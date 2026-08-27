@@ -39,11 +39,16 @@ USER clipforge
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; \
-        sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"
+    CMD python -c "import os,urllib.request,sys; \
+        port=os.environ.get('PORT','8000'); \
+        sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health', timeout=4).status == 200 else 1)"
 
 # ONE web process on purpose. The render queue and the daily scheduler live
 # in-process, so a second worker would mean a second scheduler and an account
 # could publish twice a day. To scale, run one instance with RUN_SCHEDULER=true
 # and the rest with it false.
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+#
+# Shell form, not exec form, so ${PORT} expands. Railway, Render, Fly and
+# Heroku all assign a port at runtime and route to that one; binding a
+# hardcoded 8000 leaves the proxy talking to nothing and returning 502.
+CMD uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000}
