@@ -43,6 +43,26 @@ def _list(key: str, default: str = "") -> List[str]:
     return [part.strip() for part in _str(key, default).split(",") if part.strip()]
 
 
+def _normalise_db_url(url: str) -> str:
+    """Accept the connection string a host hands you, unchanged.
+
+    Railway, Render and Fly all expose ``postgresql://…``; Heroku still emits
+    the older ``postgres://``, which SQLAlchemy refuses outright. Neither names
+    a driver, so SQLAlchemy reaches for psycopg2 and fails on an install that
+    only has psycopg 3.
+
+    Rewriting it here means an operator can paste the platform's variable
+    straight in -- ``${{Postgres.DATABASE_URL}}`` on Railway -- instead of
+    hand-editing a URL and getting it subtly wrong.
+    """
+    url = (url or "").strip()
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 class Settings:
     def __init__(self) -> None:
         self.env: str = _str("ENV", "development")
@@ -60,8 +80,8 @@ class Settings:
         self.upload_dir: Path = self.storage_dir / "uploads"
         self.render_dir: Path = self.storage_dir / "renders"
         self.cache_dir: Path = self.storage_dir / "cache"
-        self.database_url: str = _str(
-            "DATABASE_URL", f"sqlite:///{(ROOT / 'clipforge.db').as_posix()}"
+        self.database_url: str = _normalise_db_url(
+            _str("DATABASE_URL", f"sqlite:///{(ROOT / 'clipforge.db').as_posix()}")
         )
 
         # --- media ------------------------------------------------------- #

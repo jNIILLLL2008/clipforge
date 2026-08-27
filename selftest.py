@@ -231,6 +231,23 @@ check("it can be replayed",
       client.post("/api/studio/onboarded?seen=false").json()["onboarded"] is False)
 client.post("/api/studio/onboarded?seen=true")
 
+section("database url from a hosting platform")
+from backend.app.config import _normalise_db_url  # noqa: E402
+
+check("Railway/Render postgresql:// gets a driver",
+      _normalise_db_url("postgresql://u:p@h:5432/d")
+      == "postgresql+psycopg://u:p@h:5432/d")
+check("Heroku postgres:// is upgraded too",
+      _normalise_db_url("postgres://u:p@h/d") == "postgresql+psycopg://u:p@h/d")
+check("an explicit driver is left alone",
+      _normalise_db_url("postgresql+psycopg://u:p@h/d")
+      == "postgresql+psycopg://u:p@h/d")
+check("sqlite is untouched",
+      _normalise_db_url("sqlite:///x.db") == "sqlite:///x.db")
+check("empty stays empty", _normalise_db_url("") == "")
+check("whitespace is trimmed",
+      _normalise_db_url("  postgresql://u@h/d  ") == "postgresql+psycopg://u@h/d")
+
 section("schema upgrades on an existing database")
 from sqlalchemy import inspect as _inspect, text as _text  # noqa: E402
 

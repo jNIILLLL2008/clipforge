@@ -44,10 +44,62 @@ def warn(msg: str, fix: str = "") -> None:
     WARNINGS.append(msg)
 
 
+    # --url checks a running deployment from the outside instead.
+if "--url" in sys.argv:
+    import json
+    import urllib.request
+
+    try:
+        target = sys.argv[sys.argv.index("--url") + 1].rstrip("/")
+    except IndexError:
+        sys.exit("Usage: check_deploy.py --url https://your-app.up.railway.app")
+
+    print(f"\nChecking the LIVE deployment at {target}")
+    print("=" * 64)
+
+    if not target.startswith("https://"):
+        warn("Not HTTPS", "Cookies and OAuth tokens would travel in clear text.")
+    try:
+        with urllib.request.urlopen(f"{target}/api/health", timeout=20) as r:
+            health = json.load(r)
+        ok(f"Responding: env={health.get('env')} billing={health.get('billing')}")
+        if health.get("env") != "production":
+            blocker(f"The live instance reports ENV={health.get('env')}",
+                    "Set ENV=production in the platform's variables.")
+        if not health.get("billing"):
+            warn("The live instance has no Stripe key",
+                 "Nobody can subscribe there yet.")
+        sources = health.get("sources") or []
+        ok(f"Sources enabled: {', '.join(sources) or 'none'}")
+    except Exception as exc:  # noqa: BLE001
+        blocker(f"Could not reach {target}/api/health: {str(exc)[:90]}",
+                "Is the deploy finished and the domain generated?")
+
+    for path, label in (("/", "landing page"), ("/app", "the studio")):
+        try:
+            with urllib.request.urlopen(target + path, timeout=20) as r:
+                ok(f"{label} responds ({r.status})")
+        except Exception as exc:  # noqa: BLE001
+            blocker(f"{label} failed: {str(exc)[:70]}")
+
+    print("\n" + "=" * 64)
+    if BLOCKERS:
+        print(f"LIVE SITE HAS PROBLEMS - {len(BLOCKERS)} blocker(s).")
+        sys.exit(1)
+    print(f"Live site looks healthy. {len(WARNINGS)} warning(s).")
+    print("Note: settings the outside cannot see (SECRET_KEY, the database,")
+    print("the volume) are only checked by running this INSIDE the container.")
+    sys.exit(0)
+
+
 print("\nDeployment readiness")
 print("=" * 64)
 production = settings.env == "production"
+print(f"  Checking: THIS MACHINE (config from .env), not any deployment.")
 print(f"  ENV={settings.env}  DEBUG={settings.debug}")
+if settings.env != "production":
+    print("  A development result here is expected and fine. To check what")
+    print("  you actually deployed, use:  check_deploy.py --url https://...")
 
 # ------------------------------------------------------------ security --- #
 print("\nSecurity")
