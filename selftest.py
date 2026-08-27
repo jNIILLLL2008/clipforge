@@ -231,6 +231,34 @@ check("it can be replayed",
       client.post("/api/studio/onboarded?seen=false").json()["onboarded"] is False)
 client.post("/api/studio/onboarded?seen=true")
 
+section("waiting for the database")
+from backend.app.db import wait_for_database  # noqa: E402
+
+start = time.time()
+wait_for_database(timeout=5)
+check("returns immediately when the database is up", time.time() - start < 2,
+      f"{time.time() - start:.2f}s")
+
+# A container often starts before its network does; the app must retry rather
+# than crash-loop, but still give up eventually instead of hanging forever.
+import sqlalchemy  # noqa: E402
+
+import backend.app.db as db_module  # noqa: E402
+
+real_engine = db_module.engine
+db_module.engine = sqlalchemy.create_engine(
+    "postgresql+psycopg://nobody:nobody@127.0.0.1:1/none")
+start = time.time()
+try:
+    wait_for_database(timeout=2)
+    check("gives up on an unreachable database", False, "did not raise")
+except Exception:
+    elapsed = time.time() - start
+    check("retries then gives up on an unreachable database",
+          2 <= elapsed < 12, f"{elapsed:.1f}s")
+finally:
+    db_module.engine = real_engine
+
 section("database url from a hosting platform")
 from backend.app.config import _normalise_db_url  # noqa: E402
 

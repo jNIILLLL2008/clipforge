@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -26,8 +27,42 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False,
                             future=True)
 
 
+def wait_for_database(timeout: float = 90.0) -> None:
+    """Block until the database accepts a connection, or give up loudly.
+
+    A container usually starts before the network around it is ready --
+    Railway's private networking takes a few seconds, and a managed database
+    may still be booting. Connecting immediately gets "connection refused" and
+    the app crash-loops for a problem that would have resolved itself.
+
+    Retrying also covers the ordinary case of the database restarting under a
+    running app.
+    """
+    from sqlalchemy import text
+
+    deadline = time.monotonic() + timeout
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            if attempt > 1:
+                log.info("Database reachable after %d attempt(s).", attempt)
+            return
+        except Exception as exc:  # noqa: BLE001 - any failure means "not yet"
+            if time.monotonic() >= deadline:
+                log.error("Database unreachable after %.0fs: %s", timeout, exc)
+                raise
+            wait = min(5.0, 0.5 * attempt)
+            log.warning("Database not ready (attempt %d): %s -- retrying in %.1fs",
+                        attempt, str(exc).splitlines()[0][:120], wait)
+            time.sleep(wait)
+
+
 def init_db() -> None:
     """Create tables, add any new columns, and seed the built-in niches."""
+    wait_for_database()
     Base.metadata.create_all(engine)
     _add_missing_columns()
 
