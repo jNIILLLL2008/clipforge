@@ -80,7 +80,8 @@ except ImportError:
 stripe.api_key = key
 
 try:
-    account = stripe.Account.retrieve()
+    # Stripe 15 returns typed objects, not dict-likes: .get() raises.
+    account = stripe.Account.retrieve().to_dict()
     name = account.get("business_profile", {}).get("name") or account.get("id")
     ok(f"Key works, account: {name}")
     if live_mode and not account.get("charges_enabled"):
@@ -115,7 +116,7 @@ for tier, (price_id, label) in wanted.items():
         continue
 
     try:
-        price = stripe.Price.retrieve(price_id)
+        price = stripe.Price.retrieve(price_id).to_dict()
     except Exception as exc:  # noqa: BLE001
         bad(f"{tier}: Stripe cannot find {price_id}",
             "Check for a typo, or whether it belongs to the other mode "
@@ -198,7 +199,8 @@ if "localhost" in expected_url or "127.0.0.1" in expected_url:
          "         and use the whsec_ it prints.")
 else:
     try:
-        endpoints = stripe.WebhookEndpoint.list(limit=100).get("data", [])
+        endpoints = [e.to_dict() for e in
+                     stripe.WebhookEndpoint.list(limit=100).data]
         match = next((e for e in endpoints if e.get("url") == expected_url), None)
         if match is None:
             urls = ", ".join(e.get("url", "?") for e in endpoints) or "none"

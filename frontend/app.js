@@ -10,6 +10,9 @@ const state = {
   dirty: false,
   jobs: [],
   poll: null,
+  // A plan chosen on the landing page, carried through sign-in so checkout
+  // resumes on the other side instead of dumping them on the dashboard.
+  pendingPlan: new URLSearchParams(location.search).get('plan'),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -77,6 +80,16 @@ function showGate() {
   clearInterval(state.poll);
   $('gate').classList.remove('hidden');
   $('app').classList.add('hidden');
+
+  // Someone who clicked a price wants to buy, not to read a sign-in form.
+  // Say what happens next and default them to creating an account.
+  if (state.pendingPlan) {
+    $('gate-intent').textContent =
+      `Create an account to continue to ${state.pendingPlan} checkout.`;
+    $('gate-intent').classList.remove('hidden');
+    const signup = document.querySelector('.tab[data-mode="signup"]');
+    if (signup && authMode !== 'signup') signup.click();
+  }
 }
 
 async function enterApp() {
@@ -84,7 +97,35 @@ async function enterApp() {
   $('app').classList.remove('hidden');
   await Promise.all([loadStudio(), loadSettings()]);
   state.poll = setInterval(tick, 2500);
+
+  // Resume a purchase started from the landing page before anything else.
+  if (state.pendingPlan) {
+    const plan = state.pendingPlan;
+    state.pendingPlan = null;
+    history.replaceState({}, '', '/app');
+    await startCheckout(plan);
+    return;
+  }
   if (state.studio && !state.studio.onboarded) openTour();
+}
+
+async function startCheckout(plan) {
+  if (state.user && state.user.plan === plan) {
+    toast(`You are already on ${plan}.`);
+    return;
+  }
+  toast('Taking you to checkout…');
+  try {
+    const { url } = await api(`/api/billing/checkout?plan=${encodeURIComponent(plan)}`,
+                              { method: 'POST' });
+    window.location = url;
+  } catch (err) {
+    // Billing off, or that plan has no price configured. Land them somewhere
+    // useful rather than on a dead end.
+    toast(err.message);
+    document.querySelector('.tabitem[data-tab="activity"]').click();
+    setTimeout(() => $('plans')?.scrollIntoView({ block: 'center' }), 400);
+  }
 }
 
 /* -------------------------------------------------------------- nav ---- */
@@ -518,12 +559,7 @@ async function loadPlans() {
   + (note ? `<div class="row"><span class="row-sub">${esc(note)}</span></div>` : '');
 
   $('plans').querySelectorAll('[data-buy]').forEach((b) => {
-    b.onclick = async () => {
-      try {
-        const { url } = await api(`/api/billing/checkout?plan=${b.dataset.buy}`, { method: 'POST' });
-        window.location = url;
-      } catch (err) { toast(err.message); }
-    };
+    b.onclick = () => startCheckout(b.dataset.buy);
   });
 }
 

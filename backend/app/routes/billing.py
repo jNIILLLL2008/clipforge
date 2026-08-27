@@ -73,16 +73,28 @@ def checkout(plan: str, user: User = Depends(current_user),
         user.stripe_customer_id = customer.id
         db.commit()
 
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=user.stripe_customer_id,
-        line_items=[{"price": price, "quantity": 1}],
-        success_url=f"{settings.public_url}/?billing=success",
-        cancel_url=f"{settings.public_url}/?billing=cancelled",
-        # Lets the webhook identify the account without trusting the browser.
-        subscription_data={"metadata": {"user_id": str(user.id)}},
-        allow_promotion_codes=True,
-    )
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=user.stripe_customer_id,
+            line_items=[{"price": price, "quantity": 1}],
+            success_url=f"{settings.public_url}/?billing=success",
+            cancel_url=f"{settings.public_url}/?billing=cancelled",
+            # Lets the webhook identify the account without trusting the browser.
+            subscription_data={"metadata": {"user_id": str(user.id)}},
+            allow_promotion_codes=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - never show a customer a 500 here
+        # A misconfigured price, a missing tax code, a revoked key: all of it
+        # is the operator's problem, but the customer is mid-purchase. Log the
+        # detail and tell them something true and brief.
+        log.error("Checkout failed for user %s on %s: %s", user.id, plan, exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Checkout is temporarily unavailable. Nothing has been charged - "
+            "please try again shortly.",
+        ) from exc
+
     return {"url": session.url}
 
 

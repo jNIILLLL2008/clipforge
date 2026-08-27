@@ -259,6 +259,21 @@ except Exception:
 finally:
     db_module.engine = real_engine
 
+section("public url always carries a scheme")
+from backend.app.config import _normalise_public_url as pub  # noqa: E402
+
+# A hosting dashboard shows the domain without a scheme, so pasting a bare host
+# is the obvious mistake -- and it makes Stripe reject checkout with a 500.
+check("bare host gets https", pub("example.up.railway.app")
+      == "https://example.up.railway.app")
+check("https is left alone", pub("https://x.com") == "https://x.com")
+check("http is left alone", pub("http://x.com") == "http://x.com")
+check("localhost gets http, not https", pub("localhost:8000")
+      == "http://localhost:8000")
+check("127.0.0.1 gets http", pub("127.0.0.1:8000") == "http://127.0.0.1:8000")
+check("trailing slash removed", pub("https://x.com/") == "https://x.com")
+check("empty stays empty", pub("") == "")
+
 section("database url from a hosting platform")
 from backend.app.config import _normalise_db_url  # noqa: E402
 

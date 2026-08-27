@@ -43,6 +43,26 @@ def _list(key: str, default: str = "") -> List[str]:
     return [part.strip() for part in _str(key, default).split(",") if part.strip()]
 
 
+def _normalise_public_url(url: str) -> str:
+    """Guarantee PUBLIC_URL carries a scheme.
+
+    Stripe and Google both reject a bare host, so a value like
+    ``example.com`` turns every checkout into a 500 at the exact moment a
+    customer is trying to pay. Hosting dashboards show domains without the
+    scheme, so pasting one in is the obvious mistake to make.
+
+    Anything that is not clearly local gets https, because a production
+    redirect over http would leak the session cookie.
+    """
+    url = (url or "").strip().rstrip("/")
+    if not url:
+        return ""
+    if url.startswith(("http://", "https://")):
+        return url
+    local = url.startswith(("localhost", "127.0.0.1", "0.0.0.0", "[::1]"))
+    return f"{'http' if local else 'https'}://{url}"
+
+
 def _normalise_db_url(url: str) -> str:
     """Accept the connection string a host hands you, unchanged.
 
@@ -116,14 +136,22 @@ class Settings:
         self.anthropic_api_key: str = _str("ANTHROPIC_API_KEY")
         self.ai_model: str = _str("AI_MODEL", "claude-sonnet-5")
 
+        # Where this instance is reachable. Defined before the OAuth and
+        # billing blocks, because both derive redirect URLs from it.
+        self.public_url: str = _normalise_public_url(
+            _str("PUBLIC_URL", "http://localhost:8000")
+        )
+
         # --- YouTube publishing ------------------------------------------ #
         # A web OAuth client from Google Cloud. Without it the app runs with
         # publishing switched off and renders are download-only.
         self.google_client_id: str = _str("GOOGLE_CLIENT_ID")
         self.google_client_secret: str = _str("GOOGLE_CLIENT_SECRET")
-        self.google_redirect_uri: str = _str(
-            "GOOGLE_REDIRECT_URI",
-            f"{_str('PUBLIC_URL', 'http://localhost:8000')}/api/youtube/callback",
+        # Derived from the already-normalised public_url, so it inherits the
+        # scheme rather than repeating the same mistake.
+        self.google_redirect_uri: str = _normalise_public_url(
+            _str("GOOGLE_REDIRECT_URI",
+                 f"{self.public_url}/api/youtube/callback")
         )
 
         # --- billing ----------------------------------------------------- #
@@ -137,7 +165,6 @@ class Settings:
         self.price_label_starter: str = _str("PRICE_LABEL_STARTER", "$12/mo")
         self.price_label_pro: str = _str("PRICE_LABEL_PRO", "$39/mo")
         self.billing_enabled: bool = bool(self.stripe_secret_key)
-        self.public_url: str = _str("PUBLIC_URL", "http://localhost:8000")
 
         for directory in (self.upload_dir, self.render_dir, self.cache_dir):
             try:
