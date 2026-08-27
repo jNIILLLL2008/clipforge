@@ -1,0 +1,49 @@
+# ClipForge -- one image running the API, the render workers and the scheduler.
+#
+# ffmpeg is the reason this cannot go on a serverless host: renders take
+# minutes, need a real filesystem, and run in background threads. Any platform
+# that can run a container with a persistent volume will do.
+
+FROM python:3.12-slim
+
+# ffmpeg does the encoding; fonts are needed because the overlay burns text in
+# with libass and would otherwise fall back to nothing on a bare image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        fonts-dejavu-core \
+        fonts-liberation \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Dependencies first, so a code change does not reinstall them.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Storage is a volume in production; this only creates the mount points.
+RUN mkdir -p /app/storage/uploads /app/storage/renders /app/storage/cache
+
+# Run as a non-root user. Renders are driven from user-supplied files, so the
+# process should not be root if ffmpeg is ever made to misbehave.
+RUN useradd --create-home --uid 10001 clipforge \
+    && chown -R clipforge:clipforge /app
+USER clipforge
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; \
+        sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"
+
+# ONE web process on purpose. The render queue and the daily scheduler live
+# in-process, so a second worker would mean a second scheduler and an account
+# could publish twice a day. To scale, run one instance with RUN_SCHEDULER=true
+# and the rest with it false.
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

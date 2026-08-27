@@ -1,0 +1,13 @@
+# Keep secrets, local state and heavy media out of the image.
+.env
+*.db
+*.sqlite3
+.venv/
+__pycache__/
+*.pyc
+storage/
+.git/
+.gitignore
+.claude/
+*.md
+!README.md

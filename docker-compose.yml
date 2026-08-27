@@ -1,0 +1,48 @@
+# Production-shaped stack: the app, Postgres, and a volume for the media.
+#
+#   docker compose up -d --build
+#
+# Reads the same .env as local development, so put the live values there (or
+# set them in your host's dashboard and drop the env_file line).
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Postgres, because SQLite cannot take concurrent writes from the render
+      # workers and the web process at once.
+      DATABASE_URL: postgresql+psycopg://clipforge:${POSTGRES_PASSWORD:-change-me}@db:5432/clipforge
+      STORAGE_DIR: /app/storage
+      ENV: production
+      DEBUG: "false"
+      RUN_SCHEDULER: "true"
+    volumes:
+      # Uploads and renders must outlive the container.
+      - media:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clipforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: clipforge
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clipforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  media:
+  pgdata:

@@ -1,0 +1,363 @@
+"""
+studio.py -- The endpoints the Home and Settings screens use.
+
+The shape mirrors the desktop app: one configuration per account, one button
+that runs the whole pipeline, and a switch for the daily schedule. Everything
+the Home screen shows comes from ``/api/studio``, so the status panel cannot
+disagree with what a publish would actually do.
+"""
+
+from __future__ import annotations
+
+import secrets
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from .. import youtube
+from ..auth import current_user, read_token
+from ..config import settings
+from ..db import get_db
+from ..logging_setup import get_logger
+from ..models import Job, JobStatus, Niche, User, utcnow
+from ..scheduler import automation_allowed, due
+from ..settings_schema import defaults, sanitise, schema
+from ..sources import catalogue
+from ..worker import enqueue
+
+log = get_logger("studio")
+router = APIRouter(prefix="/api")
+
+
+class SettingsIn(BaseModel):
+    settings: Dict = {}
+
+
+class AutomationIn(BaseModel):
+    enabled: bool
+    time: str = "09:00"
+    timezone: str = ""
+
+
+class RunIn(BaseModel):
+    dry_run: bool = False
+
+
+def _user_settings(user: User) -> Dict:
+    """The account's configuration, always complete and in range."""
+    return sanitise(dict(user.settings or {}))
+
+
+def _readiness(user: User, cfg: Dict) -> List[Dict]:
+    """The Home screen's status rows: what would stop a publish right now."""
+    rows = [{
+        "id": "engine",
+        "label": "Video engine",
+        "detail": "",
+        "state": "ready",
+    }]
+
+    if not youtube.configured():
+        rows.append({"id": "youtube", "label": "YouTube account",
+                     "detail": "Publishing not set up on this server",
+                     "state": "off"})
+    elif user.youtube_connected:
+        rows.append({"id": "youtube", "label": "YouTube account",
+                     "detail": user.youtube_channel_title or "Signed in",
+                     "state": "ready"})
+    else:
+        rows.append({"id": "youtube", "label": "YouTube account",
+                     "detail": "Not connected", "state": "action"})
+
+    rows.append({
+        "id": "ai",
+        "label": "AI metadata",
+        "detail": settings.ai_model if settings.anthropic_api_key
+        else "Template titles",
+        "state": "ready" if settings.anthropic_api_key else "off",
+    })
+
+    sources = [s for s in catalogue(user.id)
+               if s["name"] in (cfg.get("sources") or [])]
+    usable = [s for s in sources if s["enabled"] and s["configured"]]
+    rows.append({
+        "id": "sources",
+        "label": "Footage",
+        "detail": ", ".join(s["label"] for s in usable) if usable
+        else "No usable source",
+        "state": "ready" if usable else "action",
+    })
+    return rows
+
+
+@router.get("/studio")
+def studio(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Everything the Home screen renders."""
+    cfg = _user_settings(user)
+    user.refresh_period()
+
+    published = (db.query(Job)
+                 .filter(Job.owner_id == user.id, Job.upload_state == "uploaded")
+                 .count())
+    rendered = (db.query(Job)
+                .filter(Job.owner_id == user.id, Job.status == JobStatus.DONE)
+                .count())
+    running = (db.query(Job)
+               .filter(Job.owner_id == user.id,
+                       Job.status.in_([JobStatus.QUEUED, JobStatus.SOURCING,
+                                       JobStatus.CURATING, JobStatus.RENDERING]))
+               .order_by(Job.id.desc())
+               .first())
+
+    readiness = _readiness(user, cfg)
+    blocking = [r for r in readiness if r["state"] == "action"]
+
+    return {
+        "ready": not blocking and running is None,
+        "busy": running.to_dict() if running else None,
+        "blocked_by": [r["label"] for r in blocking],
+        "status": readiness,
+        "automation": {
+            "enabled": bool(user.automate_daily),
+            "time": user.automate_time,
+            "timezone": user.automate_timezone,
+            "allowed": automation_allowed(user),
+            "plan_needed": "starter",
+            "last_run": user.automate_last_run.isoformat()
+            if user.automate_last_run else None,
+            "due_now": due(user) if user.automate_daily else False,
+        },
+        "overview": {
+            "sources": len(cfg.get("sources") or []),
+            "source_names": cfg.get("sources") or [],
+            "visibility": cfg.get("privacy_status", "private"),
+            "auto_upload": bool(cfg.get("auto_upload")),
+            "clips_per_run": cfg.get("clips", 5),
+            "length": cfg.get("target_seconds", 105),
+            "published": published,
+            "rendered": rendered,
+        },
+        "plan": {
+            "id": user.plan.value,
+            "renders_left": user.renders_left(),
+            "renders_total": user.limits["renders_per_month"],
+            "watermark": user.limits["watermark"],
+        },
+        "youtube": {
+            "configured": youtube.configured(),
+            "connected": user.youtube_connected,
+            "channel": user.youtube_channel_title,
+        },
+        "onboarded": bool(user.onboarded),
+    }
+
+
+@router.post("/studio/onboarded")
+def set_onboarded(seen: bool = True, user: User = Depends(current_user),
+                  db: Session = Depends(get_db)):
+    """Remember that the first-run tour has been seen (or replay it)."""
+    user.onboarded = bool(seen)
+    db.commit()
+    return {"onboarded": user.onboarded}
+
+
+@router.get("/studio/settings")
+def get_settings(user: User = Depends(current_user)):
+    return {"settings": _user_settings(user), "schema": schema()}
+
+
+@router.put("/studio/settings")
+def put_settings(body: SettingsIn, user: User = Depends(current_user),
+                 db: Session = Depends(get_db)):
+    cfg = sanitise(body.settings, base=user.settings or {})
+
+    # Plan ceilings are enforced here, not just in the UI.
+    cfg["clips"] = min(cfg["clips"], user.limits["max_clips"])
+    cfg["target_seconds"] = min(cfg["target_seconds"], user.limits["max_seconds"])
+
+    user.settings = cfg
+    db.commit()
+    return {"settings": cfg}
+
+
+@router.get("/presets")
+def presets(db: Session = Depends(get_db)):
+    """Starting points a user can load over their settings."""
+    rows = db.query(Niche).filter(Niche.owner_id.is_(None)).all()
+    return {"presets": [
+        {"id": n.id, "slug": n.slug, "name": n.name,
+         "description": n.description,
+         "highlights": {
+             "clips": (n.settings or {}).get("clips"),
+             "seconds": (n.settings or {}).get("target_seconds"),
+             "list": (n.settings or {}).get("checklist_enabled"),
+             "show_filter": (n.settings or {}).get("require_show_match"),
+         }}
+        for n in sorted(rows, key=lambda r: r.name.lower())
+    ]}
+
+
+@router.post("/presets/{preset_id}/apply")
+def apply_preset(preset_id: int, user: User = Depends(current_user),
+                 db: Session = Depends(get_db)):
+    """Copy a preset over the account's settings, keeping upload preferences."""
+    preset = db.get(Niche, preset_id)
+    if preset is None or preset.owner_id is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such preset.")
+
+    current = _user_settings(user)
+    incoming = dict(preset.settings or {})
+    # A preset describes the video, not where it goes. Keep the user's channel
+    # choices so applying one never silently makes their uploads public.
+    for keep in ("auto_upload", "privacy_status", "category_id",
+                 "made_for_kids", "publish_delay_minutes", "title_suffix"):
+        incoming[keep] = current.get(keep)
+
+    user.settings = sanitise(incoming)
+    db.commit()
+    return {"settings": user.settings, "applied": preset.name}
+
+
+@router.post("/studio/run")
+def run(body: RunIn, user: User = Depends(current_user),
+        db: Session = Depends(get_db)):
+    """The one button: source, cut, check, render and publish."""
+    cfg = _user_settings(user)
+
+    if user.renders_left() <= 0:
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            f"You have used all {user.limits['renders_per_month']} runs this "
+            "month. Upgrade for more.",
+        )
+
+    busy = (db.query(Job)
+            .filter(Job.owner_id == user.id,
+                    Job.status.in_([JobStatus.QUEUED, JobStatus.SOURCING,
+                                    JobStatus.CURATING, JobStatus.RENDERING]))
+            .count())
+    if busy:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "A run is already in progress.")
+
+    job = Job(
+        owner_id=user.id,
+        title="",
+        options={"format": {}},
+        status=JobStatus.QUEUED,
+        stage_detail="Waiting for a worker",
+        dry_run=bool(body.dry_run),
+    )
+    db.add(job)
+    user.refresh_period()
+    user.renders_this_period += 1
+    db.commit()
+    db.refresh(job)
+
+    enqueue(job.id)
+    log.info("Run queued for user %s (job %s, dry_run=%s).",
+             user.id, job.public_id, body.dry_run)
+    return job.to_dict()
+
+
+@router.put("/studio/automation")
+def set_automation(body: AutomationIn, user: User = Depends(current_user),
+                   db: Session = Depends(get_db)):
+    if body.enabled and not automation_allowed(user):
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            "Daily automation is included with Starter and Pro.",
+        )
+    try:
+        hour, minute = (int(p) for p in body.time.split(":"))
+        assert 0 <= hour < 24 and 0 <= minute < 60
+    except (ValueError, AssertionError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Time must be HH:MM in 24-hour form.")
+
+    user.automate_daily = bool(body.enabled)
+    user.automate_time = f"{hour:02d}:{minute:02d}"
+    user.automate_timezone = body.timezone.strip()[:64]
+    db.commit()
+    return {"enabled": user.automate_daily, "time": user.automate_time,
+            "timezone": user.automate_timezone}
+
+
+# --------------------------------------------------------------------------- #
+# YouTube connection
+# --------------------------------------------------------------------------- #
+@router.get("/youtube/connect")
+def youtube_connect(user: User = Depends(current_user)):
+    if not youtube.configured():
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "YouTube publishing is not configured here.")
+    # The state carries the account so the callback knows who came back, and a
+    # nonce so a stray callback cannot be replayed.
+    state = f"{user.id}:{secrets.token_urlsafe(16)}"
+    _PENDING[state] = user.id
+    return {"url": youtube.consent_url(state)}
+
+
+# Short-lived map of outstanding consent requests.
+_PENDING: Dict[str, int] = {}
+
+
+@router.get("/youtube/callback")
+def youtube_callback(request: Request, db: Session = Depends(get_db)):
+    """Where Google sends the user back after they approve."""
+    params = request.query_params
+    error = params.get("error")
+    if error:
+        return _closing_page(f"YouTube connection cancelled ({error}).")
+
+    code, state = params.get("code"), params.get("state", "")
+    user_id = _PENDING.pop(state, None)
+    if not code or user_id is None:
+        return _closing_page("That connection link has expired. Try again.")
+
+    user = db.get(User, user_id)
+    if user is None:
+        return _closing_page("Account not found.")
+
+    try:
+        refresh_token, title, channel_id = youtube.exchange_code(code)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("YouTube exchange failed for user %s: %s", user_id, exc)
+        return _closing_page(f"Could not connect: {exc}")
+
+    user.youtube_refresh_token = refresh_token
+    user.youtube_channel_title = (title or "")[:160]
+    user.youtube_channel_id = (channel_id or "")[:64]
+    user.youtube_connected_at = utcnow()
+    db.commit()
+    log.info("User %s connected channel %r.", user_id, title)
+    return _closing_page(f"Connected to {title or 'your channel'}.", ok=True)
+
+
+@router.post("/youtube/disconnect")
+def youtube_disconnect(user: User = Depends(current_user),
+                       db: Session = Depends(get_db)):
+    user.youtube_refresh_token = None
+    user.youtube_channel_title = ""
+    user.youtube_channel_id = ""
+    user.youtube_connected_at = None
+    db.commit()
+    return {"connected": False}
+
+
+def _closing_page(message: str, ok: bool = False) -> HTMLResponse:
+    """A tiny page that tells the opener and closes itself."""
+    colour = "#17803d" if ok else "#c0392b"
+    return HTMLResponse(f"""<!doctype html><meta charset="utf-8">
+<title>ClipForge</title>
+<body style="font:15px system-ui;background:#0e1014;color:#e8eaee;
+display:grid;place-items:center;height:100vh;margin:0;text-align:center">
+<div><p style="color:{colour};font-weight:600">{message}</p>
+<p style="opacity:.7">You can close this window.</p></div>
+<script>
+  try {{ window.opener && window.opener.postMessage('clipforge-youtube', '*'); }} catch (e) {{}}
+  setTimeout(function () {{ window.close(); }}, 1200);
+</script></body>""")

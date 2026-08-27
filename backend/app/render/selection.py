@@ -1,0 +1,123 @@
+"""
+selection.py -- Decide which candidate clips qualify.
+
+Ported from the single-channel tool, where these rules were learned the hard
+way, and generalised so any subscriber can express them for their own subject.
+
+Two independent gates:
+
+* **Clip filters** -- duration, views, age, blocked channels. Cheap, and they
+  run before anything is downloaded.
+* **The show filter** -- optional, and the interesting one. It insists a clip
+  is from *one specific programme* rather than merely featuring the same
+  people. A clip qualifies on an explicit show keyword, or on naming two or
+  more of the show's regulars together.
+
+The alias handling matters: "thierry henry" is two words naming one person, and
+counting it as two regulars would let a clip about him alone pass a filter
+meant to catch panel moments. Aliases are grouped per person with "|".
+"""
+
+from __future__ import annotations
+
+from typing import Dict, List, Sequence, Tuple
+
+from ..logging_setup import get_logger
+from ..sources.base import SourceClip
+
+log = get_logger("render.selection")
+
+
+def _haystack(clip: SourceClip) -> str:
+    return " ".join(part.lower() for part in (
+        clip.title or "",
+        (clip.extra.get("description") or "")[:800],
+        " ".join(clip.tags or []),
+        clip.author or "",
+    ))
+
+
+def passes_filters(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
+    """Cheap metadata checks. Returns (ok, reason_if_not)."""
+    duration = clip.duration or 0.0
+    if duration:
+        low = float(settings.get("min_duration_seconds", 0) or 0)
+        high = float(settings.get("max_duration_seconds", 0) or 0)
+        if low and duration < low:
+            return False, f"{duration:.0f}s is shorter than {low:.0f}s"
+        if high and duration > high:
+            return False, f"{duration:.0f}s is longer than {high:.0f}s"
+
+    views = clip.extra.get("view_count")
+    floor = int(settings.get("min_view_count", 0) or 0)
+    if floor and isinstance(views, int) and views < floor:
+        return False, f"{views:,} views is under {floor:,}"
+
+    age = clip.extra.get("age_days")
+    max_age = int(settings.get("max_video_age_days", 0) or 0)
+    if max_age and isinstance(age, (int, float)) and age > max_age:
+        return False, f"{age:.0f} days old"
+
+    author = (clip.author or "").lower()
+    blocked = [b.lower() for b in settings.get("blocked_uploaders", []) if b]
+    if author and any(b in author for b in blocked):
+        return False, f"channel {clip.author!r} is blocked"
+
+    excluded = [e.lower() for e in settings.get("exclude_terms", []) if e]
+    if excluded:
+        text = _haystack(clip)
+        hit = next((e for e in excluded if e in text), None)
+        if hit:
+            # An explicit show keyword outranks a generic exclusion, so a real
+            # show clip is not thrown away for mentioning a banned word.
+            show_terms = [s.lower() for s in settings.get("show_terms", []) if s]
+            if not any(term in text for term in show_terms):
+                return False, f"matched excluded term {hit!r}"
+
+    return True, ""
+
+
+def matches_show(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
+    """The show filter. Returns (ok, reason_if_not)."""
+    if not settings.get("require_show_match"):
+        return True, ""
+
+    text = _haystack(clip)
+    show_terms = [t.lower() for t in settings.get("show_terms", []) if t]
+    if any(term in text for term in show_terms):
+        return True, ""
+
+    # Count distinct people, not distinct words: one person's aliases must
+    # never look like two different regulars.
+    found = set()
+    for entry in settings.get("show_people", []):
+        aliases = [a.strip().lower() for a in str(entry).split("|") if a.strip()]
+        if aliases and any(alias in text for alias in aliases):
+            found.add(aliases[0])
+    if len(found) >= 2:
+        return True, ""
+
+    trusted = [t.lower() for t in settings.get("trusted_uploaders", []) if t]
+    if trusted and any(t in (clip.author or "").lower() for t in trusted):
+        return True, ""
+
+    return False, "no evidence it is from this show"
+
+
+def apply(clips: Sequence[SourceClip], settings: Dict) -> List[SourceClip]:
+    """Run both gates, logging why anything was dropped."""
+    kept: List[SourceClip] = []
+    dropped = 0
+    for clip in clips:
+        ok, reason = passes_filters(clip, settings)
+        if ok:
+            ok, reason = matches_show(clip, settings)
+        if not ok:
+            dropped += 1
+            log.debug("Dropped %r: %s", (clip.title or "")[:44], reason)
+            continue
+        kept.append(clip)
+
+    if dropped:
+        log.info("Selection kept %d of %d clip(s).", len(kept), len(clips))
+    return kept
