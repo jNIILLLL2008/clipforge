@@ -1,0 +1,7 @@
+# Shell scripts and the Dockerfile must keep LF endings. Git on Windows
+# converts to CRLF by default, and a CRLF shebang makes Linux report
+# "no such file or directory" for a file that is plainly there.
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+*.py text eol=lf

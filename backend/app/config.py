@@ -140,7 +140,19 @@ class Settings:
         self.public_url: str = _str("PUBLIC_URL", "http://localhost:8000")
 
         for directory in (self.upload_dir, self.render_dir, self.cache_dir):
-            directory.mkdir(parents=True, exist_ok=True)
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except PermissionError as exc:
+                # Almost always a volume mounted as root under a container that
+                # runs unprivileged. The raw traceback points at pathlib and
+                # tells you nothing, so say what to actually do.
+                raise PermissionError(
+                    f"Cannot write to {directory}. If this is a container with "
+                    f"a mounted volume, the volume is owned by root while the "
+                    f"app runs as another user -- the image's entrypoint should "
+                    f"chown {self.storage_dir} before dropping privileges. "
+                    f"Otherwise set STORAGE_DIR to a writable path."
+                ) from exc
 
     def validate(self) -> List[str]:
         """Problems that should stop a production boot."""

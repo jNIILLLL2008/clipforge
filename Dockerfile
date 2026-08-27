@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-dejavu-core \
         fonts-liberation \
         ca-certificates \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \
@@ -30,11 +31,16 @@ COPY . .
 # Storage is a volume in production; this only creates the mount points.
 RUN mkdir -p /app/storage/uploads /app/storage/renders /app/storage/cache
 
-# Run as a non-root user. Renders are driven from user-supplied files, so the
-# process should not be root if ffmpeg is ever made to misbehave.
+# Renders are driven from user-supplied files, so the process must not be root
+# if ffmpeg is ever made to misbehave. The container still STARTS as root so
+# the entrypoint can take ownership of a freshly mounted volume, then hands
+# over to this user with gosu. There is no USER line for that reason.
 RUN useradd --create-home --uid 10001 clipforge \
     && chown -R clipforge:clipforge /app
-USER clipforge
+
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 8000
 
