@@ -33,7 +33,7 @@ class SourceClip:
     height: int = 0
 
     # Licence facts. `reusable` is the gate; everything else is bookkeeping.
-    licence: str = ""             # e.g. "Pexels License", "CC BY 4.0"
+    licence: str = ""             # e.g. "User upload", "CC BY 4.0"
     reusable: bool = False        # cleared for commercial reuse
     attribution_required: bool = False
 

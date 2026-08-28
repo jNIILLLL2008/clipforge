@@ -35,7 +35,7 @@ BUILTIN_NICHES: List[Dict] = [
                        "The numbered list is what keeps people watching.",
         "settings": _settings(
             banner_line1="TOP {count}", checklist_enabled=True, countdown=True,
-            clips=5, target_seconds=105, sources=["upload", "pexels", "pixabay"],
+            clips=5, target_seconds=105, sources=["upload"],
         ),
     },
     {
@@ -48,7 +48,7 @@ BUILTIN_NICHES: List[Dict] = [
             countdown=False, clips=6, target_seconds=90, max_clip_seconds=18,
             hook_seconds=1.5, search_terms=["funny", "fail", "bloopers"],
             exclude_terms=["tutorial", "review"],
-            sources=["upload", "pexels", "pixabay"],
+            sources=["upload"],
         ),
     },
     {
@@ -60,7 +60,7 @@ BUILTIN_NICHES: List[Dict] = [
             banner_enabled=False, checklist_enabled=False, countdown=False,
             clips=8, target_seconds=45, min_clip_seconds=3, max_clip_seconds=7,
             caption_uppercase=True, hook_seconds=1.0, max_shot_seconds=7.0,
-            search_terms=["meme", "reaction"], sources=["upload", "pexels"],
+            search_terms=["meme", "reaction"], sources=["upload"],
         ),
     },
     {
@@ -75,19 +75,19 @@ BUILTIN_NICHES: List[Dict] = [
             background="crop", max_shot_seconds=22.0,
             search_terms=["satisfying", "slow motion", "kinetic"],
             exclude_terms=["talking", "interview"],
-            sources=["pexels", "pixabay", "upload"],
+            sources=["upload"],
         ),
     },
     {
         "slug": "facts",
         "name": "Did You Know",
-        "description": "One fact per clip with an on-screen list. Works when the "
-                       "footage is generic because the text carries it.",
+        "description": "One fact per clip with an on-screen list. The text carries "
+                       "it, so the footage under it can be simple.",
         "settings": _settings(
             banner_line1="{count} FACTS", checklist_enabled=True, countdown=True,
             clips=5, target_seconds=95, caption_uppercase=True,
             search_terms=["nature", "space", "city", "ocean"],
-            sources=["pexels", "pixabay", "openverse", "archive"],
+            sources=["upload"],
         ),
     },
     {
@@ -98,7 +98,7 @@ BUILTIN_NICHES: List[Dict] = [
         "settings": _settings(
             banner_line1="{count} STEPS", checklist_enabled=True,
             countdown=False, clips=5, target_seconds=110, max_clip_seconds=24,
-            sources=["upload", "pexels"],
+            sources=["upload"],
         ),
     },
     {

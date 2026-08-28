@@ -14,8 +14,6 @@ from typing import Dict, List, Optional
 from ..config import settings
 from ..logging_setup import get_logger
 from .base import SourceClip, SourceError  # noqa: F401 - re-exported
-from .commons import ArchiveSource, OpenverseSource
-from .stock import PexelsSource, PixabaySource
 from .upload import UploadSource
 from .youtube_source import YouTubeSource
 
@@ -25,12 +23,10 @@ log = get_logger("sources")
 # "upload" is scoped to one user, "youtube" to one job's settings.
 _PER_USER = {"upload", "youtube"}
 
-_SHARED = {
-    "pexels": PexelsSource(),
-    "pixabay": PixabaySource(),
-    "openverse": OpenverseSource(),
-    "archive": ArchiveSource(),
-}
+# The stock and open-collection adapters (Pexels, Pixabay, Openverse, the
+# Internet Archive) were removed: this build sources footage from the user's own
+# uploads only. Nothing shared remains, so every adapter here is per-request.
+_SHARED: Dict[str, object] = {}
 
 
 def build(name: str, user_id: Optional[int] = None,

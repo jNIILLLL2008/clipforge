@@ -203,17 +203,6 @@ check("free plan cannot enable automation", blocked.status_code == 402,
 section("configuration advice")
 from backend.app.render.advice import review as review_cfg  # noqa: E402
 
-# The mistake that most often produces nothing: a broadcast subject against
-# libraries that hold no broadcast footage.
-stock_tv = review_cfg(sanitise({
-    "sources": ["pexels", "pixabay"],
-    "search_terms": ["football panel show", "studio banter"],
-}))
-check("stock sources + a TV subject is a blocker", not stock_tv.can_run)
-check("and it names the reason",
-      any("stock" in f.title.lower() for f in stock_tv.blockers),
-      [f.title for f in stock_tv.blockers][:1])
-
 check("uploads-only with no uploads is a blocker",
       not review_cfg(sanitise({"sources": ["upload"]}), upload_count=0).can_run)
 check("uploads-only with uploads is fine",

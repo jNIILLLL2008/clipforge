@@ -121,10 +121,8 @@ class Settings:
         # scraping adapter exists but stays off unless an operator turns it on
         # and accepts what that means for their own liability.
         self.enabled_sources: List[str] = _list(
-            "ENABLED_SOURCES", "upload,pexels,pixabay,openverse,archive"
+            "ENABLED_SOURCES", "upload"
         )
-        self.pexels_api_key: str = _str("PEXELS_API_KEY")
-        self.pixabay_api_key: str = _str("PIXABAY_API_KEY")
         self.allow_unlicensed_sources: bool = _bool("ALLOW_UNLICENSED_SOURCES", False)
 
         # yt-dlp, used only by the unlicensed YouTube adapter. A cookies file

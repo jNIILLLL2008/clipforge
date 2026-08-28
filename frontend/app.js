@@ -721,32 +721,9 @@ const GUIDE = [
     },
   },
   {
-    title: 'Where does the footage come from?',
-    choiceKey: 'footage',
-    intro: `<p>This is the decision that most often stops a first run
-      producing anything.</p>`,
-    render: () => choices('footage', [
-      { id: 'upload', title: 'My own clips',
-        note: 'You upload them. Nothing to claim, and the only option for sport, gaming or anything off a broadcast.' },
-      { id: 'stock', title: 'Licensed stock footage',
-        note: 'Generic clips licensed for commercial reuse. No broadcast or celebrity footage exists here.' },
-      { id: 'both', title: 'Both',
-        note: 'Your uploads first, stock to fill the gaps.' },
-    ]),
-    apply: (value) => {
-      const map = {
-        upload: ['upload'],
-        stock: ['pexels', 'pixabay', 'openverse', 'archive'],
-        both: ['upload', 'pexels', 'pixabay'],
-      };
-      state.settings.sources = map[value] || ['upload'];
-    },
-  },
-  {
     title: 'What should it look for?',
-    intro: `<p>These words are searched in each source. For your own uploads
-      they match the filename, so leaving this empty uses everything you have
-      uploaded.</p>`,
+    intro: `<p>These words are matched against your upload filenames, so
+      leaving this empty uses everything you have uploaded.</p>`,
     render: () => field('search_terms', 'Search terms', 'textarea',
       (state.settings.search_terms || []).join('\n'),
       'One per line. e.g. "skateboard", "city at night"'),
@@ -1017,11 +994,12 @@ const TOUR = [
   {
     tab: 'activity',
     target: '#drop',
-    title: 'Your own footage always works',
-    body: `<p>Drop clips here. Footage you own has nothing to claim, and it is
-      the only way to cover what stock libraries do not &mdash; sport, gaming,
-      anything recorded off a broadcast.</p>
-      <p>Under this you can see every source and whether it is ready to use.</p>`,
+    title: 'Start by dropping in footage',
+    body: `<p>Drop clips here. ClipForge cuts what you upload and sources
+      nothing on your behalf, so the only rights involved are the ones you
+      already hold.</p>
+      <p>It is also the only way to cover sport, gaming, or anything recorded
+      off a broadcast.</p>`,
   },
   {
     title: 'Last thing: it can say no',

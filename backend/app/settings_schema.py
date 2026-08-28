@@ -70,8 +70,8 @@ FIELDS: List[Dict[str, Any]] = [
           "A clip whose title or tags contain any of these is dropped."),
     field("sources", "subject", "list", ["upload"],
           "Sources",
-          "Where footage comes from. Only sources licensed for reuse, or your "
-          "own uploads, can be selected."),
+          "Where footage comes from. Your own uploads, which is the only "
+          "source this build ships enabled."),
     field("source_channels", "subject", "list", [],
           "Source channels",
           "Pull from specific channels rather than a general search. Only used "

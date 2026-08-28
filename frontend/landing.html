@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ClipForge &mdash; short-form video on autopilot</title>
-<meta name="description" content="Set it up once. One button finds footage, cuts it to a retention-tested format, and publishes it to your channel. On a paid plan it does that every day.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127916;</text></svg>">
+<title>ClipForge: short-form video on autopilot</title>
+<meta name="description" content="Set it up once. One button cuts your footage to a retention-tested format, scores it, and publishes it to your channel. On a paid plan it does that every day.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0b0d'/><path d='M16 7l7 9-7 9-7-9z' fill='%23e2603a'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://picsum.photos">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/landing.css">
+<script>document.documentElement.className += " js";</script>
 </head>
 <body>
 
@@ -25,135 +27,110 @@
       <a href="#pricing">Pricing</a>
     </nav>
     <div class="nav-actions">
-      <a class="btn btn-tertiary btn-sm" href="/app">Sign in</a>
-      <a class="btn btn-primary btn-sm" href="/app">Get started</a>
+      <a class="btn btn-quiet btn-sm" href="/app">Sign in</a>
+      <a class="btn btn-primary btn-sm" href="/app">Start free</a>
     </div>
   </div>
 </header>
 
 <main id="main">
 
-  <!-- ============================== hero ============================== -->
+  <!-- ============================== hero ==============================
+       Asymmetric split. Three text elements only: headline, subtext, CTAs.
+       The visual is real vertical footage frames, which is the thing the
+       product actually produces. -->
   <section class="hero">
     <div class="wrap">
-      <p class="badge"><span class="dot" aria-hidden="true"></span> Renders, scores and publishes on its own</p>
-
-      <h1 class="display-xl">Short-form video, down to one button.</h1>
-
-      <p class="lede body-lg">
-        Set up your niche once. ClipForge finds the clips, cuts them into a
-        vertical countdown with a banner, a numbered list and burned-in
-        captions, writes the title and description, and uploads it to your
-        channel. On a paid plan it does that every morning without you.
-      </p>
-
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="/app">Start free &mdash; 3 videos a month</a>
-        <a class="btn btn-secondary" href="#how">See how it works</a>
-      </div>
-      <p class="hero-note body-sm">No card required. Your first uploads default to private.</p>
-
-      <!-- the product is the protagonist -->
-      <div class="panel">
-        <div class="app-shot" role="img"
-             aria-label="The ClipForge Studio screen: a Ready state with Publish now and Dry run buttons, a status list, and daily automation settings.">
-          <div class="shot-nav" aria-hidden="true">
-            <div class="brand"><span class="brand-mark">&#9670;</span> ClipForge</div>
-            <div class="shot-nav-item on"><span class="ico">&#8962;</span> Home</div>
-            <div class="shot-nav-item"><span class="ico">&#9788;</span> Settings</div>
-            <div class="shot-nav-item"><span class="ico">&#9684;</span> History</div>
-            <div class="shot-nav-item"><span class="ico">&#9636;</span> Activity</div>
+      <div class="hero-grid">
+        <div class="hero-copy reveal">
+          <h1 class="display-xl">Short-form video, down to one button.</h1>
+          <p class="lede">
+            Set up your niche once. ClipForge cuts your footage, scores it
+            for retention, and uploads it to your channel.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="/app">Start free</a>
+            <a class="btn btn-secondary" href="#how">See how it works</a>
           </div>
+        </div>
 
-          <div class="shot-body" aria-hidden="true">
-            <div class="shot-h1">Studio</div>
-
-            <div>
-              <div class="shot-hero">
-                <div class="shot-play">&#9654;</div>
-                <div>
-                  <b>Ready</b>
-                  <span>Press Publish to run the pipeline</span>
-                </div>
-              </div>
-              <div class="shot-actions">
-                <span class="shot-btn">Publish now</span>
-                <span class="shot-btn ghost">Dry run</span>
-              </div>
-
-              <p class="shot-label">Status</p>
-              <div class="shot-rows">
-                <div class="shot-row"><span>Video engine</span><span class="chip">Ready</span></div>
-                <div class="shot-row">
-                  <span>YouTube account<span class="sub">Signed in</span></span>
-                  <span class="chip">Ready</span>
-                </div>
-                <div class="shot-row">
-                  <span>AI metadata<span class="sub">claude-sonnet-5</span></span>
-                  <span class="chip">Ready</span>
-                </div>
-              </div>
+        <!-- Real renders from published runs. Each one shows the format the
+             pipeline produces: banner, numbered list, burned-in captions. -->
+        <div class="stills reveal reveal-d1">
+          <div class="still">
+            <img src="/static/img/hero-frame-1.jpg"
+                 width="265" height="480"
+                 alt="A finished ClipForge render: a top five CBS Sports countdown with a banner, a numbered list and burned-in captions."
+                 decoding="async">
+          </div>
+          <div class="still">
+            <img src="/static/img/hero-frame-2.jpg"
+                 width="269" height="480"
+                 alt="A finished ClipForge render: a top four CBS Sports countdown with a banner, a numbered list and burned-in captions."
+                 fetchpriority="high" decoding="async">
+            <div class="still-score">
+              <b class="num">93.3</b>
+              <span>passed</span>
             </div>
-
-            <div>
-              <p class="shot-label" style="margin-top:0">Automation</p>
-              <div class="shot-rows">
-                <div class="shot-row"><span>Run every day</span><span class="toggle on"></span></div>
-                <div class="shot-row"><span>Time</span><span class="val">09:00</span></div>
-                <div class="shot-row"><span>Timezone</span><span class="val">Europe/London</span></div>
-              </div>
-
-              <p class="shot-label">Overview</p>
-              <div class="shot-rows">
-                <div class="shot-row"><span>Sources</span><span class="val">2 selected</span></div>
-                <div class="shot-row"><span>Visibility</span><span class="val">private</span></div>
-                <div class="shot-row"><span>Per run</span><span class="val">5 clips &middot; 105s</span></div>
-                <div class="shot-row"><span>Published</span><span class="val">111 of 149</span></div>
-              </div>
-            </div>
+          </div>
+          <div class="still">
+            <img src="/static/img/hero-frame-3.jpg"
+                 width="266" height="480"
+                 alt="A finished ClipForge render: a top five CBS Sports countdown with a banner, a numbered list and burned-in captions."
+                 decoding="async">
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ============================== how ============================== -->
+  <!-- ============================ sources =============================
+       Not a customer wall. These are the services the pipeline actually
+       talks to, which is the honest version of social proof here. -->
+  <div class="sources">
+    <div class="wrap">
+      <p class="sources-label">Publishes straight to</p>
+      <div class="sources-logos">
+        <img src="https://cdn.simpleicons.org/youtube/141416/f4f2ef" alt="YouTube" width="20" height="20" loading="lazy">
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== how ===============================
+       Hairline-separated columns rather than three equal cards, and the verb
+       is the label rather than a step number. -->
   <section id="how">
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">How it works</p>
+      <div class="section-head reveal">
         <h2 class="display-lg">Three decisions, then it runs itself.</h2>
-        <p class="subhead">
-          Everything after setup is one button &mdash; or nothing at all, if you
-          leave the daily schedule on.
+        <p class="body">
+          Everything after setup is one button, or nothing at all if you leave
+          the daily schedule on.
         </p>
       </div>
 
-      <div class="grid-3">
-        <article class="card">
-          <span class="step-num">01</span>
-          <h3 class="card-title">Pick a format</h3>
+      <div class="steps">
+        <article class="step reveal">
+          <h3>Pick a format</h3>
           <p>
             Seven presets, each a different <em>shape</em> of video rather than a
-            topic &mdash; countdown, fast meme cut, calm loop, one specific TV
-            show. Shape is what holds attention. Then change any of the 68
-            settings behind it.
+            topic: countdown, fast meme cut, calm loop, one specific TV show.
+            Shape is what holds attention. Then change any of the 68 settings
+            behind it.
           </p>
         </article>
-        <article class="card">
-          <span class="step-num">02</span>
-          <h3 class="card-title">Point it at footage</h3>
+        <article class="step reveal reveal-d1">
+          <h3>Upload your footage</h3>
           <p>
-            Upload your own clips, or pull from stock libraries licensed for
-            commercial reuse. Every clip carries its licence through the
-            pipeline and into the description.
+            Drag in the clips you want cut. ClipForge never sources footage on
+            your behalf, so the only rights involved are the ones you already
+            hold.
           </p>
         </article>
-        <article class="card">
-          <span class="step-num">03</span>
-          <h3 class="card-title">Press Publish</h3>
+        <article class="step reveal reveal-d2">
+          <h3>Press Publish</h3>
           <p>
-            It sources, cuts, scores, renders, writes the metadata and uploads.
+            It cuts, scores, renders, writes the metadata and uploads.
             Connect a channel once and finished videos land there on their own,
             private until you say otherwise.
           </p>
@@ -162,200 +139,200 @@
     </div>
   </section>
 
-  <!-- =========================== retention =========================== -->
+  <!-- =========================== retention ============================ -->
   <section id="retention">
     <div class="wrap">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">The retention gate</p>
         <h2 class="display-lg">It will refuse to make a bad video.</h2>
-        <p class="subhead">
+        <p class="body">
           Every video is scored before a single frame is encoded. Below 55 the
           run is rejected, you are told exactly which rule failed, and the run
           is refunded to your monthly allowance.
         </p>
       </div>
 
-      <div class="grid-2">
-        <div class="score-panel">
-          <div class="score-row">
-            <span>Opening clip reaches the action inside the hook window</span>
-            <span class="weight">25</span>
-          </div>
-          <div class="score-row">
-            <span>No single shot runs past its limit</span>
-            <span class="weight">20</span>
-          </div>
-          <div class="score-row">
-            <span>Cuts per minute land in a watchable band</span>
-            <span class="weight">20</span>
-          </div>
-          <div class="score-row">
-            <span>Something promises a payoff &mdash; a countdown or a list</span>
-            <span class="weight">20</span>
-          </div>
-          <div class="score-row">
-            <span>On-screen text, because most short-form is watched muted</span>
-            <span class="weight">10</span>
-          </div>
-          <div class="score-row">
-            <span>Total length is sane for the format</span>
-            <span class="weight">5</span>
-          </div>
-          <div class="score-total">
-            <b>93.3</b>
-            <span class="verdict">
-              passed &mdash; flagged <span class="mono">&ldquo;only 5.3 cuts a
-              minute; the edit feels static&rdquo;</span>
-            </span>
-          </div>
+      <div class="gate-grid">
+        <div class="score reveal">
+          <div class="score-value">93.3</div>
+          <div class="score-verdict">Passed</div>
+          <p class="score-note">
+            Still flagged: <q>only 5.3 cuts a minute, the edit feels static</q>.
+            Videos that pass report what was weakest, so the next one is better.
+          </p>
         </div>
 
-        <div>
+        <div class="reveal reveal-d1">
+          <ul class="rules">
+            <li><span>Opening clip reaches the action inside the hook window</span><b>25</b></li>
+            <li><span>No single shot runs past its limit</span><b>20</b></li>
+            <li><span>Cuts per minute land in a watchable band</span><b>20</b></li>
+            <li><span>Something promises a payoff, such as a countdown or a list</span><b>20</b></li>
+            <li><span>On-screen text, because most short-form is watched muted</span><b>10</b></li>
+            <li><span>Total length is sane for the format</span><b>5</b></li>
+          </ul>
+
           <h3 class="headline">A rejection is the tool working.</h3>
-          <p class="muted" style="margin-top:16px">
+          <p class="body">
             Most tools in this category will happily render anything you point
             them at, and you find out it was weak after it has been sitting on
             your channel for a week.
           </p>
-          <p class="muted">
+          <p class="body">
             Scoring the plan instead of the finished file means a weak video
-            costs nothing &mdash; no encode, no upload, no allowance spent. And
-            because each rule is specific, the failure tells you what to change:
-            cut faster, shorten the opening, turn the numbered list on.
-          </p>
-          <p class="subtle body-sm">
-            Videos that pass still report what was weakest, so the next one is
-            better.
+            costs nothing: no encode, no upload, no allowance spent. And because
+            each rule is specific, the failure tells you what to change. Cut
+            faster, shorten the opening, turn the numbered list on.
           </p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ============================ footage ============================ -->
+  <!-- ============================ footage =============================
+       Four cells for four pieces of content, 2+1 then 1+2. -->
   <section id="footage">
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Footage &amp; licensing</p>
-        <h2 class="display-lg">Every clip carries its licence.</h2>
-        <p class="subhead">
-          Sources declare whether their footage may be reused commercially, and
-          the pipeline re-checks it on every single clip &mdash; not just once
-          per source.
+      <div class="section-head reveal">
+        <p class="eyebrow">Footage and licensing</p>
+        <h2 class="display-lg">Your footage, and nothing else.</h2>
+        <p class="body">
+          ClipForge does not go and find clips for you. Every run starts from
+          footage you uploaded, which is the only version of this that is
+          honestly safe to sell.
         </p>
       </div>
 
-      <div class="grid-3" style="margin-bottom:24px">
-        <article class="card">
-          <h3 class="card-title">Your own uploads</h3>
-          <p>Drag clips in. You hold the rights, so there is nothing to claim. The only way to cover sport, gaming or anything from a broadcast.</p>
+      <div class="bento">
+        <article class="cell cell-wide cell-shot reveal">
+          <!-- TODO: replace with a still from footage you own. -->
+          <figure>
+            <img src="https://picsum.photos/seed/clipforge-own-footage/1200/525"
+                 width="1200" height="525"
+                 alt="A wide frame of self-recorded footage." loading="lazy" decoding="async">
+          </figure>
+          <div class="cell-body">
+            <h3>You hold the rights</h3>
+            <p>
+              Drag your clips in and there is nothing to claim, because nothing
+              came from anyone else. It is also the only way to cover sport,
+              gaming or anything from a broadcast.
+            </p>
+          </div>
         </article>
-        <article class="card">
-          <h3 class="card-title">Licensed stock</h3>
-          <p>Pexels and Pixabay, both licensed for commercial use without attribution.</p>
-        </article>
-        <article class="card">
-          <h3 class="card-title">Open collections</h3>
-          <p>Openverse and the Internet Archive &mdash; CC0, public domain, CC BY and BY-SA only. Non-commercial and no-derivatives licences are refused, and required credit is written into the description for you.</p>
-        </article>
-      </div>
 
-      <div class="notice">
-        <p>
-          <strong>What this does not do.</strong> No amount of engineering makes
-          someone else&rsquo;s broadcast footage safe to re-upload &mdash;
-          Content ID matches the content itself, whoever posted it. If your
-          niche is a TV show, the honest route is footage you have the rights
-          to, through the upload source.
-        </p>
-        <p class="body-sm subtle">
-          Self-hosting? There is an adapter for pulling from YouTube. It ships
-          disabled and takes two deliberate opt-ins to switch on, because the
-          terms-of-service and liability trade-off is a decision, not a default.
-        </p>
+        <article class="cell reveal reveal-d1">
+          <h3>No stock libraries</h3>
+          <p>
+            Stock and public-domain libraries hold generic clips. Nothing
+            broadcast, nothing sport, nothing gaming. For what actually gets
+            made here they were dead weight, so the pipeline does not carry
+            them at all.
+          </p>
+        </article>
+
+        <article class="cell cell-full cell-note reveal">
+          <h3>What this does not do</h3>
+          <p>
+            Uploading is not a loophole. If you upload someone else&rsquo;s
+            broadcast footage, Content ID still matches the content itself,
+            whoever posted it, and that is between you and the rights holder.
+            The tool makes no claim it can help there.
+          </p>
+          <p class="body-sm subtle">
+            Self-hosting? There is an adapter for pulling from YouTube. It ships
+            disabled and takes two deliberate opt-ins to switch on, because the
+            terms-of-service and liability trade-off is a decision, not a
+            default.
+          </p>
+        </article>
       </div>
     </div>
   </section>
 
-  <!-- ============================ pricing ============================ -->
+  <!-- ============================ pricing ============================= -->
   <section id="pricing">
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Pricing</p>
+      <div class="section-head reveal">
         <h2 class="display-lg">Start free. Automate when it earns it.</h2>
-        <p class="subhead">
+        <p class="body">
           A run only counts once it renders. Rejected and failed runs are
           refunded automatically.
         </p>
       </div>
 
       <div class="tiers">
-        <div class="tier">
-          <h3>Free</h3>
-          <div class="price"><span data-price="free">£0</span><small> / month</small></div>
-          <a class="btn btn-secondary" href="/app">Create an account</a>
+        <div class="tier reveal">
+          <p class="tier-name">Free</p>
+          <div class="price"><span class="num" data-price="free">&pound;0</span><small>/ month</small></div>
+          <a class="btn btn-secondary" href="/app">Start free</a>
           <ul>
             <li>3 videos a month</li>
             <li>Up to 5 clips, 60 seconds</li>
             <li>Every format setting</li>
-            <li class="no">Watermarked</li>
-            <li class="no">No daily automation</li>
+            <li class="off">Watermarked</li>
+            <li class="off">No daily automation</li>
           </ul>
         </div>
 
-        <div class="tier featured">
-          <h3>Starter <span class="tier-tag">Most popular</span></h3>
-          <div class="price"><span data-price="starter">£12</span><small> / month</small></div>
-          <a class="btn btn-primary" href="/app?plan=starter">Start with Starter</a>
+        <div class="tier tier-featured reveal reveal-d1">
+          <p class="tier-name">Starter <span class="tier-tag">Most popular</span></p>
+          <div class="price"><span class="num" data-price="starter">&pound;12</span><small>/ month</small></div>
+          <a class="btn btn-primary" href="/app?plan=starter">Choose Starter</a>
           <ul>
             <li>40 videos a month</li>
             <li>Up to 8 clips, 3 minutes</li>
+            <li>3 custom formats</li>
             <li>No watermark</li>
             <li>Daily automated publishing</li>
-            <li>Scheduled publish times</li>
           </ul>
         </div>
 
-        <div class="tier">
-          <h3>Pro</h3>
-          <div class="price"><span data-price="pro">£39</span><small> / month</small></div>
-          <a class="btn btn-secondary" href="/app?plan=pro">Start with Pro</a>
+        <div class="tier reveal reveal-d2">
+          <p class="tier-name">Pro</p>
+          <div class="price"><span class="num" data-price="pro">&pound;39</span><small>/ month</small></div>
+          <a class="btn btn-secondary" href="/app?plan=pro">Choose Pro</a>
           <ul>
             <li>300 videos a month</li>
             <li>Up to 12 clips, 5 minutes</li>
+            <li>50 custom formats</li>
             <li>No watermark</li>
-            <li>Daily automated publishing</li>
             <li>Priority rendering</li>
           </ul>
         </div>
       </div>
+
+      <p class="pricing-fine reveal">
+        No card required for the free plan. Your first uploads default to
+        private.
+      </p>
     </div>
   </section>
 
-  <!-- ============================== faq ============================== -->
+  <!-- ============================== faq =============================== -->
   <section>
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Questions</p>
+      <div class="section-head reveal">
         <h2 class="display-md">Before you sign up</h2>
       </div>
 
-      <div class="faq">
+      <div class="faq reveal">
         <details>
           <summary>Do I need my own footage?</summary>
-          <p>No &mdash; the stock and open-collection sources work on their own.
-          But they carry no broadcast, sport or gaming footage, so if that is
-          your niche you will need to supply clips you have the rights to.</p>
+          <p>Yes. ClipForge cuts footage you upload and does not source any on
+          your behalf, so bring clips you have the rights to. Stock and
+          public-domain sources were removed because they hold nothing useful
+          for broadcast, sport or gaming.</p>
         </details>
         <details>
           <summary>Will my videos get copyright claims?</summary>
-          <p>Not from footage this tool sourced for you: everything it uses is
-          either yours or licensed for commercial reuse, and non-commercial
-          licences are refused outright. If you upload clips you do not own,
-          that is a different matter and no tool can help with it.</p>
+          <p>Nothing is sourced for you, so no claim can originate with the
+          tool. Every frame it touches is one you uploaded. If you upload clips
+          you do not own, that is a different matter, and no tool can help with
+          it.</p>
         </details>
         <details>
-          <summary>What does &ldquo;daily automation&rdquo; actually do?</summary>
+          <summary>What does daily automation actually do?</summary>
           <p>Pick a time and a timezone. Our servers queue a run when that time
           arrives, so nothing needs to stay open on your machine. An account
           runs at most once per calendar day, and a window missed by more than
@@ -364,8 +341,8 @@
         <details>
           <summary>Can I see a video before it goes out?</summary>
           <p>Yes. Use <b>Dry run</b> to render without uploading, or leave
-          visibility on private &mdash; which is the default for every new
-          account &mdash; and publish from YouTube once you have watched it.</p>
+          visibility on private, which is the default for every new account, and
+          publish from YouTube once you have watched it.</p>
         </details>
         <details>
           <summary>What happens if it cannot find enough clips?</summary>
@@ -379,10 +356,13 @@
   <!-- ============================== cta =============================== -->
   <section>
     <div class="wrap">
-      <div class="cta-banner">
-        <h2 class="headline">Three videos, free, no card.</h2>
-        <p>See what it makes before you decide whether it is worth automating.</p>
-        <a class="btn btn-primary" href="/app">Get started</a>
+      <div class="cta-band reveal">
+        <h2 class="display-md">See what it makes before you automate it.</h2>
+        <p>
+          Three videos a month on the free plan, and every format setting is
+          unlocked while you try it.
+        </p>
+        <a class="btn btn-primary" href="/app">Start free</a>
       </div>
     </div>
   </section>
@@ -392,18 +372,18 @@
   <div class="wrap">
     <div>
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
-      <p class="fine" style="margin-top:12px">
+      <p class="fine">
         Short-form video that sources licensed footage, scores itself for
         retention, and publishes on a schedule.
       </p>
     </div>
-    <div class="cols">
+    <div class="foot-cols">
       <div>
         <h4>Product</h4>
         <ul>
           <li><a href="#how">How it works</a></li>
           <li><a href="#retention">Retention gate</a></li>
-          <li><a href="#footage">Footage &amp; licensing</a></li>
+          <li><a href="#footage">Your footage</a></li>
           <li><a href="#pricing">Pricing</a></li>
         </ul>
       </div>
@@ -411,33 +391,70 @@
         <h4>Account</h4>
         <ul>
           <li><a href="/app">Sign in</a></li>
-          <li><a href="/app">Create an account</a></li>
+          <li><a href="/app">Start free</a></li>
         </ul>
       </div>
     </div>
   </div>
 </footer>
 
-
 <script>
-/* Fill the pricing table from the server, so this page cannot disagree with
-   what Stripe actually charges. The values in the markup are the fallback for
-   when the API is unreachable. */
-fetch('/api/plans')
-  .then(function (r) { return r.json(); })
-  .then(function (data) {
-    (data.plans || []).forEach(function (plan) {
-      var slot = document.querySelector('[data-price="' + plan.id + '"]');
-      if (!slot || !plan.price) return;
-      var parts = String(plan.price).split('/');
-      slot.textContent = parts[0].trim();
-      var unit = slot.parentElement.querySelector('small');
-      if (unit && parts.length > 1) {
-        unit.textContent = ' / ' + parts.slice(1).join('/').trim();
-      }
+(function () {
+  /* Reveal on entry. IntersectionObserver rather than a scroll listener, and
+     it degrades to plain visible content if either the API or JS is missing. */
+  var nodes = document.querySelectorAll('.reveal');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function revealAll() {
+    for (var i = 0; i < nodes.length; i++) nodes[i].classList.add('in');
+  }
+
+  if (!('IntersectionObserver' in window) || reduce) {
+    revealAll();
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('in');
+        io.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+    nodes.forEach(function (n) { io.observe(n); });
+
+    /* Safety net. The reveal starts at opacity 0, so anything that stops the
+       observer from delivering would leave the page blank rather than merely
+       unanimated. If nothing has been revealed shortly after load, show
+       everything and drop the effect. */
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        if (!document.querySelector('.reveal.in')) {
+          io.disconnect();
+          revealAll();
+        }
+      }, 900);
     });
-  })
-  .catch(function () { /* keep the printed prices */ });
+  }
+
+  /* Fill the pricing table from the server, so this page cannot disagree with
+     what Stripe actually charges. The printed values are the fallback for when
+     the API is unreachable. */
+  fetch('/api/plans')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      (data.plans || []).forEach(function (plan) {
+        var slot = document.querySelector('[data-price="' + plan.id + '"]');
+        if (!slot || !plan.price) return;
+        var parts = String(plan.price).split('/');
+        slot.textContent = parts[0].trim();
+        var unit = slot.parentElement.querySelector('small');
+        if (!unit) return;
+        /* A plan with no unit in its price, such as "Free", must not be left
+           reading "Free / month". */
+        unit.textContent = parts.length > 1 ? '/ ' + parts.slice(1).join('/').trim() : '';
+      });
+    })
+    .catch(function () { /* keep the printed prices */ });
+})();
 </script>
 </body>
 </html>

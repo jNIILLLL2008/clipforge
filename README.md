@@ -64,9 +64,10 @@ This is enforced in code, not in a policy page.
 * Clips needing credit are recorded with `attribution_required`, and the
   credit line is generated for the description.
 
-Shipped sources: the user's own uploads, Pexels, Pixabay, Openverse
-(CC0/PDM/BY/BY-SA only — NC and ND are refused), and public-domain film from
-archive.org.
+Shipped source: the user's own uploads. The stock and open-collection
+adapters (Pexels, Pixabay, Openverse, archive.org) were removed, because they
+hold no broadcast, sport or gaming footage and that is what this is used for.
+The licence machinery above still stands and still gates the YouTube adapter.
 
 **The honest limit.** This means no broadcast footage. A niche built on
 someone else's TV show cannot be made claim-free by any amount of engineering,

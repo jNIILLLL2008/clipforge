@@ -15,18 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-# Sources that carry no broadcast, sport or celebrity footage. Someone whose
-# niche is a TV show will find nothing in them however good their search terms.
-STOCK_ONLY = {"pexels", "pixabay", "openverse", "archive"}
-
-# Words that say "I want footage of a specific programme or person", which is
-# exactly what stock libraries do not have.
-BROADCAST_HINTS = (
-    "show", "tv", "episode", "series", "podcast", "interview", "panel",
-    "highlights", "match", "game", "league", "football", "soccer", "nba",
-    "nfl", "ufc", "boxing", "celebrity", "reaction", "stream", "twitch",
-)
-
 
 @dataclass
 class Finding:
@@ -95,27 +83,6 @@ def review(cfg: Dict, *, upload_count: int = 0,
                     "either repeat itself or come out short.",
                     f"Upload at least {clips}, or lower the clip count.",
                     "clips"))
-
-    # --- is the subject reachable from these sources? --------------------- #
-    stock_only = bool(sources) and set(sources) <= STOCK_ONLY
-    hinted = [word for word in BROADCAST_HINTS
-              if any(word in term for term in terms)]
-    if stock_only and hinted:
-        add(Finding(
-            "blocker", "Stock libraries cannot cover this subject",
-            f"Your search terms mention {hinted[0]!r}, but stock footage "
-            "libraries hold generic clips, not broadcast, sport or celebrity "
-            "footage.",
-            "Add your own clips as a source and upload the footage you have "
-            "the rights to.",
-            "sources"))
-
-    if stock_only and not terms:
-        add(Finding("warning", "No search terms with stock sources",
-                    "Stock libraries need something to search for; without "
-                    "terms the results will be arbitrary.",
-                    "Add a few words describing the footage you want.",
-                    "search_terms"))
 
     # --- the show filter -------------------------------------------------- #
     if cfg.get("require_show_match"):
