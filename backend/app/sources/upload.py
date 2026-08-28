@@ -36,6 +36,8 @@ class UploadSource:
 
     def __init__(self, user_id: Optional[int] = None) -> None:
         self.user_id = user_id
+        # Why the last search came back empty. Read by render/pipeline.py.
+        self.last_problem: str = ""
 
     def available(self) -> bool:
         return self.user_id is not None
@@ -46,6 +48,7 @@ class UploadSource:
         Terms filter by filename when given, but an empty term list returns
         everything -- a user with ten clips expects to use all ten.
         """
+        self.last_problem = ""
         if not self.available():
             return []
         directory = user_dir(self.user_id)
@@ -56,6 +59,15 @@ class UploadSource:
             if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
         ]
         files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+        # This adapter is "available" whenever somebody is signed in, so an
+        # empty folder is the single most common reason a run finds nothing.
+        if not files:
+            self.last_problem = (
+                "You have not uploaded any footage yet, and uploads are the "
+                "only source this niche is using."
+            )
+            return []
 
         clips: List[SourceClip] = []
         for path in files:

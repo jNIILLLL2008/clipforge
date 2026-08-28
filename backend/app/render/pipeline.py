@@ -79,6 +79,22 @@ def gather(niche_settings: Dict, wanted: int,
     pool = selection.apply(raw, niche_settings)
     log.info("Gathered %d candidate clip(s) from %d source(s).",
              len(pool), len(adapters))
+
+    if not pool:
+        # Every source coming back empty looks the same from here, but the
+        # causes are very different: no uploads, nothing configured to look
+        # at, or YouTube refusing a datacentre IP. Each adapter records why,
+        # so the job can say which rather than "no clips matched".
+        notes = [note for note in
+                 (getattr(a, "last_problem", "") for a in adapters) if note]
+        if raw and not notes:
+            notes.append(
+                f"Found {len(raw)} clip(s), but every one was rejected by the "
+                "niche filters. Loosen the duration, view count or show filter."
+            )
+        if notes:
+            raise RenderError(" ".join(notes))
+
     return pool
 
 

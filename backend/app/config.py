@@ -129,6 +129,11 @@ class Settings:
         # exported from a signed-in browser gets past age gates and the
         # "confirm you're not a bot" interstitial that hits datacentre IPs.
         self.ytdlp_cookies_file: str = _str("YTDLP_COOKIES_FILE")
+        # A container has nowhere to put a cookies.txt and no browser to
+        # read one from, so the jar can be pasted straight into an env var.
+        self.ytdlp_cookies_content: str = _str("YTDLP_COOKIES_CONTENT")
+        # Desktop only: chrome, firefox, edge, brave...
+        self.ytdlp_cookies_from_browser: str = _str("YTDLP_COOKIES_FROM_BROWSER")
 
         # --- AI ---------------------------------------------------------- #
         self.anthropic_api_key: str = _str("ANTHROPIC_API_KEY")

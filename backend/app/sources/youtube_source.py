@@ -20,6 +20,7 @@ the survivors are fully resolved.
 from __future__ import annotations
 
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,10 +35,73 @@ log = get_logger("sources.youtube")
 _HANDLE = re.compile(r"^@[\w.\-]+$")
 _VIDEO_ID = re.compile(r"^[\w\-]{11}$")
 
+#: Tab suffixes a pasted channel URL may already carry. Appending another tab
+#: to one of these produces /@channel/shorts/videos, which is not a real page.
+_TAB_SUFFIXES = ("/shorts", "/videos", "/streams", "/featured", "/search")
+
+#: YouTube's own "Duration: under 4 minutes" search filter. A plain search
+#: returns mostly long videos that all die on the duration filter later, so
+#: this narrows the field server-side first. Taken from the desktop tool.
+_SP_UNDER_4_MIN = "EgIYAQ%3D%3D"
+
+#: Substrings that mean YouTube refused us rather than simply had nothing.
+#: Datacentre IPs hit this constantly, which is why a server can come back
+#: empty while the same code works on a laptop.
+_BLOCK_SIGNS = (
+    "sign in to confirm", "not a bot", "confirm you're not",
+    "http error 429", "too many requests", "http error 403",
+    "blocked", "captcha", "consent",
+)
+
 
 def _slug(term: str) -> str:
     """A hashtag tab wants 'premierleague', not 'premier league'."""
     return re.sub(r"[^a-z0-9]+", "", term.lower())
+
+
+#: Resolved once per process: writing the pasted cookie jar to disk on every
+#: call would be wasteful and racy.
+_COOKIE_PATH: Optional[str] = None
+_COOKIE_DONE = False
+
+
+def _cookie_file() -> str:
+    """Path to a cookies.txt, materialising one from env if needed.
+
+    A container has no browser to read cookies from and usually no volume to
+    mount a file into, so YTDLP_COOKIES_CONTENT lets the whole jar be pasted
+    into an environment variable. Without cookies YouTube serves datacentre
+    IPs a bot interstitial and every scan comes back empty.
+    """
+    global _COOKIE_PATH, _COOKIE_DONE
+    if _COOKIE_DONE:
+        return _COOKIE_PATH or ""
+    _COOKIE_DONE = True
+
+    if settings.ytdlp_cookies_file:
+        if Path(settings.ytdlp_cookies_file).is_file():
+            _COOKIE_PATH = settings.ytdlp_cookies_file
+        else:
+            log.warning("YTDLP_COOKIES_FILE is set but %s does not exist.",
+                        settings.ytdlp_cookies_file)
+        return _COOKIE_PATH or ""
+
+    body = (settings.ytdlp_cookies_content or "").strip()
+    if not body:
+        return ""
+    # A cookie jar pasted into an env var often arrives with its newlines
+    # escaped, and yt-dlp needs the Netscape header line to parse the file.
+    body = body.replace("\\n", "\n")
+    if "# Netscape HTTP Cookie File" not in body:
+        body = "# Netscape HTTP Cookie File\n" + body
+    try:
+        target = Path(tempfile.gettempdir()) / "clipforge-cookies.txt"
+        target.write_text(body + "\n", encoding="utf-8")
+        _COOKIE_PATH = str(target)
+        log.info("Wrote a yt-dlp cookie jar from YTDLP_COOKIES_CONTENT.")
+    except OSError as exc:
+        log.warning("Could not write the cookie jar: %s", exc)
+    return _COOKIE_PATH or ""
 
 
 class YouTubeSource:
@@ -55,6 +119,9 @@ class YouTubeSource:
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         # Per-job settings, so each subscriber's channels and filters apply.
         self.config: Dict[str, Any] = config or {}
+        # Why the last search came back empty, so the job can say something
+        # more useful than "no clips matched". Read by render/pipeline.py.
+        self.last_problem: str = ""
 
     def with_settings(self, config: Dict[str, Any]) -> "YouTubeSource":
         return YouTubeSource(config)
@@ -78,8 +145,14 @@ class YouTubeSource:
             "socket_timeout": 30,
             "retries": 3,
         }
-        if settings.ytdlp_cookies_file:
-            opts["cookiefile"] = settings.ytdlp_cookies_file
+        cookies = _cookie_file()
+        if cookies:
+            opts["cookiefile"] = cookies
+        elif settings.ytdlp_cookies_from_browser:
+            # yt-dlp wants (browser, profile, keyring, container). Only useful
+            # on a desktop; a container has no browser to read.
+            opts["cookiesfrombrowser"] = (
+                settings.ytdlp_cookies_from_browser, None, None, None)
         opts.update(extra)
         return opts
 
@@ -96,6 +169,38 @@ class YouTubeSource:
             return f"https://www.youtube.com/@{value.lstrip('@')}"
         return value
 
+    def _channel_tabs(self, value: str, tabs: List[str]) -> List[str]:
+        """Tab URLs for one channel.
+
+        A channel URL copied from the address bar usually already ends in a
+        tab. Appending another one produces /@channel/shorts/videos, so a
+        value that already names a tab is used exactly as given.
+        """
+        base = self._channel_base(value)
+        if not base:
+            return []
+        if base.endswith(_TAB_SUFFIXES) or "/search?" in base:
+            return [base]
+        return [f"{base}/{tab}" for tab in tabs]
+
+    def _keyword_urls(self, term: str) -> List[str]:
+        """Discovery URLs for one search term, per the search mode.
+
+        Hashtag Shorts tabs return actual Shorts. A plain search returns
+        mostly long videos that die on the duration filter, so the search mode
+        applies YouTube's own "under 4 minutes" filter first.
+        """
+        mode = str(self.config.get("search_mode") or "hashtag").lower()
+        urls: List[str] = []
+        if mode in {"hashtag", "both"}:
+            slug = _slug(term)
+            if slug:
+                urls.append(f"https://www.youtube.com/hashtag/{slug}/shorts")
+        if mode in {"search", "both"}:
+            urls.append("https://www.youtube.com/results"
+                        f"?search_query={quote_plus(term)}&sp={_SP_UNDER_4_MIN}")
+        return urls
+
     def build_sources(self, terms: List[str]) -> List[str]:
         """Every discovery URL for this job, most specific first."""
         cfg = self.config
@@ -111,19 +216,16 @@ class YouTubeSource:
                 continue
             # Archive searches first: a channel's recent uploads are rarely its
             # best material, and a seasonal show may be off air entirely.
-            for term in searches:
-                urls.append(f"{base}/search?query={quote_plus(term)}")
-            for tab in tabs:
-                urls.append(f"{base}/{tab}")
+            if "/search?" not in base:
+                for term in searches:
+                    urls.append(f"{base}/search?query={quote_plus(term)}")
+            urls.extend(self._channel_tabs(channel, tabs))
 
-        # Hashtag Shorts tabs actually return Shorts, where ytsearch returns
-        # full-length videos that all die on the duration filter.
         for term in terms:
-            slug = _slug(term)
-            if slug:
-                urls.append(f"https://www.youtube.com/hashtag/{slug}/shorts")
+            urls.extend(self._keyword_urls(term))
 
-        return urls
+        # The same tab can be reached from two spellings of one channel.
+        return list(dict.fromkeys(urls))
 
     # ------------------------------------------------------------------ #
     # Stage 1 -- flat scan
@@ -138,13 +240,27 @@ class YouTubeSource:
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
         except (DownloadError, ExtractorError) as exc:
-            log.warning("Scan failed for %s: %s", url[:70], str(exc)[:120])
+            detail = str(exc)
+            log.warning("Scan failed for %s: %s", url[:70], detail[:120])
+            # Being refused and finding nothing look identical from here, and
+            # only one of them is the operator's fault. Say which.
+            if any(sign in detail.lower() for sign in _BLOCK_SIGNS):
+                self.last_problem = (
+                    "YouTube refused the request, which is what it serves to "
+                    "datacentre IPs without cookies. Set YTDLP_COOKIES_CONTENT "
+                    "to a cookies.txt exported from a signed-in browser."
+                )
+            elif not self.last_problem:
+                self.last_problem = f"YouTube scan failed: {detail[:120]}"
             return []
         if not info:
             return []
 
+        # A single video URL comes back as one dict rather than a playlist.
+        entries = info.get("entries") or ([info] if info.get("id") else [])
+
         found: List[SourceClip] = []
-        for entry in (info.get("entries") or []):
+        for entry in entries:
             if not entry:
                 continue
             video_id = entry.get("id") or ""
@@ -215,13 +331,19 @@ class YouTubeSource:
     # Search
     # ------------------------------------------------------------------ #
     def search(self, terms: List[str], limit: int) -> List[SourceClip]:
+        self.last_problem = ""
         if not self.available():
             log.warning("yt-dlp is not installed; the YouTube source is idle.")
+            self.last_problem = "yt-dlp is not installed on the server."
             return []
 
         urls = self.build_sources(terms)
         if not urls:
             log.info("No channels or search terms configured for YouTube.")
+            self.last_problem = (
+                "The YouTube source has nothing to look at. Add a channel "
+                "under Source channels, or give the niche some search terms."
+            )
             return []
 
         pool_size = int(self.config.get("candidate_pool_size", 40))
@@ -244,6 +366,12 @@ class YouTubeSource:
             if self.enrich(clip):
                 enriched.append(clip)
 
+        if not enriched and not self.last_problem:
+            self.last_problem = (
+                f"Scanned {len(urls)} YouTube page(s) and found no usable "
+                "clips. The channel may have nothing matching, or the filters "
+                "may be too tight."
+            )
         log.info("YouTube offered %d clip(s) from %d source URL(s).",
                  len(enriched), len(urls))
         return enriched

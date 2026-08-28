@@ -72,6 +72,11 @@ FIELDS: List[Dict[str, Any]] = [
           "Sources",
           "Where footage comes from. Your own uploads, which is the only "
           "source this build ships enabled."),
+    field("search_mode", "subject", "select", "hashtag",
+          "Search mode",
+          "How search terms become YouTube pages. Hashtag reads a tag's "
+          "Shorts tab, search reads results filtered to under four minutes.",
+          options=["hashtag", "search", "both"]),
     field("source_channels", "subject", "list", [],
           "Source channels",
           "Pull from specific channels rather than a general search. Only used "
