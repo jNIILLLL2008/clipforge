@@ -137,6 +137,13 @@ class Settings:
         # The industrial answer to datacentre blocking. An operator points this
         # at a residential proxy once and no subscriber ever hears about it.
         self.ytdlp_proxy: str = _str("YTDLP_PROXY")
+        # Whether the media download goes through the proxy too. It does not by
+        # default, and that is the difference between a proxy being affordable
+        # and not: the block lands on the metadata requests, which are
+        # kilobytes, while the video itself is served from a CDN that does not
+        # care about the IP. Proxying downloads as well multiplies the bill by
+        # about ten thousand for no extra access.
+        self.ytdlp_proxy_downloads: bool = _bool("YTDLP_PROXY_DOWNLOADS", False)
         # The desktop tool's selector, which is what it downloads with today.
         # The middle branch matters: without an any-extension merge, a client
         # that offers no mp4 pair falls straight through to a single muxed

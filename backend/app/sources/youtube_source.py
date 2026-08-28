@@ -146,7 +146,8 @@ class YouTubeSource:
         chosen = [c.strip() for c in settings.ytdlp_player_clients if c.strip()]
         return chosen or ["default"]
 
-    def _opts(self, client: str = "default", **extra: Any) -> Dict[str, Any]:
+    def _opts(self, client: str = "default", proxied: bool = True,
+              **extra: Any) -> Dict[str, Any]:
         opts: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
@@ -159,7 +160,7 @@ class YouTubeSource:
         # one. The named clients are the fallbacks for when it is refused.
         if client and client != "default":
             opts["extractor_args"] = {"youtube": {"player_client": [client]}}
-        if settings.ytdlp_proxy:
+        if settings.ytdlp_proxy and proxied:
             opts["proxy"] = settings.ytdlp_proxy
         if settings.ytdlp_js_runtime:
             # yt-dlp validates this as {runtime: {config}} and raises on a list.
@@ -440,6 +441,11 @@ class YouTubeSource:
         stem = destination.with_suffix("")
 
         opts = self._opts(
+            # The media comes off a CDN that does not apply the block the
+            # metadata endpoints do, so this goes direct unless an operator
+            # says otherwise. Sending gigabytes of video through a metered
+            # residential proxy is what makes one unaffordable.
+            proxied=settings.ytdlp_proxy_downloads,
             format=settings.ytdlp_format,
             merge_output_format="mp4",
             outtmpl=f"{stem}.%(ext)s",
