@@ -77,18 +77,37 @@ def health() -> JSONResponse:
 _PAGE_PATHS = {"/", "/app"}
 
 
-@app.middleware("http")
-async def no_cache_frontend(request, call_next):
-    """Serve the frontend uncached in development.
+#: Assets that change on every deploy and whose filenames are not fingerprinted.
+_REVALIDATE_SUFFIXES = (".css", ".js", ".html")
 
-    This covers the HTML pages as well as /static. Without it the browser keeps
-    an old styles.css after an edit -- or worse, keeps serving a cached "/" from
-    before that route changed, so the new page appears not to exist at all.
+
+@app.middleware("http")
+async def cache_frontend(request, call_next):
+    """Tell the browser how long it may trust the frontend.
+
+    In development nothing is cached at all. In production this used to send no
+    Cache-Control header whatsoever, which is worse than it sounds: with only an
+    ETag and a Last-Modified to go on, browsers fall back to *heuristic* caching
+    and invent their own freshness window. A stylesheet could then outlive the
+    deploy that changed it, and the new markup would render against the old CSS.
+
+    Filenames here are not fingerprinted, so the fix is to make the browser
+    revalidate. "no-cache" still lets it store the file; it just has to ask
+    first, and the ETag turns that into a 304 with no body.
     """
     response = await call_next(request)
     path = request.url.path
-    if settings.debug and (path.startswith("/static") or path in _PAGE_PATHS):
+    if not (path.startswith("/static") or path in _PAGE_PATHS):
+        return response
+
+    if settings.debug:
         response.headers["Cache-Control"] = "no-store, must-revalidate"
+    elif path in _PAGE_PATHS or path.endswith(_REVALIDATE_SUFFIXES):
+        response.headers["Cache-Control"] = "no-cache"
+    else:
+        # Images and fonts change rarely. Rename the file to force a swap
+        # sooner than this.
+        response.headers["Cache-Control"] = "public, max-age=3600"
     return response
 
 
