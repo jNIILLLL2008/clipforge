@@ -200,6 +200,75 @@ check("free plan cannot enable automation", blocked.status_code == 402,
       blocked.status_code)
 
 # --------------------------------------------------------------------------- #
+section("configuration advice")
+from backend.app.render.advice import review as review_cfg  # noqa: E402
+
+# The mistake that most often produces nothing: a broadcast subject against
+# libraries that hold no broadcast footage.
+stock_tv = review_cfg(sanitise({
+    "sources": ["pexels", "pixabay"],
+    "search_terms": ["football panel show", "studio banter"],
+}))
+check("stock sources + a TV subject is a blocker", not stock_tv.can_run)
+check("and it names the reason",
+      any("stock" in f.title.lower() for f in stock_tv.blockers),
+      [f.title for f in stock_tv.blockers][:1])
+
+check("uploads-only with no uploads is a blocker",
+      not review_cfg(sanitise({"sources": ["upload"]}), upload_count=0).can_run)
+check("uploads-only with uploads is fine",
+      review_cfg(sanitise({"sources": ["upload"], "clips": 4}),
+                 upload_count=6).can_run)
+check("no source at all is a blocker",
+      not review_cfg(sanitise({"sources": []})).can_run)
+
+empty_gate = review_cfg(sanitise({
+    "sources": ["upload"], "require_show_match": True,
+    "show_terms": [], "show_people": [],
+}), upload_count=5)
+check("show filter with nothing to match on is a blocker", not empty_gate.can_run)
+
+fine = review_cfg(sanitise({
+    "sources": ["upload"], "clips": 6, "target_seconds": 60,
+    "min_clip_seconds": 5, "max_clip_seconds": 20, "checklist_enabled": True,
+}), upload_count=10)
+check("a workable config raises no blockers", fine.can_run,
+      [f.title for f in fine.blockers])
+
+slow = review_cfg(sanitise({
+    "sources": ["upload"], "clips": 3, "target_seconds": 180,
+    "max_clip_seconds": 60, "checklist_enabled": True,
+}), upload_count=10)
+check("a static edit is warned about",
+      any("pace" in f.title.lower() for f in slow.findings),
+      [f.title for f in slow.findings][:2])
+
+silent = review_cfg(sanitise({
+    "sources": ["upload"], "clips": 6, "target_seconds": 60,
+    "captions_enabled": False, "checklist_enabled": False,
+    "banner_enabled": False,
+}), upload_count=10)
+check("no on-screen text is warned about",
+      any("read" in f.title.lower() for f in silent.findings),
+      [f.title for f in silent.findings][:2])
+
+section("layout preview")
+from backend.app.render import preview as preview_mod  # noqa: E402
+
+frame = preview_mod.build(sanitise({
+    "clips": 5, "banner_line1": "TOP {count}", "checklist_enabled": True,
+    "captions_enabled": True, "search_terms": ["first thing", "second thing"],
+}), at_clip=3)
+check("renders a PNG", frame[:8] == b"\x89PNG\r\n\x1a\n", frame[:4])
+check("of a sensible size", 5_000 < len(frame) < 400_000, f"{len(frame):,} bytes")
+
+bare = preview_mod.build(sanitise({
+    "clips": 3, "banner_enabled": False, "checklist_enabled": False,
+    "captions_enabled": False,
+}), at_clip=1)
+check("works with every overlay switched off",
+      bare[:8] == b"\x89PNG\r\n\x1a\n")
+
 section("billing surface")
 plans_payload = client.get("/api/plans").json()
 tiers = {p["id"]: p for p in plans_payload["plans"]}

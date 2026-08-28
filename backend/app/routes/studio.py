@@ -183,6 +183,73 @@ def put_settings(body: SettingsIn, user: User = Depends(current_user),
     return {"settings": cfg}
 
 
+class PreviewIn(BaseModel):
+    settings: Dict = {}
+    at_clip: int = 2
+
+
+@router.post("/studio/preview")
+def preview(body: PreviewIn, user: User = Depends(current_user)):
+    """One frame of the layout, rendered the same way the video will be.
+
+    Takes unsaved settings so the preview can update while someone is still
+    editing, rather than forcing them to save first.
+    """
+    from fastapi.responses import Response
+
+    from ..render import preview as preview_render
+    from ..sources.upload import VIDEO_SUFFIXES, user_dir
+
+    cfg = sanitise(body.settings, base=user.settings or {})
+    cfg["clips"] = min(cfg["clips"], user.limits["max_clips"])
+
+    # Preview against the user's own footage when they have some -- seeing the
+    # overlay on a grey card tells you much less than seeing it on your clip.
+    sample = None
+    if "upload" in (cfg.get("sources") or []):
+        directory = user_dir(user.id)
+        clips = sorted(
+            (p for p in directory.iterdir()
+             if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES),
+            key=lambda p: -p.stat().st_mtime,
+        )
+        sample = clips[0] if clips else None
+
+    try:
+        image = preview_render.build(
+            cfg,
+            at_clip=body.at_clip,
+            user_upload=sample,
+            watermark="clipforge.app" if user.limits["watermark"] else "",
+        )
+    except Exception as exc:  # noqa: BLE001 - a preview must never 500 the app
+        log.warning("Preview failed for user %s: %s", user.id, exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Could not build a preview just now.",
+        ) from exc
+
+    return Response(content=image, media_type="image/png",
+                    headers={"Cache-Control": "no-store"})
+
+
+@router.post("/studio/review")
+def review_settings(body: PreviewIn, user: User = Depends(current_user)):
+    """What is wrong with this configuration, before a render is spent on it."""
+    from ..render.advice import review
+    from ..sources.upload import VIDEO_SUFFIXES, user_dir
+
+    cfg = sanitise(body.settings, base=user.settings or {})
+    directory = user_dir(user.id)
+    uploads = sum(1 for p in directory.iterdir()
+                  if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES)
+
+    available = [s["name"] for s in catalogue(user.id)
+                 if s["enabled"] and s["configured"] and s["permitted"]]
+    return review(cfg, upload_count=uploads,
+                  available_sources=available).to_dict()
+
+
 @router.get("/presets")
 def presets(db: Session = Depends(get_db)):
     """Starting points a user can load over their settings."""

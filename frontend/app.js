@@ -145,6 +145,9 @@ function showTab(name, { focus = false } = {}) {
   window.scrollTo(0, 0);
   if (name === 'history') loadJobs();
   if (name === 'activity') { loadUploads(); loadSources(); loadPlans(); }
+  // Build the preview only when the screen showing it is opened, so it never
+  // costs an ffmpeg run for someone who is not looking at it.
+  if (name === 'settings') { fillPreviewClips(); previewSoon(150); }
 }
 
 NAV.forEach((item, index) => {
@@ -396,6 +399,10 @@ function bindSettings() {
       else state.settings[key] = input.value;
       state.dirty = true;
       $('settings-status').textContent = 'Unsaved changes';
+
+      // Show the effect of the edit without waiting for a save.
+      if (key === 'clips') fillPreviewClips();
+      previewSoon();
     };
     if (input.type === 'checkbox' || input.tagName === 'SELECT') input.onchange = input.oninput;
   });
@@ -595,6 +602,363 @@ async function uploadFiles(files) {
   toast(`Uploaded ${videos.length} clip(s).`);
   loadUploads();
 }
+
+/* ------------------------------------------------------- preview ------ */
+/* The frame is rendered server-side by the real pipeline, so it cannot drift
+   from what the video will look like. Requests are debounced and the previous
+   one is abandoned, because people edit settings faster than ffmpeg runs. */
+let previewTimer = null;
+let previewRun = 0;
+
+function previewSoon(delay = 700) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(refreshPreview, delay);
+}
+
+async function refreshPreview() {
+  const img = $('preview-img');
+  const state = $('preview-state');
+  if (!img) return;
+
+  const run = ++previewRun;
+  state.textContent = 'Building preview…';
+  state.classList.remove('hidden');
+
+  const atClip = Number($('preview-clip').value) || 2;
+  try {
+    const response = await fetch('/api/studio/preview', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: state_settings(), at_clip: atClip }),
+    });
+    if (run !== previewRun) return;          // a newer edit already won
+    if (!response.ok) throw new Error(`preview failed (${response.status})`);
+
+    const blob = await response.blob();
+    if (run !== previewRun) return;
+    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    const url = URL.createObjectURL(blob);
+    img.dataset.url = url;
+    img.src = url;
+    state.classList.add('hidden');
+  } catch (err) {
+    if (run !== previewRun) return;
+    state.textContent = 'Preview unavailable right now.';
+    state.classList.remove('hidden');
+  }
+  refreshReview();
+}
+
+function state_settings() {
+  return state.settings;
+}
+
+function fillPreviewClips() {
+  const select = $('preview-clip');
+  if (!select) return;
+  const count = Math.max(2, Math.min(state.settings.clips || 5, 12));
+  const chosen = Math.min(Number(select.value) || 2, count);
+  select.innerHTML = Array.from({ length: count }, (_, i) =>
+    `<option value="${i + 1}" ${i + 1 === chosen ? 'selected' : ''}>${i + 1} of ${count}</option>`).join('');
+}
+
+async function refreshReview() {
+  const host = $('review-list');
+  if (!host) return;
+  try {
+    const data = await api('/api/studio/review', {
+      method: 'POST', body: { settings: state.settings },
+    });
+    host.innerHTML = renderFindings(data);
+  } catch { host.innerHTML = ''; }
+}
+
+function renderFindings(data) {
+  if (!data.findings.length) {
+    return '<div class="finding review-ok">Nothing to flag &mdash; this should produce a video.</div>';
+  }
+  const order = { blocker: 0, warning: 1, tip: 2 };
+  return [...data.findings]
+    .sort((a, b) => order[a.level] - order[b.level])
+    .map((f) => `<div class="finding ${f.level}">
+      <b>${esc(f.title)}</b>
+      <span class="detail">${esc(f.detail)}</span>
+      ${f.fix ? `<span class="fix">${esc(f.fix)}</span>` : ''}
+    </div>`).join('');
+}
+
+if ($('preview-refresh')) $('preview-refresh').onclick = () => refreshPreview();
+if ($('preview-clip')) $('preview-clip').onchange = () => refreshPreview();
+
+/* -------------------------------------------------- guided setup ------ */
+/* A walkthrough that actually configures the niche, checking each answer
+   against what the pipeline can deliver. The last step will not let someone
+   finish on a configuration that cannot produce a video. */
+const GUIDE = [
+  {
+    title: 'What are you making?',
+    choiceKey: 'shape',
+    intro: `<p>Pick the <b>shape</b> of video. This decides the pacing and what
+      goes on screen, which matters more for retention than the topic does.</p>`,
+    render: () => choices('shape', [
+      { id: 'top5', title: 'A ranked countdown',
+        note: 'Numbered list, best clip last. The strongest format for holding attention.' },
+      { id: 'funny', title: 'Loose highlights',
+        note: 'No ranking. The best moment goes first instead of last.' },
+      { id: 'memes', title: 'Fast meme cut',
+        note: 'Very short clips, big captions, built for rewatching.' },
+      { id: 'show', title: 'One specific TV show or series',
+        note: 'Adds a filter that rejects clips from anywhere else.' },
+    ]),
+    apply: async (value) => {
+      const { presets } = await api('/api/presets');
+      const preset = presets.find((p) => p.slug === value);
+      if (preset) {
+        const data = await api(`/api/presets/${preset.id}/apply`, { method: 'POST' });
+        state.settings = data.settings;
+      }
+    },
+  },
+  {
+    title: 'Where does the footage come from?',
+    choiceKey: 'footage',
+    intro: `<p>This is the decision that most often stops a first run
+      producing anything.</p>`,
+    render: () => choices('footage', [
+      { id: 'upload', title: 'My own clips',
+        note: 'You upload them. Nothing to claim, and the only option for sport, gaming or anything off a broadcast.' },
+      { id: 'stock', title: 'Licensed stock footage',
+        note: 'Generic clips licensed for commercial reuse. No broadcast or celebrity footage exists here.' },
+      { id: 'both', title: 'Both',
+        note: 'Your uploads first, stock to fill the gaps.' },
+    ]),
+    apply: (value) => {
+      const map = {
+        upload: ['upload'],
+        stock: ['pexels', 'pixabay', 'openverse', 'archive'],
+        both: ['upload', 'pexels', 'pixabay'],
+      };
+      state.settings.sources = map[value] || ['upload'];
+    },
+  },
+  {
+    title: 'What should it look for?',
+    intro: `<p>These words are searched in each source. For your own uploads
+      they match the filename, so leaving this empty uses everything you have
+      uploaded.</p>`,
+    render: () => field('search_terms', 'Search terms', 'textarea',
+      (state.settings.search_terms || []).join('\n'),
+      'One per line. e.g. "skateboard", "city at night"'),
+    // Read the textarea, not the choice value: this step has no choice, and
+    // `value` would be undefined -- which showed up in the preview as a
+    // checklist entry reading "Undefined".
+    apply: (value, form) => {
+      state.settings.search_terms = splitLines(form.search_terms);
+    },
+  },
+  {
+    title: 'Which show is it?',
+    skipUnless: () => state.settings.require_show_match,
+    intro: `<p>The filter keeps clips that either mention a <b>show keyword</b>,
+      or name <b>two different regulars</b> together. That combination is what
+      separates the show from anything else those people appear in.</p>`,
+    render: () => `
+      ${field('show_name', 'Show name', 'input', state.settings.show_name || '',
+              'Given to the AI. e.g. "the CBS Sports Golazo studio show"')}
+      ${field('show_terms', 'Show keywords', 'textarea',
+              (state.settings.show_terms || []).join('\n'),
+              'One per line. Words that appear on clips FROM this show.')}
+      ${field('show_people', 'The regulars', 'textarea',
+              (state.settings.show_people || []).join('\n'),
+              'One person per line. Separate their aliases with | so nicknames match:\nthierry henry|thierry|henry')}`,
+    apply: (value, form) => {
+      state.settings.show_name = form.show_name.trim();
+      state.settings.show_terms = splitLines(form.show_terms);
+      state.settings.show_people = splitLines(form.show_people);
+    },
+  },
+  {
+    title: 'How long, and how many clips?',
+    intro: `<p>Pace is what the retention gate scores hardest. More clips in
+      less time reads as energetic; fewer, longer ones read as static.</p>`,
+    render: () => `
+      ${field('clips', 'Number of clips', 'number', state.settings.clips, '')}
+      ${field('target_seconds', 'Total length (seconds)', 'number',
+              state.settings.target_seconds, '')}
+      <p class="hint" id="pace-note"></p>`,
+    apply: (value, form) => {
+      state.settings.clips = parseInt(form.clips, 10) || 5;
+      state.settings.target_seconds = parseInt(form.target_seconds, 10) || 105;
+    },
+  },
+  {
+    title: 'Here is what it will look like',
+    intro: `<p>Rendered by the same pipeline that makes the video. Check the
+      banner text and where the numbered list sits.</p>`,
+    preview: true,
+    render: () => `
+      ${field('banner_line1', 'Banner line 1', 'input',
+              state.settings.banner_line1 || '', '{count} becomes the clip count')}
+      ${field('banner_line2', 'Banner line 2', 'input',
+              state.settings.banner_line2 || '', 'Your channel name works well here')}`,
+    apply: (value, form) => {
+      state.settings.banner_line1 = form.banner_line1;
+      state.settings.banner_line2 = form.banner_line2;
+    },
+  },
+];
+
+let guideAt = 0;
+let guideChoice = {};
+
+function choices(key, options) {
+  return options.map((o) => `
+    <button type="button" class="choice ${guideChoice[key] === o.id ? 'on' : ''}"
+            data-choice="${key}" data-value="${o.id}">
+      <b>${esc(o.title)}</b><span>${esc(o.note)}</span>
+    </button>`).join('');
+}
+
+function field(name, label, kind, value, hint) {
+  const control = kind === 'textarea'
+    ? `<textarea data-field="${name}" placeholder="${esc(hint)}">${esc(value ?? '')}</textarea>`
+    : `<input type="${kind}" data-field="${name}" value="${esc(value ?? '')}"
+         placeholder="${esc(hint)}">`;
+  return `<div class="guide-field">
+    <label>${esc(label)}</label>${control}
+    ${hint && kind !== 'textarea' ? `<span class="hint">${esc(hint)}</span>` : ''}
+  </div>`;
+}
+
+function splitLines(value) {
+  return String(value || '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+}
+
+function visibleGuideSteps() {
+  return GUIDE.filter((s) => !s.skipUnless || s.skipUnless());
+}
+
+async function renderGuide() {
+  const steps = visibleGuideSteps();
+  guideAt = Math.max(0, Math.min(guideAt, steps.length - 1));
+  const step = steps[guideAt];
+
+  $('guide-step').textContent = `Step ${guideAt + 1} of ${steps.length}`;
+  $('guide-title').textContent = step.title;
+  $('guide-body').innerHTML = (step.intro || '') + step.render();
+  $('guide-dots').innerHTML = steps.map((_, i) =>
+    `<i class="${i === guideAt ? 'on' : ''}"></i>`).join('');
+  $('guide-back').disabled = guideAt === 0;
+  $('guide-next').textContent = guideAt === steps.length - 1 ? 'Save and finish' : 'Next';
+
+  $('guide-body').querySelectorAll('[data-choice]').forEach((button) => {
+    button.onclick = () => {
+      guideChoice[button.dataset.choice] = button.dataset.value;
+      $('guide-body').querySelectorAll(`[data-choice="${button.dataset.choice}"]`)
+        .forEach((b) => b.classList.toggle('on', b === button));
+    };
+  });
+
+  // Live pace feedback while they type, so the retention rule is visible
+  // before it rejects anything.
+  const paceNote = $('pace-note');
+  if (paceNote) {
+    const update = () => {
+      const form = readGuideForm();
+      const clips = parseInt(form.clips, 10) || 1;
+      const secs = parseInt(form.target_seconds, 10) || 1;
+      const cpm = clips / secs * 60;
+      paceNote.textContent =
+        `${cpm.toFixed(1)} cuts a minute — ` +
+        (cpm < 8 ? 'too static; the retention gate will mark this down.'
+         : cpm > 30 ? 'very fast; hard to follow.'
+         : 'a good range.');
+      paceNote.style.color = (cpm < 8 || cpm > 30) ? 'var(--warn)' : 'var(--good)';
+    };
+    $('guide-body').querySelectorAll('[data-field]').forEach((i) => { i.oninput = update; });
+    update();
+  }
+
+  $('guide-preview').classList.toggle('hidden', !step.preview);
+  $('guide-review').innerHTML = '';
+  if (step.preview) await guidePreview();
+}
+
+function readGuideForm() {
+  const out = {};
+  $('guide-body').querySelectorAll('[data-field]').forEach((input) => {
+    out[input.dataset.field] = input.value;
+  });
+  return out;
+}
+
+async function guidePreview() {
+  try {
+    const response = await fetch('/api/studio/preview', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: state.settings, at_clip: 2 }),
+    });
+    if (!response.ok) throw new Error('no preview');
+    const blob = await response.blob();
+    $('guide-img').src = URL.createObjectURL(blob);
+  } catch {
+    $('guide-preview').classList.add('hidden');
+  }
+  try {
+    const data = await api('/api/studio/review', {
+      method: 'POST', body: { settings: state.settings },
+    });
+    $('guide-review').innerHTML = renderFindings(data);
+  } catch { /* advice is a bonus, not a blocker */ }
+}
+
+async function openGuide() {
+  guideAt = 0;
+  guideChoice = {};
+  $('guide').classList.remove('hidden');
+  await renderGuide();
+}
+
+$('guide-close').onclick = () => $('guide').classList.add('hidden');
+$('guide').onclick = (e) => { if (e.target === $('guide')) $('guide-close').click(); };
+$('open-guide').onclick = openGuide;
+
+$('guide-back').onclick = async () => { guideAt -= 1; await renderGuide(); };
+
+$('guide-next').onclick = async () => {
+  const steps = visibleGuideSteps();
+  const step = steps[guideAt];
+  const button = $('guide-next');
+  button.disabled = true;
+  try {
+    // Steps that offer choices name the key they store under; the rest read
+    // their values from the form instead.
+    await step.apply?.(guideChoice[step.choiceKey], readGuideForm());
+
+    if (guideAt < visibleGuideSteps().length - 1) {
+      guideAt += 1;
+      await renderGuide();
+    } else {
+      const { settings } = await api('/api/studio/settings', {
+        method: 'PUT', body: { settings: state.settings },
+      });
+      state.settings = settings;
+      renderSettings();
+      fillPreviewClips();
+      previewSoon(0);
+      await loadStudio();
+      $('guide').classList.add('hidden');
+      toast('Your niche is set up. Press Publish when ready.');
+    }
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+  }
+};
 
 /* ------------------------------------------------------------- tour ---- */
 /* An interactive walkthrough. Each step switches to the right screen and

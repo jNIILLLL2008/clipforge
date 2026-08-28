@@ -327,6 +327,102 @@ button { font: inherit; cursor: pointer; border-radius: 10px; transition: .12s; 
 
 .tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 
+/* ------------------------------------------------------- preview ------ */
+.preview-panel {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 1rem; margin: 1.2rem 0;
+}
+.preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; margin-bottom: .9rem; flex-wrap: wrap;
+}
+.preview-select {
+  background: var(--surface-2); color: var(--accent); border: 0;
+  border-radius: 8px; padding: .35rem .5rem; font: inherit; font-size: .85rem;
+}
+.preview-body { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+
+.preview-frame {
+  position: relative; background: #000; border-radius: 10px;
+  overflow: hidden; aspect-ratio: 9 / 16; max-width: 260px; margin: 0 auto;
+  border: 1px solid var(--border);
+}
+.preview-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.preview-state {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: var(--surface); color: var(--muted); font-size: .85rem;
+  text-align: center; padding: 1rem;
+}
+.preview-state.hidden { display: none; }
+.preview-notes p { margin: 0 0 .8rem; }
+
+/* findings from the config review */
+.review-list { display: grid; gap: .5rem; }
+.finding {
+  background: var(--surface-2); border-radius: 10px; padding: .7rem .8rem;
+  border-left: 3px solid var(--muted); font-size: .87rem;
+}
+.finding.blocker { border-left-color: var(--bad); }
+.finding.warning { border-left-color: var(--warn); }
+.finding.tip { border-left-color: var(--accent); }
+.finding b { display: block; margin-bottom: .15rem; }
+.finding .detail { color: var(--muted); }
+.finding .fix { color: var(--text); margin-top: .35rem; display: block; }
+.review-ok {
+  background: rgba(48, 209, 88, .12); border-left-color: var(--good);
+  color: var(--good); font-weight: 500;
+}
+
+/* --------------------------------------------------- guided setup ----- */
+.guide-card {
+  width: min(680px, 100%); max-height: 92dvh; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; overflow: hidden;
+}
+.guide-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; padding: 1.2rem 1.2rem .8rem;
+}
+.guide-head h2 { font-size: 1.35rem; letter-spacing: -.02em; }
+.guide-body { padding: 0 1.2rem; overflow-y: auto; flex: 1; }
+.guide-body > p { color: var(--muted); font-size: .95rem; line-height: 1.55; }
+.guide-body b { color: var(--text); }
+.guide-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; padding: 1rem 1.2rem; border-top: 1px solid var(--border);
+}
+.guide-foot .tour-dots { margin: 0; }
+
+.choice {
+  display: block; width: 100%; text-align: left; margin-bottom: .5rem;
+  background: var(--surface-2); border: 1px solid transparent;
+  border-radius: var(--radius); padding: .85rem .9rem; color: var(--text);
+}
+.choice:hover { border-color: var(--hairline, #3a3a3c); background: #232326; }
+.choice.on { border-color: var(--accent); background: rgba(47, 124, 246, .12); }
+.choice b { display: block; font-size: .97rem; }
+.choice span { display: block; font-size: .83rem; color: var(--muted); margin-top: .15rem; }
+
+.guide-field { display: grid; gap: .35rem; margin-bottom: 1rem; }
+.guide-field label { font-size: .88rem; font-weight: 600; }
+.guide-field .hint { font-size: .8rem; }
+.guide-field input, .guide-field textarea, .guide-field select {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: .6rem .7rem; font: inherit; width: 100%;
+}
+.guide-field textarea { min-height: 74px; resize: vertical; }
+
+.guide-preview { padding: 0 1.2rem 1rem; }
+.guide-preview img {
+  display: block; margin: 0 auto; max-height: 340px; border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+@media (min-width: 760px) {
+  .preview-body { grid-template-columns: 260px 1fr; align-items: start; }
+  .preview-frame { margin: 0; }
+}
+
 /* --------------------------------------------------------- toast ------ */
 .toast {
   position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);

@@ -130,7 +130,37 @@
           <span class="row-label">Load a preset</span>
           <span class="row-value">Top 5, memes, one show&hellip; <span class="chev" aria-hidden="true">&rsaquo;</span></span>
         </button>
+        <button class="row tappable" id="open-guide">
+          <span class="row-label">Set up my niche
+            <span class="row-sub">A guided walkthrough that checks your answers</span></span>
+          <span class="row-value accent">Start <span class="chev" aria-hidden="true">&rsaquo;</span></span>
+        </button>
       </div>
+
+      <!-- live layout preview, rendered by the real pipeline -->
+      <section class="preview-panel" aria-labelledby="h-preview">
+        <div class="preview-head">
+          <h2 class="group-title" id="h-preview" style="margin:0">Preview</h2>
+          <div class="head-actions">
+            <label class="hint" for="preview-clip">Show clip</label>
+            <select id="preview-clip" class="preview-select"></select>
+            <button class="ghost" id="preview-refresh">Refresh</button>
+          </div>
+        </div>
+        <div class="preview-body">
+          <div class="preview-frame">
+            <img id="preview-img" alt="A frame showing where the banner, numbered list and captions will appear.">
+            <div class="preview-state" id="preview-state">Building preview&hellip;</div>
+          </div>
+          <div class="preview-notes">
+            <p class="hint">This is rendered by the same pipeline that makes the
+              video, on your own footage when you have some. It costs nothing
+              and does not use a run.</p>
+            <div id="review-list" class="review-list"></div>
+          </div>
+        </div>
+      </section>
+
       <div id="settings-groups" class="settings-grid"></div>
       <div class="save-bar">
         <span class="hint" id="settings-status" role="status" aria-live="polite"></span>
@@ -209,6 +239,36 @@
         <button class="primary" id="tour-next">Next</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ===================== guided niche setup ======================== -->
+<div id="guide" class="modal hidden" role="dialog" aria-modal="true"
+     aria-labelledby="guide-title">
+  <div class="guide-card">
+    <header class="guide-head">
+      <div>
+        <p class="tour-step" id="guide-step">Step 1 of 6</p>
+        <h2 id="guide-title">What are you making?</h2>
+      </div>
+      <button class="ghost" id="guide-close">Close</button>
+    </header>
+
+    <div class="guide-body" id="guide-body"></div>
+
+    <div class="guide-preview hidden" id="guide-preview">
+      <img id="guide-img" alt="Preview of the video layout.">
+    </div>
+
+    <div id="guide-review" class="review-list"></div>
+
+    <footer class="guide-foot">
+      <div class="tour-dots" id="guide-dots" aria-hidden="true"></div>
+      <div class="head-actions">
+        <button class="ghost" id="guide-back">Back</button>
+        <button class="primary" id="guide-next">Next</button>
+      </div>
+    </footer>
   </div>
 </div>
 
