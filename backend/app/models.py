@@ -105,6 +105,13 @@ class User(Base):
     # Settings screen edits this, and Publish uses it. Presets seed it.
     settings = Column(JSON, default=dict, nullable=False)
 
+    # Lets a render agent on the user's own machine claim their jobs. Separate
+    # from the session token on purpose: it is long-lived, it sits in a config
+    # file on a desktop, and it has to be revocable without signing the person
+    # out everywhere. Null until they ask for one.
+    agent_token = Column(String(64), unique=True, nullable=True, index=True)
+    agent_last_seen = Column(DateTime(timezone=True), nullable=True)
+
     # YouTube connection. Only the refresh token is kept; access tokens are
     # short-lived and fetched as needed.
     youtube_refresh_token = Column(Text, nullable=True)

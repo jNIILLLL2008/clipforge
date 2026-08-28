@@ -53,7 +53,14 @@ def start_workers() -> None:
         if stranded:
             log.info("Requeued %d job(s) after restart.", len(stranded))
 
-    for index in range(max(1, settings.render_workers)):
+    # RENDER_WORKERS=0 means this instance renders nothing itself and waits for
+    # a render agent to claim the queue instead. Jobs still queue normally, so
+    # they simply wait rather than fail while the agent is offline.
+    if settings.render_workers <= 0:
+        log.info("No local render workers; jobs will wait for a render agent.")
+        return
+
+    for index in range(settings.render_workers):
         thread = threading.Thread(target=_loop, name=f"render-{index}", daemon=True)
         thread.start()
         _threads.append(thread)

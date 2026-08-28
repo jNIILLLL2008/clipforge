@@ -610,6 +610,94 @@ check("and it carries the job's settings",
       opted_in and opted_in[0].config.get("source_channels") == ["@x"])
 settings.allow_unlicensed_sources = False
 
+section("the render agent")
+# The agent is the same pipeline on the subscriber's machine. The server still
+# decides whether a job may run, so the interesting cases are the refusals.
+import io as _io
+import json as _json
+
+agent_owner = TestClient(app)
+agent_owner.post("/api/auth/signup",
+                 json={"email": "agent@example.com", "password": "agent-pass-77"})
+check("not paired until asked",
+      agent_owner.get("/api/agent/status").json()["paired"] is False)
+
+_tok = agent_owner.post("/api/agent/token").json()["token"]
+check("a token is issued", len(_tok) > 20, len(_tok))
+AGENT = {"Authorization": f"Bearer {_tok}"}
+
+check("an unknown token is refused",
+      TestClient(app).get("/api/agent/hello",
+                          headers={"Authorization": "Bearer nope"}).status_code == 401)
+check("no token is refused",
+      TestClient(app).get("/api/agent/hello").status_code == 401)
+check("a valid token identifies its owner",
+      TestClient(app).get("/api/agent/hello", headers=AGENT).json()["email"]
+      == "agent@example.com")
+
+check("an empty queue answers 204",
+      TestClient(app).post("/api/agent/claim", headers=AGENT).status_code == 204)
+
+agent_owner.put("/api/studio/settings",
+                json={"settings": {"sources": ["upload"], "clips": 3}})
+_job = agent_owner.post("/api/jobs", json={"dry_run": True}).json()["id"]
+
+_claim = TestClient(app).post("/api/agent/claim", headers=AGENT)
+check("the agent claims the queued job", _claim.json()["job"] == _job)
+check("the claim carries the resolved settings",
+      isinstance(_claim.json()["settings"], dict)
+      and "clips" in _claim.json()["settings"])
+check("a claimed job is not handed out twice",
+      TestClient(app).post("/api/agent/claim", headers=AGENT).status_code == 204)
+
+TestClient(app).post(f"/api/agent/jobs/{_job}/progress", headers=AGENT,
+                     json={"stage": "rendering", "detail": "Encoding"})
+check("progress from the agent reaches the app",
+      agent_owner.get(f"/api/jobs/{_job}").json()["status"] == "rendering")
+
+# Another subscriber's agent must not see, touch or finish this job.
+stranger = TestClient(app)
+stranger.post("/api/auth/signup",
+              json={"email": "stranger@example.com", "password": "stranger-pass-9"})
+_other = stranger.post("/api/agent/token").json()["token"]
+check("another account's agent cannot touch the job",
+      TestClient(app).post(f"/api/agent/jobs/{_job}/progress",
+                           headers={"Authorization": f"Bearer {_other}"},
+                           json={"stage": "rendering"}).status_code == 404)
+
+_result = {
+    "duration": 42.5, "score": 91.2, "title": "Top 3",
+    "retention": {"score": 91.2, "rejected": False},
+    "labels": ["One", "Two", "Three"], "credits": "",
+    "settings": {"auto_upload": False},
+    "clips": [{"source": "upload", "external_id": "a.mp4", "title": "A",
+               "duration": 14.0, "label": "One", "licence": "User upload"}],
+}
+_done = TestClient(app).post(
+    f"/api/agent/jobs/{_job}/complete", headers=AGENT,
+    data={"result": _json.dumps(_result)},
+    files={"video": ("clip.mp4", _io.BytesIO(b"mp4" * 2048), "video/mp4")})
+check("a finished render is accepted", _done.status_code == 200, _done.text[:90])
+
+_state = agent_owner.get(f"/api/jobs/{_job}").json()
+check("the job is done", _state["status"] == "done", _state["status"])
+check("the retention score is recorded",
+      abs(float(_state["retention_score"]) - 91.2) < 0.01, _state["retention_score"])
+check("the uploaded file is measured",
+      int(_state["size_bytes"]) >= 4096, _state["size_bytes"])
+
+check("a finished job cannot be completed again",
+      TestClient(app).post(
+          f"/api/agent/jobs/{_job}/complete", headers=AGENT,
+          data={"result": _json.dumps(_result)},
+          files={"video": ("c.mp4", _io.BytesIO(b"x"), "video/mp4")}
+      ).status_code == 409)
+
+agent_owner.delete("/api/agent/token")
+check("revoking the token stops the agent at once",
+      TestClient(app).get("/api/agent/hello", headers=AGENT).status_code == 401)
+
+
 section("licence gate")
 
 

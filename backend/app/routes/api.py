@@ -131,6 +131,46 @@ def plans():
 # --------------------------------------------------------------------------- #
 # Sources and uploads
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Render agent
+# --------------------------------------------------------------------------- #
+@router.get("/agent/status")
+def agent_status(user: User = Depends(current_user)) -> dict:
+    """Whether an agent is paired, without revealing the token again."""
+    return {
+        "paired": bool(user.agent_token),
+        "last_seen": user.agent_last_seen.isoformat() if user.agent_last_seen else "",
+        "local_rendering": settings.render_workers <= 0,
+    }
+
+
+@router.post("/agent/token")
+def agent_token(user: User = Depends(current_user),
+                db: Session = Depends(get_db)) -> dict:
+    """Mint a new agent token, invalidating any previous one.
+
+    Returned in full exactly once. It is stored as-is so an agent can present
+    it, so treat it the way you would an API key.
+    """
+    from .agent import new_agent_token
+
+    user.agent_token = new_agent_token()
+    user.agent_last_seen = None
+    db.commit()
+    log.info("Issued a render agent token for %s.", user.email)
+    return {"token": user.agent_token, "server": settings.public_url}
+
+
+@router.delete("/agent/token")
+def revoke_agent_token(user: User = Depends(current_user),
+                       db: Session = Depends(get_db)) -> dict:
+    """Unpair the agent. Any copy of the old token stops working at once."""
+    user.agent_token = None
+    user.agent_last_seen = None
+    db.commit()
+    return {"paired": False}
+
+
 @router.get("/sources")
 def list_sources(user: User = Depends(current_user)):
     return {"sources": source_registry.catalogue(user.id)}

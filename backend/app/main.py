@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import ROOT, settings
 from .db import init_db
 from .logging_setup import get_logger, setup_logging
+from .routes.agent import router as agent_router
 from .routes.api import router as api_router
 from .routes.billing import router as billing_router
 from .routes.studio import router as studio_router
@@ -44,6 +45,7 @@ app.add_middleware(
 
 app.include_router(studio_router)
 app.include_router(api_router)
+app.include_router(agent_router)
 app.include_router(billing_router)
 
 
