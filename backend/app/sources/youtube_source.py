@@ -152,7 +152,7 @@ class YouTubeSource:
             "no_warnings": True,
             "noprogress": True,
             "ignoreerrors": True,
-            "socket_timeout": 30,
+            "socket_timeout": settings.ytdlp_socket_timeout,
             "retries": 3,
         }
         # "default" means yt-dlp's own client chain, which is usually the best
@@ -440,8 +440,7 @@ class YouTubeSource:
         stem = destination.with_suffix("")
 
         opts = self._opts(
-            format=("bestvideo[height<=1920][ext=mp4]+bestaudio[ext=m4a]/"
-                    "best[ext=mp4]/best"),
+            format=settings.ytdlp_format,
             merge_output_format="mp4",
             outtmpl=f"{stem}.%(ext)s",
             noplaylist=True,

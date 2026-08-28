@@ -137,6 +137,14 @@ class Settings:
         # The industrial answer to datacentre blocking. An operator points this
         # at a residential proxy once and no subscriber ever hears about it.
         self.ytdlp_proxy: str = _str("YTDLP_PROXY")
+        # The desktop tool's selector, which is what it downloads with today.
+        # The middle branch matters: without an any-extension merge, a client
+        # that offers no mp4 pair falls straight through to a single muxed
+        # stream, and on some clients there is not one.
+        self.ytdlp_format: str = _str(
+            "YTDLP_FORMAT",
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best")
+        self.ytdlp_socket_timeout: int = _int("YTDLP_SOCKET_TIMEOUT", 30)
         # yt-dlp needs a JS runtime for YouTube's player challenges. The image
         # installs deno; this lets an operator point at another one.
         self.ytdlp_js_runtime: str = _str("YTDLP_JS_RUNTIME")
