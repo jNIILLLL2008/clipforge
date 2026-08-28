@@ -129,6 +129,17 @@ class Settings:
         # exported from a signed-in browser gets past age gates and the
         # "confirm you're not a bot" interstitial that hits datacentre IPs.
         self.ytdlp_cookies_file: str = _str("YTDLP_COOKIES_FILE")
+        # YouTube answers different "player clients" differently, and which
+        # ones work shifts week to week. Tried in order until one returns
+        # something, so a client going bad degrades instead of breaking.
+        self.ytdlp_player_clients: List[str] = _list(
+            "YTDLP_PLAYER_CLIENTS", "default,android,web_safari,tv")
+        # The industrial answer to datacentre blocking. An operator points this
+        # at a residential proxy once and no subscriber ever hears about it.
+        self.ytdlp_proxy: str = _str("YTDLP_PROXY")
+        # yt-dlp needs a JS runtime for YouTube's player challenges. The image
+        # installs deno; this lets an operator point at another one.
+        self.ytdlp_js_runtime: str = _str("YTDLP_JS_RUNTIME")
         # A container has nowhere to put a cookies.txt and no browser to
         # read one from, so the jar can be pasted straight into an env var.
         self.ytdlp_cookies_content: str = _str("YTDLP_COOKIES_CONTENT")

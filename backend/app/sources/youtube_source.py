@@ -54,6 +54,11 @@ _BLOCK_SIGNS = (
 )
 
 
+#: Sentinel for "every client answered, none of them had anything", which is
+#: what a silent block looks like from in here.
+_EMPTY_FROM_ALL = "__empty_from_all_clients__"
+
+
 def _slug(term: str) -> str:
     """A hashtag tab wants 'premierleague', not 'premier league'."""
     return re.sub(r"[^a-z0-9]+", "", term.lower())
@@ -136,7 +141,12 @@ class YouTubeSource:
     # ------------------------------------------------------------------ #
     # yt-dlp plumbing
     # ------------------------------------------------------------------ #
-    def _opts(self, **extra: Any) -> Dict[str, Any]:
+    def clients(self) -> List[str]:
+        """Player clients to try, in order. Always at least one."""
+        chosen = [c.strip() for c in settings.ytdlp_player_clients if c.strip()]
+        return chosen or ["default"]
+
+    def _opts(self, client: str = "default", **extra: Any) -> Dict[str, Any]:
         opts: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
@@ -145,6 +155,15 @@ class YouTubeSource:
             "socket_timeout": 30,
             "retries": 3,
         }
+        # "default" means yt-dlp's own client chain, which is usually the best
+        # one. The named clients are the fallbacks for when it is refused.
+        if client and client != "default":
+            opts["extractor_args"] = {"youtube": {"player_client": [client]}}
+        if settings.ytdlp_proxy:
+            opts["proxy"] = settings.ytdlp_proxy
+        if settings.ytdlp_js_runtime:
+            opts["js_runtimes"] = [settings.ytdlp_js_runtime]
+
         cookies = _cookie_file()
         if cookies:
             opts["cookiefile"] = cookies
@@ -155,6 +174,65 @@ class YouTubeSource:
                 settings.ytdlp_cookies_from_browser, None, None, None)
         opts.update(extra)
         return opts
+
+    def _extract(self, url: str, *, download: bool = False,
+                 **extra: Any) -> Optional[Dict[str, Any]]:
+        """Run one extraction, retrying across player clients.
+
+        Which client YouTube accepts changes with no notice, and a refused
+        client raises rather than returning nothing. Trying them in order
+        means one going bad costs a retry instead of the whole feature.
+        """
+        from yt_dlp import YoutubeDL
+        from yt_dlp.utils import DownloadError, ExtractorError
+
+        last = ""
+        for client in self.clients():
+            try:
+                with YoutubeDL(self._opts(client, **extra)) as ydl:
+                    info = ydl.extract_info(url, download=download)
+            except (DownloadError, ExtractorError) as exc:
+                last = str(exc)
+                log.debug("client %s failed on %s: %s",
+                          client, url[:50], last[:100])
+                continue
+            if info:
+                if client != self.clients()[0]:
+                    log.info("Player client %r succeeded where %r did not.",
+                             client, self.clients()[0])
+                return info
+            last = last or _EMPTY_FROM_ALL
+        if last:
+            self._note_failure(last)
+        return None
+
+    def _note_failure(self, detail: str) -> None:
+        """Record why an extraction failed, in words an operator can act on."""
+        lowered = detail.lower()
+        if any(sign in lowered for sign in _BLOCK_SIGNS):
+            self.last_problem = (
+                "YouTube refused the request, which is what it serves to "
+                "datacentre IPs. Set YTDLP_PROXY to a residential proxy, or "
+                "YTDLP_COOKIES_CONTENT to a cookies.txt from a signed-in "
+                "browser."
+            )
+        elif "page needs to be reloaded" in lowered:
+            self.last_problem = (
+                "YouTube rejected every player client. This usually means the "
+                "server has no JavaScript runtime for YouTube's player "
+                "challenge; install deno in the image."
+            )
+        elif detail == _EMPTY_FROM_ALL:
+            tried = ", ".join(self.clients())
+            self.last_problem = (
+                f"YouTube returned nothing for any player client ({tried}). "
+                "On a server that usually means the request is being refused: "
+                "set YTDLP_PROXY to a residential proxy, or "
+                "YTDLP_COOKIES_CONTENT to a cookies.txt from a signed-in "
+                "browser."
+            )
+        elif not self.last_problem:
+            self.last_problem = f"YouTube extraction failed: {detail[:120]}"
 
     # ------------------------------------------------------------------ #
     # Where to look
@@ -231,28 +309,8 @@ class YouTubeSource:
     # Stage 1 -- flat scan
     # ------------------------------------------------------------------ #
     def _flat_scan(self, url: str, limit: int) -> List[SourceClip]:
-        from yt_dlp import YoutubeDL
-        from yt_dlp.utils import DownloadError, ExtractorError
-
-        opts = self._opts(extract_flat="in_playlist", skip_download=True,
-                          playlistend=limit)
-        try:
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-        except (DownloadError, ExtractorError) as exc:
-            detail = str(exc)
-            log.warning("Scan failed for %s: %s", url[:70], detail[:120])
-            # Being refused and finding nothing look identical from here, and
-            # only one of them is the operator's fault. Say which.
-            if any(sign in detail.lower() for sign in _BLOCK_SIGNS):
-                self.last_problem = (
-                    "YouTube refused the request, which is what it serves to "
-                    "datacentre IPs without cookies. Set YTDLP_COOKIES_CONTENT "
-                    "to a cookies.txt exported from a signed-in browser."
-                )
-            elif not self.last_problem:
-                self.last_problem = f"YouTube scan failed: {detail[:120]}"
-            return []
+        info = self._extract(url, extract_flat="in_playlist",
+                             skip_download=True, playlistend=limit)
         if not info:
             return []
 
@@ -291,15 +349,7 @@ class YouTubeSource:
     # ------------------------------------------------------------------ #
     def enrich(self, clip: SourceClip) -> bool:
         """Fill in description, tags and age. Returns False if unavailable."""
-        from yt_dlp import YoutubeDL
-        from yt_dlp.utils import DownloadError, ExtractorError
-
-        try:
-            with YoutubeDL(self._opts(skip_download=True, noplaylist=True)) as ydl:
-                info = ydl.extract_info(clip.url, download=False)
-        except (DownloadError, ExtractorError) as exc:
-            log.debug("Enrich failed for %s: %s", clip.external_id, str(exc)[:90])
-            return False
+        info = self._extract(clip.url, skip_download=True, noplaylist=True)
         if not info:
             return False
 
@@ -406,12 +456,29 @@ class YouTubeSource:
         if ffmpeg_dir and ffmpeg_dir != ".":
             opts["ffmpeg_location"] = ffmpeg_dir
 
-        try:
-            with YoutubeDL(opts) as ydl:
-                ydl.download([clip.url])
-        except (DownloadError, ExtractorError) as exc:
-            log.warning("Download failed for %s: %s", clip.external_id,
-                        str(exc)[:140])
+        # The download retries across clients too: the one that resolved the
+        # metadata is not always the one allowed to serve the media.
+        last = ""
+        for client in self.clients():
+            attempt = dict(opts)
+            if client and client != "default":
+                attempt["extractor_args"] = {
+                    "youtube": {"player_client": [client]}}
+            else:
+                attempt.pop("extractor_args", None)
+            try:
+                with YoutubeDL(attempt) as ydl:
+                    ydl.download([clip.url])
+                last = ""
+                break
+            except (DownloadError, ExtractorError) as exc:
+                last = str(exc)
+                log.debug("Download client %s failed for %s: %s",
+                          client, clip.external_id, last[:100])
+                continue
+        if last:
+            log.warning("Download failed for %s: %s", clip.external_id, last[:140])
+            self._note_failure(last)
             return None
 
         produced = destination if destination.exists() else None

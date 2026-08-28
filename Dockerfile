@@ -13,8 +13,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-dejavu-core \
         fonts-liberation \
         ca-certificates \
+        curl \
+        unzip \
         gosu \
     && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp needs a JavaScript runtime to solve YouTube's player challenge, and it
+# only enables deno by default. Without one YouTube answers "the page needs to
+# be reloaded" and every scan comes back empty, which is the difference between
+# the YouTube source working on a server and not working at all.
+ENV DENO_INSTALL=/usr/local
+RUN curl -fsSL https://deno.land/install.sh | sh -s -- --yes \
+    && /usr/local/bin/deno --version
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
