@@ -162,7 +162,8 @@ class YouTubeSource:
         if settings.ytdlp_proxy:
             opts["proxy"] = settings.ytdlp_proxy
         if settings.ytdlp_js_runtime:
-            opts["js_runtimes"] = [settings.ytdlp_js_runtime]
+            # yt-dlp validates this as {runtime: {config}} and raises on a list.
+            opts["js_runtimes"] = {settings.ytdlp_js_runtime: {}}
 
         cookies = _cookie_file()
         if cookies:
@@ -217,10 +218,11 @@ class YouTubeSource:
                 "browser."
             )
         elif "page needs to be reloaded" in lowered:
+            tried = ", ".join(self.clients())
             self.last_problem = (
-                "YouTube rejected every player client. This usually means the "
-                "server has no JavaScript runtime for YouTube's player "
-                "challenge; install deno in the image."
+                f"YouTube rejected every player client tried ({tried}). Add a "
+                "working one to YTDLP_PLAYER_CLIENTS, or route the server "
+                "through a residential proxy with YTDLP_PROXY."
             )
         elif detail == _EMPTY_FROM_ALL:
             tried = ", ".join(self.clients())

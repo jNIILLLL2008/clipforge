@@ -13,18 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-dejavu-core \
         fonts-liberation \
         ca-certificates \
-        curl \
-        unzip \
         gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# yt-dlp needs a JavaScript runtime to solve YouTube's player challenge, and it
-# only enables deno by default. Without one YouTube answers "the page needs to
-# be reloaded" and every scan comes back empty, which is the difference between
-# the YouTube source working on a server and not working at all.
-ENV DENO_INSTALL=/usr/local
-RUN curl -fsSL https://deno.land/install.sh | sh -s -- --yes \
-    && /usr/local/bin/deno --version
+# No JavaScript runtime is installed on purpose. yt-dlp warns that it wants
+# one, and deno was tried here, but it was measured against the failing player
+# clients and changed nothing: "the page needs to be reloaded" happens with a
+# runtime present exactly as it does without. It is not worth ~100MB, the build
+# time and a network dependency on every deploy for no effect. The player
+# client fallback in sources/youtube_source.py is what actually recovers those
+# failures. Set YTDLP_JS_RUNTIME if you install one yourself and want it used.
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
