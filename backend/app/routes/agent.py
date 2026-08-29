@@ -281,8 +281,11 @@ def _finish(job_id: int, payload: dict, job_settings: dict) -> None:
         description=str(settings_block.get("description", "")),
         labels=[str(label) for label in (payload.get("labels") or [])],
     )
+    credits = payload.get("credits") or []
+    if isinstance(credits, str):          # tolerate an agent sending one line
+        credits = [credits] if credits else []
     meta = finalise(meta, suffix=str(settings_block.get("title_suffix", "")),
-                    credits=str(payload.get("credits") or ""))
+                    credits=[str(line) for line in credits])
 
     with session_scope() as db:
         job = db.get(Job, job_id)

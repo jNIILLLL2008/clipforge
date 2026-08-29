@@ -19,3 +19,9 @@ Thumbs.db
 
 # Generated production env block - contains live secrets
 railway-env.txt
+
+# Render agent. agent.env holds a live agent token, and the footage and work
+# folders are the subscriber's own video.
+agent/agent.env
+agent/footage/
+agent/work/

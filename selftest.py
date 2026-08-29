@@ -698,6 +698,56 @@ check("revoking the token stops the agent at once",
       TestClient(app).get("/api/agent/hello", headers=AGENT).status_code == 401)
 
 
+section("the agent client")
+# The agent ships as part of this repo so it cannot drift from the pipeline it
+# calls. These are the mistakes that would only show up on a subscriber's
+# machine, where nobody is watching.
+import agent.client as _agent_client  # noqa: E402
+import agent.config as _agent_config  # noqa: E402
+
+check("the agent imports without a config",
+      hasattr(_agent_client, "Server") and hasattr(_agent_config, "load"))
+
+_missing = TMP / "agent-empty.env"
+_missing.write_text("# nothing here\n", encoding="utf-8")
+_saved = {k: os.environ.pop(k, None)
+          for k in ("CLIPFORGE_SERVER", "CLIPFORGE_AGENT_TOKEN")}
+try:
+    _agent_config.load(_missing)
+    check("an unconfigured agent refuses to start", False, "it started anyway")
+except SystemExit as exc:
+    check("an unconfigured agent refuses to start",
+          "CLIPFORGE_AGENT_TOKEN" in str(exc))
+finally:
+    for k, v in _saved.items():
+        if v is not None:
+            os.environ[k] = v
+
+_conf = TMP / "agent.env"
+_conf.write_text(
+    "CLIPFORGE_SERVER=https://example.test/\n"
+    "CLIPFORGE_AGENT_TOKEN=abc123\n"
+    f"CLIPFORGE_WORK_DIR={TMP / 'agentwork'}\n"
+    f"CLIPFORGE_FOOTAGE_DIR={TMP / 'agentfootage'}\n",
+    encoding="utf-8")
+_saved2 = {k: os.environ.pop(k, None)
+           for k in ("CLIPFORGE_SERVER", "CLIPFORGE_AGENT_TOKEN",
+                     "CLIPFORGE_WORK_DIR", "CLIPFORGE_FOOTAGE_DIR")}
+try:
+    _cfg = _agent_config.load(_conf)
+    check("the trailing slash is trimmed from the server",
+          _cfg.server == "https://example.test", _cfg.server)
+    check("the token is read", _cfg.token == "abc123")
+    check("footage is presented to the pipeline as user 1's uploads",
+          _cfg.storage_dir.name == "storage")
+    _sent = _agent_client.Server(_cfg).session.headers.get("Authorization")
+    check("every call carries the token", _sent == "Bearer abc123", _sent)
+finally:
+    for k, v in _saved2.items():
+        if v is not None:
+            os.environ[k] = v
+
+
 section("licence gate")
 
 
