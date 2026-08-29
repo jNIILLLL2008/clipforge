@@ -14,8 +14,8 @@ Bump this whenever a change to backend/app/render or the source filters should
 reach subscribers. The server compares it and tells the agent to update.
 """
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 #: Raised when a render-affecting change ships. Compared against the server's
 #: own number, which lives in backend/app/routes/agent.py.
-PIPELINE_VERSION = 5
+PIPELINE_VERSION = 6

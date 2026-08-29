@@ -48,12 +48,28 @@ _DERIVATIVE_TERMS = (
     "allscenes", "marathon",
     # Re-uploads that carry another layer of somebody else on top.
     "reupload", "screenrecord", "screenrecording",
+    # Somebody talking *about* the show rather than footage *from* it. A
+    # ranking video called "The Top 5 Spider-Man Series" reached a finished
+    # render: half of it is a man at a desk, and it passed the show filter
+    # because it names the show in its description -- which is exactly what a
+    # video discussing the show would do.
+    "reaction", "reactions", "reacts", "reacting", "react",
+    "review", "reviews", "reviewing", "reviewed",
+    "explained", "explaining", "breakdown", "recap", "recaps",
+    "ranked", "ranking", "rankings", "tierlist", "retrospective",
+    "analysis", "analyzed", "analysed", "essay", "podcast", "interview",
+    "commentary", "reviewer", "critique",
 )
 
 #: Phrases, kept separate because they need the space matched literally.
 _DERIVATIVE_PHRASES = (
     "fan edit", "all scenes", "every scene", "whatsapp status",
     "status video", "edit audio", "after effects",
+    # Ranking formats. Someone else's list is someone else's edit, and it is
+    # the same reason a compilation is refused.
+    "tier list", "top 5", "top 10", "top ten", "top five",
+    "worst to best", "best to worst", "ranking every", "every episode",
+    "video essay", "first time watching", "i watched",
 )
 
 

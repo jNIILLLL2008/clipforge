@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/agent")
 #: fixed, and it is told so on every hello.
 #:
 #: Bump it together with agent/__init__.py PIPELINE_VERSION.
-PIPELINE_VERSION = 5
+PIPELINE_VERSION = 6
 
 #: Stages an agent may report, mapped to the status the job takes. Anything
 #: else is ignored rather than trusted: the agent does not get to declare a job

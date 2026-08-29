@@ -474,6 +474,35 @@ def _cand(title, author="", tags=None, description=""):
 
 _ON = {"reject_derivative": True}
 
+# Somebody talking about the show is not footage from the show. A ranking
+# video called "The Top 5 Spider-Man Series" reached a finished render: half
+# of it is a man at a desk, and it passed the show filter because a video
+# discussing the show naturally names the show in its description.
+for _title, _term in [
+    ("The Top 5 Spider-Man Series", "top 5"),
+    ("Spectacular Spider-Man REACTION", "reaction"),
+    ("Ranking every Spider-Man cartoon", "ranking every"),
+    ("Spider-Man tier list", "tier list"),
+    ("The Spectacular Spider-Man retrospective", "retrospective"),
+    ("Spider-Man 2008 review", "review"),
+    ("worst to best Spider-Man shows", "worst to best"),
+    ("First time watching Spectacular Spider-Man", "first time watching"),
+]:
+    _got, _hit = _is_deriv(_cand(_title), _ON)
+    check(f"commentary dropped: {_title[:34]}", _got and _hit == _term, _hit)
+
+# The cost of getting that wrong is rejecting real scenes, so check the shape
+# of title these terms sit near.
+for _scene in [
+    "The Spectacular Spider-Man - Peter meets Gwen",
+    "Peter Parker fights Doctor Octopus",
+    "Gwen and Harry at the dance",
+    "Spider-Man saves the train",
+    "Editorial cut of season 2",
+]:
+    check(f"scene kept: {_scene[:36]}", not _is_deriv(_cand(_scene), _ON)[0],
+          _is_deriv(_cand(_scene), _ON)[1])
+
 for _title, _term in [
     ("Spectacular Spider-Man EDIT | phonk", "edit"),
     ("spider-man amv - Ready For It", "amv"),
