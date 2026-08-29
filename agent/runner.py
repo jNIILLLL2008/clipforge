@@ -65,11 +65,14 @@ def run(job: dict, config: AgentConfig, server: Server) -> str:
             },
             options={
                 **(job.get("options") or {}),
-                # Back into tuples: the server sent pairs as lists.
+                # Back into a mapping of (source, id) -> when it last went
+                # out. Two-item rows are accepted so an older server still
+                # works; they simply carry no date to sort on.
                 "already_used": {
-                    (str(pair[0]), str(pair[1]))
-                    for pair in (job.get("already_used") or [])
-                    if isinstance(pair, (list, tuple)) and len(pair) == 2
+                    (str(row[0]), str(row[1])): (
+                        str(row[2]) if len(row) > 2 else "")
+                    for row in (job.get("already_used") or [])
+                    if isinstance(row, (list, tuple)) and len(row) >= 2
                 },
             },
             user_id=LOCAL_USER,

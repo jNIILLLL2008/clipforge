@@ -32,6 +32,26 @@ from .base import SourceClip
 
 log = get_logger("sources.youtube")
 
+
+class _YtdlpLog:
+    """Send yt-dlp's own chatter to debug.
+
+    Nothing is lost: a failure that matters raises, and _note_failure turns
+    the last message into something an operator can act on. What this removes
+    is the noise from attempts that were retried successfully.
+    """
+
+    def debug(self, message: str) -> None:
+        log.debug("yt-dlp: %s", message)
+
+    info = debug
+    warning = debug
+
+    def error(self, message: str) -> None:
+        # Still debug. Whether this mattered is decided by the caller, which
+        # knows whether another client went on to succeed.
+        log.debug("yt-dlp error: %s", message)
+
 _HANDLE = re.compile(r"^@[\w.\-]+$")
 _VIDEO_ID = re.compile(r"^[\w\-]{11}$")
 
@@ -151,6 +171,14 @@ class YouTubeSource:
         opts: Dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
+            # quiet=True silences yt-dlp's progress, not its errors: those go
+            # straight to stderr. With a client fallback that is actively
+            # misleading -- a refused first attempt printed
+            #     ERROR: [youtube] abc: This video is not available
+            # immediately followed by this module reporting that the next
+            # client succeeded. Six clips downloaded fine and the log read
+            # like six failures. A logger keeps it where it belongs.
+            "logger": _YtdlpLog(),
             "noprogress": True,
             "ignoreerrors": True,
             "socket_timeout": settings.ytdlp_socket_timeout,

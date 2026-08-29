@@ -18,7 +18,7 @@ burning its clips would punish somebody for a run that never went out.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Optional, Set, Tuple
+from typing import Dict, Optional, Tuple
 
 from ..logging_setup import get_logger
 from ..models import Job, JobClip, JobStatus, utcnow
@@ -26,19 +26,24 @@ from ..models import Job, JobClip, JobStatus, utcnow
 log = get_logger("render.history")
 
 
-def recently_used(db, user_id: Optional[int], days: int) -> Set[Tuple[str, str]]:
-    """(source, external_id) pairs this account published inside `days`.
+def recently_used(db, user_id: Optional[int],
+                  days: int) -> Dict[Tuple[str, str], str]:
+    """When this account last published each clip, inside `days`.
 
-    Returns an empty set when there is no user, no window, or no database --
-    the caller treats that as "nothing to exclude" rather than an error, so a
+    A mapping rather than a set, because when a niche runs dry the pool has to
+    be topped back up and the right clip to repeat is the one seen longest
+    ago. Membership tests still work the same way.
+
+    Returns empty when there is no user, no window, or no database -- the
+    caller treats that as "nothing to exclude" rather than an error, so a
     history lookup can never be the reason a render fails.
     """
     if not user_id or days <= 0 or db is None:
-        return set()
+        return {}
 
     since = utcnow() - timedelta(days=days)
     try:
-        rows = (db.query(JobClip.source, JobClip.external_id)
+        rows = (db.query(JobClip.source, JobClip.external_id, Job.finished_at)
                   .join(Job, JobClip.job_id == Job.id)
                   .filter(Job.owner_id == user_id,
                           Job.status == JobStatus.DONE,
@@ -47,10 +52,17 @@ def recently_used(db, user_id: Optional[int], days: int) -> Set[Tuple[str, str]]
                   .all())
     except Exception as exc:  # noqa: BLE001 - never fail a render over history
         log.warning("Could not read clip history: %s", exc)
-        return set()
+        return {}
 
-    used = {(source or "", external_id or "")
-            for source, external_id in rows if external_id}
+    used: Dict[Tuple[str, str], str] = {}
+    for source, external_id, finished in rows:
+        if not external_id:
+            continue
+        stamp = finished.isoformat() if finished else ""
+        key = (source or "", external_id)
+        # Keep the most recent use of each clip.
+        if stamp > used.get(key, ""):
+            used[key] = stamp
     if used:
         log.info("%d clip(s) used in the last %d days will be skipped.",
                  len(used), days)

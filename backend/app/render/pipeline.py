@@ -86,16 +86,29 @@ def gather(niche_settings: Dict, wanted: int,
     if already_used:
         fresh = [c for c in pool
                  if (c.source, c.external_id) not in already_used]
-        if len(fresh) >= 2:
-            log.info("Skipped %d clip(s) already published.",
-                     len(pool) - len(fresh))
+        stale = [c for c in pool
+                 if (c.source, c.external_id) in already_used]
+
+        if len(fresh) >= wanted:
+            log.info("Skipped %d clip(s) already published.", len(stale))
             pool = fresh
-        elif len(pool) > len(fresh):
-            # Refusing to repeat is a preference, not a reason to ship
-            # nothing. A niche with a small catalogue will run dry, and a
-            # repeat beats a failed run.
-            log.info("Only %d unused clip(s) left; allowing repeats this run.",
-                     len(fresh))
+        else:
+            # Enough to not repeat is `wanted`, not two. The first version of
+            # this checked for two and happily handed a five-clip job a pool
+            # of two, because two is what was left after the history came out.
+            #
+            # So top back up rather than starve. Oldest use first, so a repeat
+            # is the clip seen longest ago instead of the one that keeps
+            # winning -- which is the whole complaint this was fixing.
+            when = already_used if hasattr(already_used, "get") else {}
+            stale.sort(key=lambda c: str(when.get((c.source, c.external_id))
+                                         or ""))
+            topped = stale[:max(0, wanted - len(fresh))]
+            if topped:
+                log.info(
+                    "Only %d unused clip(s) for a %d-clip video; reusing %d "
+                    "of the oldest.", len(fresh), wanted, len(topped))
+            pool = fresh + topped
 
     log.info("Gathered %d candidate clip(s) from %d source(s).",
              len(pool), len(adapters))

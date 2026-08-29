@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/agent")
 #: fixed, and it is told so on every hello.
 #:
 #: Bump it together with agent/__init__.py PIPELINE_VERSION.
-PIPELINE_VERSION = 4
+PIPELINE_VERSION = 5
 
 #: Stages an agent may report, mapped to the status the job takes. Anything
 #: else is ignored rather than trusted: the agent does not get to declare a job
@@ -363,8 +363,10 @@ def claim(response: Response, user: User = Depends(agent_user),
         "dry_run": job.dry_run,
         # The agent burns the watermark in, so it has to be told to.
         "watermark": "clipforge.app" if user.limits["watermark"] else "",
-        # Tuples do not survive JSON, so pairs go over as two-item lists.
-        "already_used": [[source, external] for source, external in sorted(used)],
+        # Tuples do not survive JSON. Three items, not two: the agent needs
+        # the date to decide which clip to repeat when a niche runs dry.
+        "already_used": [[source, external, used[(source, external)]]
+                         for source, external in sorted(used)],
     }
 
 

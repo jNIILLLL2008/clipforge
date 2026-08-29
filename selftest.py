@@ -329,7 +329,7 @@ _ru.post("/api/auth/signup",
 with _session_scope() as _db:
     _uid = _db.query(_U).filter(_U.email == "reuse@example.com").first().id
 
-check("a fresh account has no history", _recent(None, _uid, 60) == set())
+check("a fresh account has no history", _recent(None, _uid, 60) == {})
 
 with _session_scope() as _db:
     _done = _J(owner_id=_uid, public_id="hist-done", status=_JS.DONE,
@@ -355,10 +355,14 @@ check("clips from a failed job are not",
       ("youtube", "NEVERSHIPPED") not in _hist, sorted(_hist))
 
 with _session_scope() as _db:
-    check("the window is respected", _recent(_db, _uid, 0) == set())
+    check("the window is respected", _recent(_db, _uid, 0) == {})
     _old = _recent(_db, _uid, 60)
 check("another account sees none of it",
-      _recent(None, _uid + 999, 60) == set())
+      _recent(None, _uid + 999, 60) == {})
+with session_scope() as _db:
+    _dated = _recent(_db, _uid, 60)
+check("history records when each clip went out",
+      all(isinstance(v, str) and v for v in _dated.values()), _dated)
 
 # The filter itself, and the rule that a repeat beats a failed run.
 class _PC:
@@ -366,15 +370,42 @@ class _PC:
         self.source, self.external_id = "youtube", ext
 
 
-_pool = [_PC("USED1"), _PC("USED2"), _PC("FRESH1"), _PC("FRESH2"), _PC("FRESH3")]
-_used = {("youtube", "USED1"), ("youtube", "USED2")}
-_fresh = [c for c in _pool if (c.source, c.external_id) not in _used]
-check("used clips are dropped when there is enough left", len(_fresh) == 3)
+def _funnel(pool, used, wanted):
+    """The rule gather() applies, in isolation."""
+    fresh = [c for c in pool if (c.source, c.external_id) not in used]
+    stale = [c for c in pool if (c.source, c.external_id) in used]
+    if len(fresh) >= wanted:
+        return fresh
+    when = used if hasattr(used, "get") else {}
+    stale.sort(key=lambda c: str(when.get((c.source, c.external_id)) or ""))
+    return fresh + stale[:max(0, wanted - len(fresh))]
 
-_thin = [_PC("USED1"), _PC("USED2"), _PC("FRESH1")]
-_thin_fresh = [c for c in _thin if (c.source, c.external_id) not in _used]
-check("but a run with only one unused clip may repeat rather than fail",
-      len(_thin_fresh) < 2)
+
+_used = {("youtube", "USED1"): "2026-08-01", ("youtube", "USED2"): "2026-08-20"}
+_plenty = [_PC("USED1"), _PC("USED2"), _PC("FRESH1"), _PC("FRESH2"),
+           _PC("FRESH3"), _PC("FRESH4"), _PC("FRESH5")]
+check("used clips are dropped when there is enough left",
+      [c.external_id for c in _funnel(_plenty, _used, 5)]
+      == ["FRESH1", "FRESH2", "FRESH3", "FRESH4", "FRESH5"])
+
+# The real failure: seven survived selection, five had been published, and a
+# five-clip job was handed a pool of two because the guard asked for two.
+_thin = [_PC("USED1"), _PC("USED2"), _PC("FRESH1"), _PC("FRESH2")]
+_topped = _funnel(_thin, _used, 5)
+check("a thin pool is topped back up instead of starving",
+      len(_topped) == 4, [c.external_id for c in _topped])
+check("fresh clips still come first",
+      [c.external_id for c in _topped][:2] == ["FRESH1", "FRESH2"],
+      [c.external_id for c in _topped])
+# If something has to repeat it should be the one seen longest ago, not the
+# one that keeps winning -- that was the original complaint.
+check("the oldest use is the one repeated first",
+      [c.external_id for c in _topped][2] == "USED1",
+      [c.external_id for c in _topped])
+check("a set with no dates still works",
+      len(_funnel(_thin, {("youtube", "USED1"), ("youtube", "USED2")}, 5)) == 4)
+check("nothing is topped up when the job is small enough",
+      len(_funnel(_thin, _used, 2)) == 2)
 
 from backend.app.settings_schema import BY_KEY as _SK  # noqa: E402
 check("reuse window defaults to something non-zero",
