@@ -743,6 +743,61 @@ with session_scope() as _db:
           _db.get(User, _bid).plan == Plan.PRO,
           _db.get(User, _bid).plan)
 
+# Objects from the Stripe SDK are not dictionaries. Reading .get("data") on
+# one raises KeyError: 'get' -- attribute lookup misses, __getattr__ forwards
+# to __getitem__, and there is no key named "get". This 500'd a real purchase,
+# and could not be caught by any test that did not model the object properly.
+from backend.app.routes.billing import _plain  # noqa: E402
+
+
+class _StripeLike:
+    """No .get, attribute access forwards to keys, lists left unconverted."""
+
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def __getattr__(self, key):
+        try:
+            return self._data[key]
+        except KeyError:
+            raise KeyError(key)
+
+    def to_dict_recursive(self):
+        return {k: (v.to_dict_recursive() if isinstance(v, _StripeLike) else v)
+                for k, v in self._data.items()}
+
+
+_raised = ""
+try:
+    _StripeLike({"data": []}).get("data")
+except KeyError as _exc:
+    _raised = str(_exc)
+check("the failure mode is reproduced", "get" in _raised, _raised)
+
+_fake_sub = _StripeLike({
+    "id": "sub_stripeobj", "status": "active", "customer": "cus_test_123",
+    "metadata": {"user_id": str(_bid)},
+    "items": _StripeLike({"data": [
+        _StripeLike({"price": _StripeLike({"id": "price_test_starter"})})]}),
+})
+
+check("_plain returns a real dict", isinstance(_plain(_fake_sub), dict))
+check("and converts nested objects too",
+      isinstance(_plain(_fake_sub)["items"], dict))
+check("_plain of None is an empty dict", _plain(None) == {})
+check("_plain of a plain dict is unchanged", _plain({"a": 1}) == {"a": 1})
+
+# The whole point: a Stripe-shaped object must apply without raising.
+with session_scope() as _db:
+    _apply_subscription(_db, _fake_sub)
+with session_scope() as _db:
+    check("a Stripe object applies its plan without a 500",
+          _db.get(User, _bid).plan == Plan.STARTER, _db.get(User, _bid).plan)
+
+# Put it back to pro for the cancellation check below.
+with session_scope() as _db:
+    _apply_subscription(_db, _sub)
+
 # Cancelling has to take it away again.
 with session_scope() as _db:
     _apply_subscription(_db, {**_sub, "status": "canceled"})

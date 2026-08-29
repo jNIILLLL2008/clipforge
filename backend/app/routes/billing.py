@@ -43,6 +43,34 @@ PRICE_FOR = {
 }
 
 
+def _plain(obj) -> dict:
+    """A real dict, all the way down.
+
+    Objects from the Stripe SDK are not dictionaries in this version. Reading
+    ``result.get("data")`` looks obviously fine and raises KeyError: 'get' --
+    attribute lookup misses, __getattr__ forwards to __getitem__, and there is
+    no key called "get". It took a 500 on a live purchase to find, because
+    every one of these paths needs Stripe to answer before it runs.
+
+    to_dict_recursive is the SDK's own answer and it converts nested objects
+    too, which matters: a shallow dict() leaves subscription["items"] as a
+    StripeObject and the next .get() fails exactly the same way.
+    """
+    if obj is None:
+        return {}
+    for name in ("to_dict_recursive", "to_dict"):
+        converter = getattr(obj, name, None)
+        if callable(converter):
+            try:
+                return dict(converter())
+            except Exception:  # noqa: BLE001 - fall through to the plain cast
+                pass
+    try:
+        return dict(obj)
+    except (TypeError, ValueError):
+        return {}
+
+
 def _plan_for_price(price_id: str) -> Optional[Plan]:
     if price_id and price_id == settings.stripe_price_starter:
         return Plan.STARTER
@@ -146,7 +174,9 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bad signature.")
 
     kind = event["type"]
-    obj = event["data"]["object"]
+    # Also a Stripe object rather than a dict, and its nested "items" is
+    # another one. Flatten it once here so no handler downstream has to know.
+    obj = _plain(event["data"]["object"])
 
     if kind in {"customer.subscription.created", "customer.subscription.updated"}:
         _apply_subscription(db, obj)
@@ -181,7 +211,7 @@ def _apply_checkout(db: Session, obj: dict) -> None:
     except Exception as exc:  # noqa: BLE001 - a lookup failure is not fatal
         log.warning("Could not read subscription %s: %s", subscription_id, exc)
         return
-    _apply_subscription(db, dict(subscription))
+    _apply_subscription(db, _plain(subscription))
 
 
 def sync_from_stripe(db: Session, user: User) -> bool:
@@ -199,19 +229,20 @@ def sync_from_stripe(db: Session, user: User) -> bool:
     if not user.stripe_customer_id:
         return False
     try:
-        subscriptions = _stripe().Subscription.list(
+        result = _stripe().Subscription.list(
             customer=user.stripe_customer_id, status="all", limit=10)
     except Exception as exc:  # noqa: BLE001 - never break the page over this
         log.warning("Could not list subscriptions for user %s: %s", user.id, exc)
         return False
 
     before = user.plan
-    live = [s for s in (subscriptions.get("data") or [])
-            if s.get("status") in {"active", "trialing"}]
+    # .data, not .get("data"): see _plain. A ListObject has no .get at all.
+    rows = [_plain(row) for row in (getattr(result, "data", None) or [])]
+    live = [s for s in rows if s.get("status") in {"active", "trialing"}]
     if live:
         # Newest first, so an upgrade beats the subscription it replaced.
         live.sort(key=lambda s: s.get("created") or 0, reverse=True)
-        _apply_subscription(db, dict(live[0]))
+        _apply_subscription(db, live[0])
     else:
         log.info("No live subscription for user %s.", user.id)
     db.refresh(user)
@@ -232,13 +263,15 @@ def _find_user(db: Session, obj: dict) -> Optional[User]:
 
 
 def _apply_subscription(db: Session, obj: dict) -> None:
+    obj = _plain(obj)
     user = _find_user(db, obj)
     if not user:
         log.warning("Subscription webhook for an unknown customer.")
         return
 
-    items = (obj.get("items") or {}).get("data") or []
-    price_id = items[0]["price"]["id"] if items else ""
+    items = (_plain(obj.get("items")).get("data")) or []
+    first = _plain(items[0]) if items else {}
+    price_id = (_plain(first.get("price")).get("id") or "") if first else ""
     plan = _plan_for_price(price_id)
     active = obj.get("status") in {"active", "trialing"}
 
