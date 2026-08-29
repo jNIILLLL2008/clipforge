@@ -35,7 +35,10 @@ BUILTIN_NICHES: List[Dict] = [
                        "The numbered list is what keeps people watching.",
         "settings": _settings(
             banner_line1="TOP {count}", checklist_enabled=True, countdown=True,
-            clips=5, target_seconds=105, sources=["upload"],
+            # Two minutes, and a longest-segment with room above the 24s
+            # share so one short source cannot drag the whole video under.
+            clips=5, target_seconds=120, max_clip_seconds=32,
+            sources=["upload"],
         ),
     },
     {
@@ -111,7 +114,7 @@ BUILTIN_NICHES: List[Dict] = [
         "settings": _settings(
             banner_line1="TOP {count} FROM", banner_line2="YOUR SHOW",
             checklist_enabled=True, countdown=True, clips=5,
-            target_seconds=105, require_show_match=True,
+            target_seconds=120, max_clip_seconds=32, require_show_match=True,
             background="pad", checklist_y=1303, caption_margin_v=700,
             max_duration_seconds=1200, long_clip_seconds=75,
             # This preset only makes sense with broadcast footage, so it names

@@ -144,6 +144,21 @@ def review(cfg: Dict, *, upload_count: int = 0,
     max_clip = float(cfg.get("max_clip_seconds", 26))
     share = target / max(clips, 1)
 
+    if max_clip * clips < target * 1.15 and share <= max_clip + 0.01:
+        # Reachable, but only if every source is long enough. The planner
+        # spreads what is left over the clips that are left, so a short clip
+        # is covered by the others -- and with no headroom there is nothing
+        # to cover it with.
+        # "tip", not "note": the app sorts on blocker/warning/tip and colours
+        # those three; an unknown level sorts nowhere and renders plain.
+        add(Finding(
+            "tip", "No slack on the length",
+            f"{clips} clips at most {max_clip:g}s each is "
+            f"{max_clip * clips:.0f}s against a {target:.0f}s target. If any "
+            "source clip is short, nothing can make up the difference.",
+            f"Raise the longest segment to about {target / clips * 1.3:.0f}s "
+            "for some headroom.", "max_clip_seconds"))
+
     if share > max_clip + 0.01:
         reachable = max_clip * clips
         add(Finding(

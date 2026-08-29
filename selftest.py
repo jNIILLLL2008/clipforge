@@ -221,6 +221,96 @@ for _cue in ["[Music] I am swinging", "the music was loud", "Peter, no!"]:
           not _NON_SPEECH.fullmatch(_cue))
 
 
+section("videos reach the length they ask for")
+# target_seconds used to be a ceiling. Every clip got a fixed target/clips
+# share, so one short source made the whole video shorter and nothing took up
+# the slack: 120s with a single 12-second clip in the set produced 108s.
+from backend.app.render.pipeline import _plan_segments as _plan  # noqa: E402
+
+
+class _SrcClip:
+    def __init__(self, duration):
+        self.duration = float(duration)
+        self.local_path = Path("x.mp4")
+        self.title = "Clip"
+
+
+def _length(durations, target, max_clip=32.0, clips=None):
+    fmt = {"target_seconds": target, "max_clip_seconds": max_clip,
+           "min_clip_seconds": 8.0, "clip_trim_strategy": "center"}
+    segs = _plan([_SrcClip(d) for d in durations], fmt)
+    return round(sum(s.duration for s in segs), 1)
+
+
+check("a full set reaches two minutes",
+      _length([60] * 5, 120) == 120.0, _length([60] * 5, 120))
+# The case that was broken. The long clips cover for the short one, inside
+# max_clip_seconds.
+check("one short source no longer shortens the video",
+      _length([12, 60, 60, 60, 60], 120) == 120.0,
+      _length([12, 60, 60, 60, 60], 120))
+check("nor do several",
+      _length([12, 18, 60, 60, 60], 120) == 120.0,
+      _length([12, 18, 60, 60, 60], 120))
+# Headroom is what makes it possible; without it the arithmetic cannot work.
+check("with no headroom it still falls short, honestly",
+      _length([12, 60, 60, 60, 60], 120, max_clip=24.0) < 120.0,
+      _length([12, 60, 60, 60, 60], 120, max_clip=24.0))
+check("the cap is still respected",
+      all(s.duration <= 32.0 + 0.01 for s in _plan(
+          [_SrcClip(300) for _ in range(5)],
+          {"target_seconds": 300, "max_clip_seconds": 32.0,
+           "min_clip_seconds": 8.0})))
+check("and it never overshoots the target",
+      _length([300] * 5, 120) <= 120.0, _length([300] * 5, 120))
+
+# The advice that explains it before a run is spent.
+from backend.app.render.advice import review as _rev  # noqa: E402
+
+_short = _rev({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+               "max_clip_seconds": 15, "banner_enabled": True})
+check("an unreachable length is called out",
+      any("cannot reach your target length" in f.title.lower()
+          for f in _short.findings),
+      [f.title for f in _short.findings])
+check("and it is said exactly once",
+      sum("reach" in f.title.lower() for f in _short.findings) == 1,
+      [f.title for f in _short.findings])
+_tight = _rev({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+               "max_clip_seconds": 24, "banner_enabled": True})
+check("and a target with no slack gets a tip",
+      any("No slack" in f.title for f in _tight.findings))
+_roomy = _rev({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+               "max_clip_seconds": 32, "banner_enabled": True})
+check("a workable one says nothing about length",
+      not any("length" in f.title.lower() or "slack" in f.title.lower()
+              for f in _roomy.findings),
+      [f.title for f in _roomy.findings])
+
+# Every level the advice emits must be one the frontend can sort and colour.
+_known = {"blocker", "warning", "tip"}
+_all_levels = set()
+for _cfg in ({"sources": [], "clips": 5},
+             {"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+              "max_clip_seconds": 15, "banner_enabled": True},
+             {"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+              "max_clip_seconds": 24, "banner_enabled": True}):
+    _all_levels |= {f.level for f in _rev(_cfg).findings}
+check("advice only emits levels the app renders",
+      _all_levels <= _known, sorted(_all_levels))
+
+# The presets ship two minutes, and ship it reachable.
+from backend.app.niches import BUILTIN_NICHES as _NICHES  # noqa: E402
+
+for _slug in ("top5", "show"):
+    _n = next(n for n in _NICHES if n["slug"] == _slug)["settings"]
+    check(f"{_slug} preset is two minutes", _n["target_seconds"] == 120,
+          _n["target_seconds"])
+    check(f"{_slug} preset can reach it",
+          _n["max_clip_seconds"] * _n["clips"] >= _n["target_seconds"] * 1.15,
+          f'{_n["max_clip_seconds"]} x {_n["clips"]}')
+
+
 section("clips are not reused")
 # Every clip a job used was written to job_clips and never read back, so each
 # run scored the same pool with the same model and picked the same five. The

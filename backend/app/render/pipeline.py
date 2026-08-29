@@ -161,14 +161,23 @@ def _plan_segments(clips: List[SourceClip], fmt: Dict) -> List[Segment]:
     min_len = float(fmt.get("min_clip_seconds", 8))
     max_len = float(fmt.get("max_clip_seconds", 26))
     strategy = str(fmt.get("clip_trim_strategy", "center")).lower()
-    share = target / max(len(clips), 1)
 
     segments: List[Segment] = []
     remaining = target
-    for clip in clips:
+    for index, clip in enumerate(clips):
         if remaining <= 0.5:
             break
         available = clip.duration or 0.0
+
+        # Recomputed each time, not fixed at target/len(clips) up front. With
+        # a fixed share a single short source just made the whole video
+        # shorter and nothing took up the slack: asking for 120s with one
+        # 12-second clip in the set produced 108s, and the setting read as a
+        # ceiling rather than a target. Spreading what is left over the clips
+        # that are left lets the longer ones cover for the short one, still
+        # inside max_clip_seconds.
+        left = len(clips) - index
+        share = remaining / left if left else remaining
         length = min(share, max_len, available, remaining)
         if length < min(min_len, available):
             length = min(min_len, available, remaining)
