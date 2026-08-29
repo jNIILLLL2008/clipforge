@@ -31,6 +31,13 @@ agent/ffmpeg/
 # from the spec, so it is released rather than committed.
 agent/ClipForgeAgent.exe
 agent/ClipForgeAgent-windows.zip
+# The unpacked bundle. It carries ~200MB of ffmpeg AND the agent.env
+# a test run pairs into it, which is a live credential.
+agent/ClipForgeAgent-windows/
+# Any agent.env anywhere, not just the one beside the source. This is
+# the pattern that matters: the file is written by pairing, so it
+# appears wherever somebody unpacks and runs the agent.
+**/agent.env
 build/
 dist/
 *.spec.bak
