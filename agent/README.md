@@ -45,9 +45,12 @@ matches, and click **Pair it**. The agent picks the token up within a few
 seconds, writes its own `agent.env` and starts working. Nothing is copied and
 no file is edited by hand.
 
-**ffmpeg has to be on PATH** -- `ffmpeg -version` to check, `winget install
-Gyan.FFmpeg` on Windows if it is missing. The agent says so plainly rather than
-failing halfway through a render.
+**ffmpeg is handled for you.** The `.zip` download ships it in `ffmpeg/`
+beside the .exe, so there is nothing to install. If you took the bare .exe
+instead, it fetches its own copy into `ffmpeg/` on the first run -- about
+110MB, once, with a progress bar. An ffmpeg already on PATH is used as-is and
+nothing is downloaded. `--no-download` turns the fetch off if you would rather
+install it yourself.
 
 Drop your own clips in `footage/` beside the .exe if you use the upload source.
 Everything the agent reads and writes lives in that one folder, so keep it
@@ -103,9 +106,28 @@ it immediately.
 python agent/build_exe.py --clean
 ```
 
-Around 24MB, and it lands at `agent/ClipForgeAgent.exe`. ffmpeg is left out on
-purpose: it is roughly 90MB, it is better installed and updated by the person
-using it, and `--check` reports clearly when it is missing.
+Around 25MB, and it lands at `agent/ClipForgeAgent.exe`. To build the file
+subscribers actually download -- the .exe and ffmpeg together in one archive:
+
+```bash
+python agent/build_exe.py --clean --bundle
+```
+
+That produces `agent/ClipForgeAgent-windows.zip`, about 100MB. It needs
+`agent/ffmpeg/` to exist first; run the agent once and let it fetch one.
+
+ffmpeg sits *next to* the .exe rather than inside it. Two static binaries are
+about 200MB, and PyInstaller's onefile mode unpacks its entire payload into a
+temp directory on every launch -- burying them would write 200MB to disk each
+time a long-running agent starts. The .zip gets the same one-download install
+without paying that on every run.
+
+The build is GPL, because the pipeline encodes with `libx264` and an LGPL
+ffmpeg has no software H.264 encoder at all. That means the .zip must keep
+ffmpeg's `LICENSE` alongside the binaries and point at the source, which
+`READ ME FIRST.txt` does. The binaries are unmodified upstream builds from
+gyan.dev and the agent invokes them as a separate process, so nothing here
+makes ClipForge itself a derived work.
 
 The server half of the repo is excluded from the build, so SQLAlchemy, FastAPI,
 Stripe and the Google client are not along for the ride. The .exe is gitignored

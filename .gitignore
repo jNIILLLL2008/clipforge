@@ -25,9 +25,12 @@ railway-env.txt
 agent/agent.env
 agent/footage/
 agent/work/
+# Downloaded or unpacked beside the agent, ~200MB of third-party binaries.
+agent/ffmpeg/
 # Build artefacts from agent/build_exe.py. The .exe is 24MB and is rebuilt
 # from the spec, so it is released rather than committed.
 agent/ClipForgeAgent.exe
+agent/ClipForgeAgent-windows.zip
 build/
 dist/
 *.spec.bak

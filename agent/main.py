@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import shutil
 import sys
 import time
@@ -30,6 +31,7 @@ from typing import Optional
 import requests
 
 from . import config as agent_config
+from . import ffmpeg as agent_ffmpeg
 from . import pairing
 from .client import Server, ServerError
 
@@ -80,6 +82,28 @@ def _hold_window(code: int) -> int:
     return code
 
 
+def ensure_ffmpeg(args) -> bool:
+    """Find or fetch ffmpeg, and point the pipeline at it.
+
+    Has to happen before apply_paths, and therefore before anything imports
+    the shared pipeline: backend.app.config reads FFMPEG_BINARY once, at
+    import time, and never looks again.
+    """
+    try:
+        ffmpeg, ffprobe = agent_ffmpeg.ensure(
+            agent_config.HERE, auto=not args.no_download)
+    except agent_ffmpeg.FFmpegError as exc:
+        log.error("%s", exc)
+        return False
+    except KeyboardInterrupt:
+        print("\n  Cancelled.\n")
+        return False
+
+    agent_ffmpeg.apply(ffmpeg, ffprobe)
+    log.info("Using ffmpeg at %s", ffmpeg)
+    return True
+
+
 def ensure_paired(args) -> Optional[object]:
     """Load the configuration, pairing first if there is no token yet.
 
@@ -110,13 +134,9 @@ def preflight(cfg, server: Server) -> bool:
     """
     ok = True
 
-    if not shutil.which("ffmpeg"):
-        log.error(
-            "ffmpeg is missing, and nothing can be cut without it.\n"
-            "        Install it, then start this again:\n"
-            "          Windows   winget install Gyan.FFmpeg\n"
-            "          macOS     brew install ffmpeg\n"
-            "          Linux     sudo apt install ffmpeg")
+    # ffmpeg was resolved before this ran, so reaching here without one means
+    # the fetch failed and the reason has already been printed.
+    if not os.environ.get("FFMPEG_BINARY"):
         ok = False
 
     try:
@@ -232,6 +252,9 @@ def main(argv: Optional[list] = None) -> int:
                         help="Forget the token on this machine.")
     parser.add_argument("--no-browser", action="store_true",
                         help="Print the pairing link instead of opening it.")
+    parser.add_argument("--no-download", action="store_true",
+                        help="Never fetch ffmpeg; fail if it is not already "
+                             "installed.")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -242,6 +265,9 @@ def main(argv: Optional[list] = None) -> int:
         log.info("Token removed from %s. Revoke it on the website too if the "
                  "machine is not yours any more.", agent_config.DEFAULT_FILE)
         return _hold_window(0)
+
+    if not ensure_ffmpeg(args):
+        return _hold_window(1)
 
     cfg = ensure_paired(args)
     if cfg is None:

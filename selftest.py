@@ -855,6 +855,66 @@ finally:
             os.environ[k] = v
 
 
+section("ffmpeg comes with it")
+# "Install ffmpeg first" was the last instruction standing between a
+# subscriber and a working agent. These check the finding, not the fetching:
+# downloading 110MB is not something a test suite should do on every run.
+import agent.ffmpeg as _ff  # noqa: E402
+
+_ffhome = TMP / "ffhome"
+_ffhome.mkdir(parents=True, exist_ok=True)
+
+_saved_path = os.environ.get("PATH", "")
+os.environ["PATH"] = ""            # no system ffmpeg may mask these
+try:
+    check("nothing found on a bare machine", _ff.find(_ffhome) == (None, None))
+
+    _stub = _ffhome / "ffmpeg"
+    _stub.mkdir()
+    for _n in (f"ffmpeg{_ff.SUFFIX}", f"ffprobe{_ff.SUFFIX}"):
+        (_stub / _n).write_bytes(b"not a real binary")
+
+    _found = _ff.find(_ffhome)
+    check("a copy beside the agent is found", _found[0] == _stub / f"ffmpeg{_ff.SUFFIX}")
+    # This is the interrupted-download case, and the whole reason find() and
+    # works() are separate: the file exists and is still no use.
+    check("but a broken one does not pass works()", _ff.works(_found[0]) is False)
+
+    _refused = ""
+    try:
+        _ff.ensure(_ffhome, auto=False)
+    except _ff.FFmpegError as _exc:
+        _refused = str(_exc)
+    check("--no-download refuses rather than fetching", "missing" in _refused,
+          _refused.splitlines()[0] if _refused else "no error raised")
+    check("and still says how to install it by hand", "winget" in _refused)
+finally:
+    os.environ["PATH"] = _saved_path
+
+# apply() is the reason the pipeline uses the bundled build and not whatever
+# else is on the machine. backend.app.config reads these once, at import.
+# Compared through Path so this does not depend on the separator: on Windows
+# "X:/ff" comes back out as "X:\ff".
+_fake_ffmpeg, _fake_ffprobe = Path("X:/ff/ffmpeg.exe"), Path("X:/ff/ffprobe.exe")
+_ff.apply(_fake_ffmpeg, _fake_ffprobe)
+check("FFMPEG_BINARY is pointed at ours",
+      os.environ["FFMPEG_BINARY"] == str(_fake_ffmpeg), os.environ["FFMPEG_BINARY"])
+check("FFPROBE_BINARY too", os.environ["FFPROBE_BINARY"] == str(_fake_ffprobe))
+check("and the folder goes on PATH for anything that shells out",
+      str(_fake_ffmpeg.parent) in os.environ["PATH"].split(os.pathsep))
+check("the pipeline reads that setting",
+      "FFMPEG_BINARY" in Path("backend/app/config.py").read_text(encoding="utf-8"))
+
+check("ffplay is not something we ever want",
+      "ffplay" not in _ff.WANTED, sorted(_ff.WANTED))
+check("the download is checksummed",
+      _ff.CHECKSUM_URL.endswith(".sha256"))
+check("and comes over https", _ff.DOWNLOAD_URL.startswith("https://"))
+
+for _k in ("FFMPEG_BINARY", "FFPROBE_BINARY"):
+    os.environ.pop(_k, None)
+
+
 section("security")
 from backend.app.security import _CSP, _Buckets, _limit_for  # noqa: E402
 

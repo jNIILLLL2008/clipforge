@@ -273,6 +273,26 @@ and continue afterwards. The first-run tour is suppressed while a pairing is
 open: an agent is polling on another screen, and eight steps of welcome is not
 what to put in front of that.
 
+## ffmpeg
+
+Nobody is asked to install it. `agent/ffmpeg.py` looks in three places, in
+order: `ffmpeg/` beside the agent (what the published .zip ships), then PATH
+(so anyone with their own build keeps it), then it downloads one.
+
+It stays beside the .exe rather than inside it. Static ffmpeg and ffprobe are
+about 100MB each, and PyInstaller onefile unpacks everything to a temp
+directory on every launch -- inside the exe would mean writing 200MB to disk
+each time a background agent starts.
+
+`find()` and `works()` are deliberately separate. An interrupted download
+leaves a file that exists and does not run, and discovering that mid-render
+costs a subscriber a job they were waiting on.
+
+The build is GPL rather than LGPL because the pipeline encodes with `libx264`;
+LGPL ffmpeg ships no software H.264 encoder. That carries redistribution
+obligations, which is why the .zip keeps `ffmpeg/LICENSE` and names the source
+in `READ ME FIRST.txt`.
+
 ## Things the page must not disagree with
 
 Pricing is fetched from `/api/plans` on load and overwrites the printed values,
