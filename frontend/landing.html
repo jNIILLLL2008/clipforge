@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ClipForge: short-form video on autopilot</title>
-<meta name="description" content="Set it up once. One button cuts your footage to a retention-tested format, scores it, and publishes it to your channel. On a paid plan it does that every day.">
+<meta name="description" content="Set it up once. One button finds the clips, cuts them to a retention-tested format, scores the result, and publishes it to your channel. On a paid plan it does that every day.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0b0d'/><path d='M16 7l7 9-7 9-7-9z' fill='%23e2603a'/></svg>">
 <link rel="canonical" href="__ORIGIN__/">
 
@@ -14,20 +14,19 @@
 <meta property="og:site_name" content="ClipForge">
 <meta property="og:url" content="__ORIGIN__/">
 <meta property="og:title" content="ClipForge: short-form video on autopilot">
-<meta property="og:description" content="Set it up once. One button cuts your footage to a retention-tested format, scores it, and publishes it to your channel.">
+<meta property="og:description" content="Set it up once. One button finds the clips, cuts them to a retention-tested format, scores the result, and publishes it to your channel.">
 <meta property="og:image" content="__ORIGIN__/static/img/og-cover.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="ClipForge: short-form video, down to one button.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ClipForge: short-form video on autopilot">
-<meta name="twitter:description" content="Set it up once. One button cuts your footage to a retention-tested format, scores it, and publishes it to your channel.">
+<meta name="twitter:description" content="Set it up once. One button finds the clips, cuts them to a retention-tested format, scores the result, and publishes it to your channel.">
 <meta name="twitter:image" content="__ORIGIN__/static/img/og-cover.png">
 
 <meta name="theme-color" content="#0b0b0d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://picsum.photos">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
 <link rel="stylesheet" href="/static/landing.css?v=2">
@@ -41,7 +40,7 @@
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Web",
   "url": "__ORIGIN__/",
-  "description": "Cuts footage you own into short-form vertical video, scores it against a retention model before rendering, and publishes it to your YouTube channel on a schedule.",
+  "description": "Finds and ranks source clips on YouTube, cuts them into short-form vertical video, scores the result against a retention model before rendering, and publishes it to your YouTube channel on a schedule.",
   "offers": [
     {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "GBP"},
     {"@type": "Offer", "name": "Starter", "price": "12", "priceCurrency": "GBP"},
@@ -106,8 +105,8 @@
       <h1 class="display-xl rise rise-1">Short-form video, down to one button.</h1>
 
       <p class="lede rise rise-2">
-        Set up your niche once. ClipForge cuts your footage, scores it for
-        retention, and uploads it to your channel.
+        Set up your niche once. ClipForge finds the clips, cuts them, scores
+        the result for retention, and uploads it to your channel.
       </p>
 
       <div class="hero-cta rise rise-3">
@@ -154,7 +153,7 @@
        talks to, which is the honest version of social proof here. -->
   <div class="sources">
     <div class="wrap">
-      <p class="sources-label">Publishes straight to</p>
+      <p class="sources-label">Sources from and publishes to</p>
       <div class="sources-logos">
         <img src="https://cdn.simpleicons.org/youtube/141416/f4f2ef" alt="YouTube" width="20" height="20" loading="lazy">
       </div>
@@ -185,11 +184,11 @@
           </p>
         </article>
         <article class="step reveal reveal-d1">
-          <h3>Upload your footage</h3>
+          <h3>Point it at a source</h3>
           <p>
-            Drag in the clips you want cut. ClipForge never sources footage on
-            your behalf, so the only rights involved are the ones you already
-            hold.
+            Give it a show, a channel or a plain search and it collects the
+            candidate clips itself, then ranks them. Or drag in your own
+            footage and skip the step entirely.
           </p>
         </article>
         <article class="step reveal reveal-d2">
@@ -259,56 +258,71 @@
   <section id="footage">
     <div class="wrap">
       <div class="section-head reveal">
-        <p class="eyebrow">Footage and licensing</p>
-        <h2 class="display-lg">Your footage, and nothing else.</h2>
+        <p class="eyebrow">Footage and rights</p>
+        <h2 class="display-lg">Two ways footage gets in.</h2>
         <p class="body">
-          ClipForge does not go and find clips for you. Every run starts from
-          footage you uploaded, which is the only version of this that is
-          honestly safe to sell.
+          Point it at YouTube and it collects the clips itself, or drag in your
+          own. After that the pipeline is identical, and so is what comes out
+          the other end.
         </p>
       </div>
 
       <div class="bento">
-        <article class="cell cell-wide cell-shot reveal">
-          <!-- TODO: replace with a still from footage you own. -->
-          <figure>
-            <img src="https://picsum.photos/seed/clipforge-own-footage/1200/525"
-                 width="1200" height="525"
-                 alt="A wide frame of self-recorded footage." loading="lazy" decoding="async">
-          </figure>
+        <article class="cell cell-wide cell-rank reveal">
+          <!-- Illustrative scores, not a screenshot: the point is the shape of
+               the step, with one row below the line and rejected. -->
+          <div class="rank" aria-hidden="true">
+            <div class="rank-row">
+              <span class="rank-bar"><i style="width:92%"></i></span>
+              <span class="rank-name">Week 4 &mdash; the one-handed catch</span>
+              <b class="rank-num">92.4</b>
+            </div>
+            <div class="rank-row">
+              <span class="rank-bar"><i style="width:84%"></i></span>
+              <span class="rank-name">Fourth down, 1:12 on the clock</span>
+              <b class="rank-num">84.1</b>
+            </div>
+            <div class="rank-row is-out">
+              <span class="rank-bar"><i style="width:38%"></i></span>
+              <span class="rank-name">Post-game press conference</span>
+              <b class="rank-num">38.6</b>
+            </div>
+          </div>
           <div class="cell-body">
-            <h3>You hold the rights</h3>
+            <h3>It finds the clips</h3>
             <p>
-              Drag your clips in and there is nothing to claim, because nothing
-              came from anyone else. It is also the only way to cover sport,
-              gaming or anything from a broadcast.
+              Give it a show, a channel or a plain search. ClipForge pulls the
+              candidates, ranks them on the same retention model that later
+              gates the render, and cuts the survivors into one vertical video.
+              You never open a downloader, and there is no shortlist left
+              waiting for you to sort by hand.
             </p>
           </div>
         </article>
 
         <article class="cell reveal reveal-d1">
-          <h3>No stock libraries</h3>
+          <h3>Or bring your own</h3>
           <p>
-            Stock and public-domain libraries hold generic clips. Nothing
-            broadcast, nothing sport, nothing gaming. For what actually gets
-            made here they were dead weight, so the pipeline does not carry
-            them at all.
+            Drag your clips in and they take the same cut, the same score and
+            the same render. The only thing that changes is where the footage
+            came from &mdash; and with your own, the question below never comes
+            up at all.
           </p>
         </article>
 
         <article class="cell cell-full cell-note reveal">
           <h3>What this does not do</h3>
           <p>
-            Uploading is not a loophole. If you upload someone else&rsquo;s
-            broadcast footage, Content ID still matches the content itself,
-            whoever posted it, and that is between you and the rights holder.
-            The tool makes no claim it can help there.
+            Re-cutting is not laundering. The edit is new, but the footage
+            underneath it still belongs to whoever shot it, and Content ID
+            matches the content rather than the account that posted it. Nothing
+            here changes that, and the tool makes no claim it can settle a
+            claim for you.
           </p>
           <p class="body-sm subtle">
-            Self-hosting? There is an adapter for pulling from YouTube. It ships
-            disabled and takes two deliberate opt-ins to switch on, because the
-            terms-of-service and liability trade-off is a decision, not a
-            default.
+            So sourcing from YouTube ships off. Switching it on is a deliberate
+            opt-in, because the terms-of-service and liability trade-off is a
+            decision, not a default.
           </p>
         </article>
       </div>
@@ -368,8 +382,8 @@
       </div>
 
       <p class="pricing-fine reveal">
-        No card required for the free plan. Your first uploads default to
-        private.
+        No card required for the free plan. Everything it publishes defaults
+        to private.
       </p>
     </div>
   </section>
@@ -383,18 +397,19 @@
 
       <div class="faq reveal">
         <details>
-          <summary>Do I need my own footage?</summary>
-          <p>Yes. ClipForge cuts footage you upload and does not source any on
-          your behalf, so bring clips you have the rights to. Stock and
-          public-domain sources were removed because they hold nothing useful
-          for broadcast, sport or gaming.</p>
+          <summary>Where does the footage come from?</summary>
+          <p>Either you upload it, or ClipForge collects it from YouTube for
+          you: give it a show, a channel or a search and it pulls the
+          candidates and ranks them. Stock and public-domain libraries were
+          removed because they hold nothing useful for broadcast, sport or
+          gaming.</p>
         </details>
         <details>
           <summary>Will my videos get copyright claims?</summary>
-          <p>Nothing is sourced for you, so no claim can originate with the
-          tool. Every frame it touches is one you uploaded. If you upload clips
-          you do not own, that is a different matter, and no tool can help with
-          it.</p>
+          <p>They can. Re-cutting footage does not move its rights, and Content
+          ID matches the content itself rather than who posted it. That is why
+          sourcing from YouTube ships off behind an explicit opt-in. Upload
+          footage you own and the question does not arise.</p>
         </details>
         <details>
           <summary>What does daily automation actually do?</summary>
@@ -438,7 +453,7 @@
     <div>
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
       <p class="fine">
-        Short-form video that sources licensed footage, scores itself for
+        Short-form video that finds its own clips, scores itself for
         retention, and publishes on a schedule.
       </p>
     </div>

@@ -28,7 +28,7 @@ log = get_logger("security")
 
 #: Everything the frontend actually loads, and nothing else. Google Fonts
 #: serves its stylesheet from one host and the font files from another, so both
-#: are needed. Simple Icons and picsum are images on the marketing page.
+#: are needed. Simple Icons is the YouTube mark under the hero.
 _CSP = "; ".join([
     "default-src 'self'",
     # The two inline scripts on the marketing page are the reason for
@@ -37,7 +37,11 @@ _CSP = "; ".join([
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https://cdn.simpleicons.org https://picsum.photos",
+    # blob: is not optional: /api/studio/preview returns a PNG body that
+    # app.js turns into an object URL, on the settings screen and again in the
+    # guided walkthrough. Without it both previews render their alt text, which
+    # is exactly what they did between this header shipping and this line.
+    "img-src 'self' data: blob: https://cdn.simpleicons.org",
     "connect-src 'self'",
     "media-src 'self'",
     # None of these are used, so none of them should be possible.

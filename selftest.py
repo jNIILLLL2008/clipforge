@@ -11,6 +11,7 @@ clips stand in for real footage so this needs nothing but ffmpeg.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -763,10 +764,29 @@ check("MIME sniffing is refused", _h.get("x-content-type-options") == "nosniff")
 check("a referrer policy is set", "referrer-policy" in _h)
 check("a permissions policy is set", "permissions-policy" in _h)
 
-# The CSP has to allow exactly what the pages load, or it silently breaks them.
-for _origin in ("https://fonts.googleapis.com", "https://fonts.gstatic.com",
-                "https://cdn.simpleicons.org", "https://picsum.photos"):
+# The CSP has to allow exactly what the pages load, or it silently breaks
+# them: the response is a 200 and the image renders its alt text. A hardcoded
+# list of origins here is what let that ship, so read the pages instead.
+_HTML = Path(__file__).resolve().parent / "frontend"
+_page_origins: set = set()
+for _f in ("landing.html", "index.html", "404.html"):
+    _page_origins |= set(re.findall(
+        r'(?:href|src)="(https://[a-z0-9.-]+)',
+        (_HTML / _f).read_text(encoding="utf-8")))
+# A JSON-LD vocabulary URL. It is an identifier, nothing fetches it.
+_page_origins.discard("https://schema.org")
+check("the pages were scanned for origins", len(_page_origins) >= 2,
+      sorted(_page_origins))
+for _origin in sorted(_page_origins):
     check(f"CSP allows {_origin.split('//')[1]}", _origin in _CSP)
+
+# blob: is the one that cannot be caught by scanning markup. app.js turns the
+# /api/studio/preview PNG body into an object URL, in the settings preview and
+# again in the guided walkthrough; without blob: neither ever paints.
+_img_src = _CSP.split("img-src ", 1)[1].split(";", 1)[0]
+check("CSP allows blob: images", "blob:" in _img_src, _img_src)
+check("app.js still needs it", "createObjectURL" in
+      (_HTML / "app.js").read_text(encoding="utf-8"))
 check("CSP forbids plugins", "object-src 'none'" in _CSP)
 check("CSP forbids being framed", "frame-ancestors 'none'" in _CSP)
 check("CSP pins the base URI", "base-uri 'self'" in _CSP)

@@ -70,8 +70,8 @@ FIELDS: List[Dict[str, Any]] = [
           "A clip whose title or tags contain any of these is dropped."),
     field("sources", "subject", "list", ["upload"],
           "Sources",
-          "Where footage comes from. Your own uploads, which is the only "
-          "source this build ships enabled."),
+          "Where footage comes from. Your own uploads, or YouTube, which "
+          "collects and ranks candidate clips for you."),
     field("search_mode", "subject", "select", "hashtag",
           "Search mode",
           "How search terms become YouTube pages. Hashtag reads a tag's "

@@ -207,13 +207,15 @@ if FRONTEND.exists():
         """
         body = f"""# ClipForge
 
-> Turns footage you own into short-form vertical video, scores it against a
-> retention model before rendering, and publishes it to your YouTube channel
-> on a schedule.
+> Finds and ranks source clips on YouTube, cuts them into short-form vertical
+> video, scores the result against a retention model before rendering, and
+> publishes it to your YouTube channel on a schedule.
 
 ## What it does
 
-- You upload your own clips. ClipForge does not source footage on your behalf.
+- Footage arrives one of two ways: clips you upload, or YouTube, where it
+  collects the candidates for a show, channel or search and ranks them itself.
+  Sourcing from YouTube is off unless the operator has turned it on.
 - It cuts them to a chosen format: countdown, meme cut, calm loop, or one
   specific TV show.
 - Every video is scored before a frame is encoded. Below 55 the run is
@@ -223,8 +225,9 @@ if FRONTEND.exists():
 
 ## What it does not do
 
-- It does not make someone else's footage safe to re-upload. Content ID matches
-  the content itself regardless of who posted it.
+- It does not make someone else's footage safe to re-upload. Re-cutting does
+  not move the rights, and Content ID matches the content itself regardless of
+  who posted it.
 - It does not include stock or public-domain libraries. Those carry no
   broadcast, sport or gaming footage, which is what it is used for.
 

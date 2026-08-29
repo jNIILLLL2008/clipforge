@@ -557,11 +557,28 @@ section + section { padding-top: 0; }
    overrides of its own. */
 .cell-full { grid-column: 1 / -1; }
 
-/* Cell one carries a real image so this is not four text tiles in a row. */
-.cell-shot { padding: 0; display: flex; flex-direction: column; }
-.cell-shot figure { margin: 0; aspect-ratio: 16 / 7; overflow: hidden; background: var(--surface-sunk); }
-.cell-shot figure img { width: 100%; height: 100%; object-fit: cover; }
-.cell-shot .cell-body { padding: 24px 28px 28px; }
+/* Cell one shows the ranking step rather than a photograph. Sourcing is the
+   part of the pipeline nobody can see, and a stock still said nothing about
+   it -- three rows with one below the line say the whole thing. */
+.cell-rank { padding: 0; display: flex; flex-direction: column; }
+.cell-rank .rank { padding: 26px 28px 6px; display: grid; gap: 11px; }
+.rank-row {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+.rank-bar { height: 6px; border-radius: var(--r-chip); background: var(--surface-sunk); overflow: hidden; }
+.rank-bar i { display: block; height: 100%; background: var(--ember); border-radius: inherit; }
+.rank-name { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank-num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+/* The rejected row is the entire point of the panel, so it drops to
+   --ink-subtle and no further: 4.6:1 on --surface, still readable. */
+.rank-row.is-out .rank-bar i { background: var(--hairline-firm); }
+.rank-row.is-out .rank-name,
+.rank-row.is-out .rank-num { color: var(--ink-subtle); }
+.cell-rank .cell-body { padding: 18px 28px 28px; }
 
 .cell-note {
   background:

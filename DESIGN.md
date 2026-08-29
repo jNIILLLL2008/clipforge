@@ -199,19 +199,49 @@ marketing page, and it sits a little awkwardly next to the "what this does not
 do" section, which is about exactly this. Own footage or a licensed-stock render
 would carry the same message without the tension.
 
-**Still a placeholder:** the wide footage cell in the bento uses
-`picsum.photos`, marked `TODO` in the markup. It wants a still of footage the
-user shot themselves, so none of the CBS frames fit it.
+The wide footage cell used to hold a `picsum.photos` placeholder. It is now a
+ranked-candidate panel (`.cell-rank`) built from divs, which needs no image and
+says something a stock still could not: sourcing is a step that *rejects*
+things. The scores in it are illustrative, not a screenshot, and the markup
+says so.
 
 ## Footage sources
 
-The bot is upload-only. The stock and open-collection adapters (Pexels,
-Pixabay, Openverse, the Internet Archive) were removed from the registry, so
-the marketing page must not advertise them. If sources are ever added back,
-the copy that has to change with them is: the hero lede, the logo strip under
-the hero, the "Upload your footage" step, the whole `#footage` section, and the
-first two FAQ answers. The YouTube adapter is still present and still ships
-disabled behind two opt-ins.
+Two adapters ship: `upload`, and `youtube`, which collects and ranks candidate
+clips itself. The stock and open-collection adapters (Pexels, Pixabay,
+Openverse, the Internet Archive) were removed from the registry and the page
+must not advertise them.
+
+`youtube` is not licensed for reuse, so it is gated twice: `ENABLED_SOURCES`
+has to list it, and `ALLOW_UNLICENSED_SOURCES` has to be true. A new niche also
+defaults to `["upload"]` in `settings_schema.py`, so the page is right to say
+sourcing "ships off" even where the operator has enabled it.
+
+The copy that describes sourcing, and that has to move together if the sources
+change again: the JSON-LD `description`, the hero lede, the label on the logo
+strip, the "Point it at a source" step, the whole `#footage` section, the first
+two FAQ answers, the footer strapline, and the `sources` field help text in
+`backend/app/settings_schema.py`. That last one is in the app rather than the
+marketing page and is the easiest of the eight to forget.
+
+## The CSP will silently break images
+
+`backend/app/security.py` sends a `Content-Security-Policy`, and `img-src` on
+it is the reason two separate images once rendered as alt text in production
+while returning 200 to `curl`:
+
+- **`blob:`** must stay listed. `/api/studio/preview` returns a PNG *body*,
+  and `app.js` turns it into an object URL in two places (the settings preview
+  and the guided walkthrough). Neither is a network request, so nothing fails
+  in the network panel -- the image just never paints.
+- **Redirects are re-checked.** `picsum.photos` 302s to
+  `fastly.picsum.photos`, so allow-listing only the first host blocked every
+  image it served. Allow-list the host that actually serves the bytes.
+
+Anything added to the page that loads from a new origin -- an image, a font, a
+script, an `iframe`, a `fetch` -- needs its directive updated in the same
+commit, or it will fail in production and work perfectly on a dev server
+whichever way you test it.
 
 ## Things the page must not disagree with
 
