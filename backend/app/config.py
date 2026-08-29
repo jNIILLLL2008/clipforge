@@ -124,6 +124,13 @@ class Settings:
         # instance except one when scaling out.
         self.run_scheduler: bool = _bool("RUN_SCHEDULER", True)
 
+        # Where a subscriber gets the render agent. The .exe is a build
+        # artefact rather than something in the repo, so this points at
+        # wherever it was published -- a GitHub release, normally. Unset means
+        # the app shows the run-from-source instructions instead of a button
+        # that leads nowhere.
+        self.agent_download_url: str = _str("AGENT_DOWNLOAD_URL")
+
         # --- content sources --------------------------------------------- #
         # Only sources licensed for commercial reuse are on by default. The
         # scraping adapter exists but stays off unless an operator turns it on

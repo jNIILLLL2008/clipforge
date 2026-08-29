@@ -615,6 +615,10 @@ check("and it carries the job's settings",
       opted_in and opted_in[0].config.get("source_channels") == ["@x"])
 settings.allow_unlicensed_sources = False
 
+from backend.app.db import session_scope as _session_scope  # noqa: E402
+from backend.app.models import utcnow as _utcnow  # noqa: E402
+from datetime import timedelta as _timedelta  # noqa: E402
+
 section("the render agent")
 # The agent is the same pipeline on the subscriber's machine. The server still
 # decides whether a job may run, so the interesting cases are the refusals.
@@ -701,6 +705,104 @@ check("a finished job cannot be completed again",
 agent_owner.delete("/api/agent/token")
 check("revoking the token stops the agent at once",
       TestClient(app).get("/api/agent/hello", headers=AGENT).status_code == 401)
+
+
+section("pairing an agent")
+# The flow that replaced "copy this token into a file". Its whole reason for
+# existing is that a subscriber never handles the secret, so the checks are
+# about who can collect it and who cannot.
+pair_owner = TestClient(app)
+pair_owner.post("/api/auth/signup",
+                json={"email": "pairer@example.com", "password": "pair-pass-77"})
+
+_started = TestClient(app).post("/api/agent/pair/start",
+                                json={"label": "DESKTOP-TEST"}).json()
+_code, _secret = _started["code"], _started["device_secret"]
+check("starting needs no account", len(_code) == 9 and _code[4] == "-", _code)
+check("the code avoids letters read as digits",
+      not set(_code.replace("-", "")) & set("ILOU01"), _code)
+check("a device secret comes back", len(_secret) > 20)
+check("the verify url carries the code", _code in _started["verify_url"],
+      _started["verify_url"])
+
+check("polling before approval says pending",
+      TestClient(app).post("/api/agent/pair/poll",
+                           json={"device_secret": _secret}).json()["status"]
+      == "pending")
+check("an unknown secret is not told anything else",
+      TestClient(app).post("/api/agent/pair/poll",
+                           json={"device_secret": "made-up"}).json()["status"]
+      == "expired")
+
+# Approving is the only step that needs a session, and it is the only step
+# that attaches the pairing to an account.
+check("approving needs a signed-in session",
+      TestClient(app).post("/api/agent/pair/approve",
+                           json={"code": _code}).status_code == 401)
+check("the page can see which machine is asking",
+      pair_owner.get(f"/api/agent/pair/lookup?code={_code}").json()["label"]
+      == "DESKTOP-TEST")
+check("a code typed without its dash still resolves",
+      pair_owner.get(
+          f"/api/agent/pair/lookup?code={_code.replace('-', '').lower()}"
+      ).json()["found"] is True)
+check("an invented code is simply not found",
+      pair_owner.get("/api/agent/pair/lookup?code=ZZZZ-ZZZZ").json()["found"]
+      is False)
+
+check("approval succeeds",
+      pair_owner.post("/api/agent/pair/approve",
+                      json={"code": _code}).json()["ok"] is True)
+check("the same code cannot be approved twice",
+      pair_owner.post("/api/agent/pair/approve",
+                      json={"code": _code}).status_code == 409)
+
+_collected = TestClient(app).post("/api/agent/pair/poll",
+                                  json={"device_secret": _secret}).json()
+check("the agent collects a token", len(_collected.get("token", "")) > 20)
+check("and is told which account it joined",
+      _collected.get("email") == "pairer@example.com")
+check("the token actually works",
+      TestClient(app).get(
+          "/api/agent/hello",
+          headers={"Authorization": f"Bearer {_collected['token']}"}
+      ).status_code == 200)
+
+# The row keeps nothing once the agent has it, so a copy of the secret taken
+# afterwards is worth nothing.
+check("a token is handed over exactly once",
+      TestClient(app).post("/api/agent/pair/poll",
+                           json={"device_secret": _secret}).json()["status"]
+      == "expired")
+
+# An expired code must not be approvable, whatever the clock says elsewhere.
+from backend.app.models import AgentPairing as _Pairing  # noqa: E402
+
+_stale = TestClient(app).post("/api/agent/pair/start", json={}).json()
+with _session_scope() as _db:
+    _row = _db.query(_Pairing).filter(
+        _Pairing.code == _stale["code"]).first()
+    _row.expires_at = _utcnow() - _timedelta(minutes=1)
+check("an expired code is not found",
+      pair_owner.get(
+          f"/api/agent/pair/lookup?code={_stale['code']}").json()["found"]
+      is False)
+check("and cannot be approved",
+      pair_owner.post("/api/agent/pair/approve",
+                      json={"code": _stale["code"]}).status_code == 404)
+check("its agent is told to start over",
+      TestClient(app).post(
+          "/api/agent/pair/poll",
+          json={"device_secret": _stale["device_secret"]}).json()["status"]
+      == "expired")
+
+# The page the agent sends people to has to exist and has to be the app,
+# because the app is what knows how to show a sign-in first.
+_pair_page = TestClient(app).get("/pair?code=ABCD-2345")
+check("/pair serves the app", _pair_page.status_code == 200
+      and "id=\"pair\"" in _pair_page.text)
+check("crawlers are kept off it",
+      "Disallow: /pair" in TestClient(app).get("/robots.txt").text)
 
 
 section("the agent client")

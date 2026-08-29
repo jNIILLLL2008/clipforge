@@ -36,46 +36,48 @@ pulls, and your channel's refresh token stays on the server.
 
 ## Setup
 
-Either run it from source, or use the packaged `.exe` and skip installing
-Python. **ffmpeg has to be on PATH either way** -- check with `ffmpeg -version`,
-and install it with `winget install Gyan.FFmpeg` if it is missing.
+Put `ClipForgeAgent.exe` in a folder of its own and run it. That is the whole
+install.
 
-### From the .exe
+On the first run it has no token, so it opens your browser at the site, shows
+you a short code, and waits. You sign in if you are not already, check the code
+matches, and click **Pair it**. The agent picks the token up within a few
+seconds, writes its own `agent.env` and starts working. Nothing is copied and
+no file is edited by hand.
 
-Three things in one folder, and nothing else:
+**ffmpeg has to be on PATH** -- `ffmpeg -version` to check, `winget install
+Gyan.FFmpeg` on Windows if it is missing. The agent says so plainly rather than
+failing halfway through a render.
 
-```
-ClipForgeAgent.exe
-agent.env         copied from agent.env.example, with your token
-footage/          your own clips
-```
+Drop your own clips in `footage/` beside the .exe if you use the upload source.
+Everything the agent reads and writes lives in that one folder, so keep it
+together if you move it.
 
-Then `ClipForgeAgent.exe --check`. The .exe reads everything from the folder it
-sits in, so keep those three together if you move it.
+### Why pairing works this way
+
+The old install asked for the token off a web page and into a file. That is
+four chances to give up before anything runs -- find the folder, create a file
+with no extension, paste a 48-character secret intact, open a terminal -- and
+subscribers are not developers. Now the agent asks and the person clicks once.
+It is the shape a television uses to sign in, for the same reason.
 
 ### From source
 
-You need Python 3.11+.
-
-1. On the website, sign in and open **Settings**, then pair a render agent.
-   The token is shown once. Copy it.
-2. Copy `agent.env.example` to `agent.env` and fill in the server and token.
-3. Put your own clips in `footage/`.
-4. Check everything before running for real:
-
-```bash
-python -m agent.main --check
-```
-
-That verifies the token, reports your plan and remaining runs, confirms ffmpeg,
-and counts the footage it can see. Then:
+You need Python 3.11+. Same flow:
 
 ```bash
 python -m agent.main
 ```
 
-It polls until you stop it. `--once` takes a single job and exits, which is
-what you want from a scheduled task.
+`--check` verifies the token, reports your plan and remaining runs, confirms
+ffmpeg and counts the footage it can see, then exits. `--once` takes a single
+job and exits, which is what you want from a scheduled task. `--pair` pairs
+again with a different account, and `--unpair` forgets the token on this
+machine.
+
+An unattended install with no browser can still be configured by hand: copy
+`agent.env.example` to `agent.env` and fill in a token minted by pairing
+somewhere else.
 
 ## Settings
 
@@ -83,16 +85,17 @@ Everything lives in `agent.env`. Only the first two are required.
 
 | Setting | Default | |
 | --- | --- | --- |
-| `CLIPFORGE_SERVER` | | The site you subscribed to |
-| `CLIPFORGE_AGENT_TOKEN` | | From Settings, shown once |
+| `CLIPFORGE_SERVER` | the hosted site | Only needed for your own instance |
+| `CLIPFORGE_AGENT_TOKEN` | | Written by pairing; you should not set it |
 | `CLIPFORGE_FOOTAGE_DIR` | `./footage` | Your own clips |
 | `CLIPFORGE_WORK_DIR` | `./work` | Scratch space, cleaned as it goes |
 | `CLIPFORGE_POLL_SECONDS` | `5` | Wait after finishing a job |
 | `CLIPFORGE_IDLE_SECONDS` | `20` | Wait when there was nothing to do |
 
 `agent.env`, `footage/` and `work/` are all gitignored. The token is a
-credential: anything holding it can claim your jobs. Revoking it on the website
-stops it immediately.
+credential: anything holding it can claim your jobs. The file is written
+`0600` where the filesystem supports it, and revoking it on the website stops
+it immediately.
 
 ## Building the .exe
 
@@ -107,6 +110,13 @@ using it, and `--check` reports clearly when it is missing.
 The server half of the repo is excluded from the build, so SQLAlchemy, FastAPI,
 Stripe and the Google client are not along for the ride. The .exe is gitignored
 because it is a build artefact; the spec and this script are what is kept.
+
+## Where the .exe comes from
+
+Set `AGENT_DOWNLOAD_URL` on the server to wherever the build is published -- a
+GitHub release, normally -- and the app shows a download button next to the
+pairing instructions. Left unset, it shows the run-from-source route instead of
+a button that leads nowhere.
 
 ## Serving jobs from the server side
 

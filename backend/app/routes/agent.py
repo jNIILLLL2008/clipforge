@@ -33,10 +33,13 @@ from fastapi import (
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..auth import current_user
 from ..config import settings
 from ..db import get_db, session_scope
 from ..logging_setup import get_logger
-from ..models import Job, JobClip, JobStatus, User, utcnow
+from ..models import (
+    AgentPairing, Job, JobClip, JobStatus, User, utcnow,
+)
 
 log = get_logger("agent")
 router = APIRouter(prefix="/api/agent")
@@ -85,6 +88,181 @@ class Progress(BaseModel):
 class Failure(BaseModel):
     error: str = ""
     rejected: bool = False
+
+
+# --------------------------------------------------------------------------- #
+# Pairing
+#
+# The old flow showed the token on a web page and asked the subscriber to paste
+# it into a file called agent.env. That is a developer's install, and these are
+# not developers: it asked them to find a folder, create a file with no
+# extension, paste a 48-character secret without mangling it, and then open a
+# terminal. Every one of those is a place to give up.
+#
+# So the agent asks instead. It starts a pairing, opens the browser at a page
+# carrying the code, and polls. The person clicks one button on a site they are
+# already signed in to. The token goes from the server into the agent's own
+# config file and is never displayed, never copied and never typed.
+#
+# This is the device-authorisation shape a television uses, and it has the same
+# weak point: nothing stops someone sending a victim a link to *their* code and
+# borrowing the approval. The defences are that the approval page names the
+# machine asking, says plainly what to do if you did not start it, and expires
+# in fifteen minutes -- and that approving grants rendering for your own
+# account, not access to it.
+# --------------------------------------------------------------------------- #
+class PairStart(BaseModel):
+    label: str = ""
+
+
+class PairPoll(BaseModel):
+    device_secret: str = ""
+
+
+class PairApprove(BaseModel):
+    code: str = ""
+
+
+def _sweep(db: Session) -> None:
+    """Drop pairings nobody finished. Cheap, and keeps codes reusable."""
+    db.query(AgentPairing).filter(AgentPairing.expires_at <= utcnow()).delete(
+        synchronize_session=False)
+
+
+def _find(db: Session, code: str) -> Optional[AgentPairing]:
+    """Look up a code the way a person would type it: loosely."""
+    cleaned = (code or "").strip().upper().replace(" ", "")
+    if len(cleaned) == 8 and "-" not in cleaned:
+        cleaned = f"{cleaned[:4]}-{cleaned[4:]}"
+    if not cleaned:
+        return None
+    return db.query(AgentPairing).filter(AgentPairing.code == cleaned).first()
+
+
+@router.post("/pair/start")
+def pair_start(body: PairStart, db: Session = Depends(get_db)) -> dict:
+    """Begin pairing. Unauthenticated: the agent has no credentials yet.
+
+    Handing out a code costs nothing and grants nothing. Only the approval
+    step, which needs a signed-in session, attaches it to an account.
+    """
+    _sweep(db)
+
+    # A collision is a lost pairing rather than a security problem, but it is
+    # trivial to avoid, so avoid it.
+    for _ in range(6):
+        code = AgentPairing.new_code()
+        if not db.query(AgentPairing.id).filter(
+                AgentPairing.code == code).first():
+            break
+    else:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Could not allocate a pairing code. Try again.")
+
+    pairing = AgentPairing(
+        code=code,
+        device_secret=secrets.token_urlsafe(36),
+        label=(body.label or "")[:120],
+        expires_at=utcnow() + AgentPairing.LIFETIME,
+    )
+    db.add(pairing)
+    db.commit()
+
+    log.info("Pairing %s started for %r.", pairing.code, pairing.label)
+    return {
+        "code": pairing.code,
+        "device_secret": pairing.device_secret,
+        # Built from PUBLIC_URL because the agent has no browser context to
+        # borrow an origin from, unlike the settings page.
+        "verify_url": f"{settings.public_url.rstrip('/')}/pair?code={pairing.code}",
+        "interval": 3,
+        "expires_in": int(AgentPairing.LIFETIME.total_seconds()),
+    }
+
+
+@router.post("/pair/poll")
+def pair_poll(body: PairPoll, db: Session = Depends(get_db)) -> dict:
+    """Has anyone approved us yet? Answered only to the agent that asked.
+
+    The token is handed over exactly once and then wiped from the row, so a
+    database dump taken later holds nothing usable.
+    """
+    secret = (body.device_secret or "").strip()
+    pairing = (db.query(AgentPairing)
+                 .filter(AgentPairing.device_secret == secret).first()
+               if secret else None)
+    if pairing is None:
+        # Deleted by the sweep, or never existed. Same answer either way: the
+        # agent should start over rather than poll forever.
+        return {"status": "expired"}
+    if pairing.expired:
+        return {"status": "expired"}
+    if pairing.approved_at is None:
+        return {"status": "pending"}
+
+    token = pairing.token
+    if not token:
+        # Approved, and already collected. Somebody is polling with a copy.
+        return {"status": "expired"}
+
+    pairing.token = None
+    pairing.delivered_at = utcnow()
+    db.commit()
+
+    log.info("Pairing %s collected by the agent.", pairing.code)
+    return {
+        "status": "approved",
+        "token": token,
+        "server": settings.public_url,
+        "email": pairing.user.email if pairing.user else "",
+    }
+
+
+@router.get("/pair/lookup")
+def pair_lookup(code: str = "", user: User = Depends(current_user),
+                db: Session = Depends(get_db)) -> dict:
+    """What the approval page shows before anyone clicks anything."""
+    pairing = _find(db, code)
+    if pairing is None or pairing.expired:
+        return {"found": False}
+    return {
+        "found": True,
+        "code": pairing.code,
+        "label": pairing.label,
+        "approved": pairing.approved_at is not None,
+        "already_paired": bool(user.agent_token),
+    }
+
+
+@router.post("/pair/approve")
+def pair_approve(body: PairApprove, user: User = Depends(current_user),
+                 db: Session = Depends(get_db)) -> dict:
+    """Attach a waiting pairing to this account and mint its token.
+
+    Approving replaces any existing agent token, exactly as "Replace token"
+    does, because one account renders on one machine at a time and the
+    alternative is two agents fighting over the same queue.
+    """
+    pairing = _find(db, body.code)
+    if pairing is None or pairing.expired:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "That pairing code has expired. Start the agent "
+                            "again to get a new one.")
+    if pairing.approved_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "That code has already been used.")
+
+    user.agent_token = new_agent_token()
+    user.agent_last_seen = None
+
+    pairing.user_id = user.id
+    pairing.approved_at = utcnow()
+    pairing.token = user.agent_token
+    db.commit()
+
+    log.info("Pairing %s approved by %s for %r.",
+             pairing.code, user.email, pairing.label)
+    return {"ok": True, "label": pairing.label}
 
 
 # --------------------------------------------------------------------------- #

@@ -36,9 +36,9 @@
 
     <h1>One button. A finished Short on your channel.</h1>
     <p class="lede">
-      Set it up once. Press Publish and it cuts your footage to a
-      retention-tested format and uploads it. On a paid plan it does that every
-      day without you.
+      Set it up once. Press Publish and it finds the clips, cuts them to a
+      retention-tested format and uploads the result. On a paid plan it does
+      that every day without you.
     </p>
 
     <p id="gate-intent" class="gate-intent hidden" role="status"></p>
@@ -62,10 +62,28 @@
     </form>
 
     <ul class="points">
-      <li><b>Your own footage.</b> Nothing is sourced on your behalf, so there is nothing to claim.</li>
+      <li><b>It finds the clips.</b> Give it a show, a channel or a search, or upload your own footage.</li>
       <li><b>A retention gate.</b> Every video is scored before it renders. Weak ones are rejected and cost you nothing.</li>
       <li><b>Every setting in one screen.</b> The same options the desktop studio has.</li>
     </ul>
+  </div>
+</div>
+
+<!-- =========================== pair an agent =========================
+     Shown when a render agent sent the browser here. One button: the whole
+     point is that nobody has to handle a token. -->
+<div id="pair" class="pair hidden" role="dialog" aria-modal="true"
+     aria-labelledby="pair-title">
+  <div class="pair-card">
+    <p class="pair-eyebrow">Render agent</p>
+    <h1 id="pair-title">Pair this computer</h1>
+    <p class="pair-lead" id="pair-lead">Checking the code&hellip;</p>
+
+    <div class="rows" id="pair-rows"></div>
+
+    <div class="actions-row" id="pair-actions"></div>
+
+    <p class="note pair-warn" id="pair-warn"></p>
   </div>
 </div>
 

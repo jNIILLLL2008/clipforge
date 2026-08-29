@@ -308,3 +308,71 @@ class JobClip(Base):
             return ""
         who = self.author or "unknown"
         return f"{self.title or 'Clip'} by {who} ({self.licence}) - {self.source_url}"
+
+
+class AgentPairing(Base):
+    """One in-progress "pair this computer" request.
+
+    The agent cannot ask the person to paste a token, because the person is a
+    subscriber and not a developer. So it starts one of these instead: it gets
+    a short code, opens the browser at a page carrying that code, and polls
+    until someone signed in has approved it. The token then travels straight
+    into the agent's own config file and is never shown to anybody.
+
+    Two separate secrets, because they protect different things. ``code`` is
+    short and goes on screen, so it only ever identifies a request waiting for
+    approval -- knowing one is useless without a signed-in session to approve
+    it with. ``device_secret`` is long, never displayed, and is the only thing
+    that can collect the token afterwards, so a guessed code cannot steal it.
+    """
+
+    __tablename__ = "agent_pairings"
+
+    id = Column(Integer, primary_key=True)
+
+    # Shown to the person so they can confirm the agent in front of them is
+    # the one they are approving. Short, and therefore rate-limited and
+    # short-lived rather than relied on for secrecy.
+    code = Column(String(16), unique=True, index=True, nullable=False)
+    device_secret = Column(String(64), unique=True, index=True, nullable=False)
+
+    # The machine's own name, so the approval page can say which computer is
+    # asking rather than asking for blind trust.
+    label = Column(String(120), default="", nullable=False)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Held only between approval and the agent's next poll, then cleared. A
+    # pairing row that has done its job stops being worth stealing.
+    token = Column(Text, nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    user = relationship("User")
+
+    #: Long enough to find the browser window, short enough that an abandoned
+    #: code is not sitting there tomorrow.
+    LIFETIME = timedelta(minutes=15)
+
+    @staticmethod
+    def new_code() -> str:
+        """A code someone can read off one screen and recognise on another.
+
+        No I, L, O, U, 0 or 1: the first four are misread as each other and as
+        digits, and U is dropped so the alphabet cannot spell anything unkind.
+        Grouped in fours because that is how people read them back.
+        """
+        alphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
+        raw = "".join(secrets.choice(alphabet) for _ in range(8))
+        return f"{raw[:4]}-{raw[4:]}"
+
+    @property
+    def expired(self) -> bool:
+        deadline = self.expires_at
+        if deadline is not None and deadline.tzinfo is None:
+            # SQLite hands back naive datetimes; Postgres does not.
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        return deadline is None or deadline <= utcnow()

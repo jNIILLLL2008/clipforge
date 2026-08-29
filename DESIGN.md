@@ -243,6 +243,36 @@ script, an `iframe`, a `fetch` -- needs its directive updated in the same
 commit, or it will fail in production and work perfectly on a dev server
 whichever way you test it.
 
+## Pairing the render agent
+
+The agent never shows anybody a token. On first run it has none, so it POSTs
+`/api/agent/pair/start`, opens the browser at `/pair?code=XXXX-XXXX`, and polls
+`/api/agent/pair/poll` until somebody signed in approves it. The token goes
+from the server into `agent.env` without passing through a person.
+
+Two secrets per pairing, and the split is the point. `code` is eight characters
+and goes on screen, so it only identifies a request; knowing one is useless
+without a session to approve it with. `device_secret` is long, never displayed,
+and is the only thing that can collect the token -- so a guessed code cannot
+steal a pairing. The token is handed over exactly once and wiped from the row.
+
+The alphabet for the code omits I, L, O, U, 0 and 1, and the page renders it in
+tabular mono, because the person is reading it off one screen and matching it
+on another.
+
+The known weakness is the one every device flow has: someone talked into
+approving a code that is not theirs. The mitigations are all on `/pair` -- it
+names the machine that asked, it says what to do if you did not start an agent,
+it says when approving will replace an existing one, and codes expire in
+fifteen minutes. Approving grants rendering *for* the approver's account rather
+than access *to* it, which caps what a successful trick is worth.
+
+`/pair` serves `index.html` rather than a page of its own, because arriving
+signed out is the common case and the app already knows how to show a sign-in
+and continue afterwards. The first-run tour is suppressed while a pairing is
+open: an agent is polling on another screen, and eight steps of welcome is not
+what to put in front of that.
+
 ## Things the page must not disagree with
 
 Pricing is fetched from `/api/plans` on load and overwrites the printed values,

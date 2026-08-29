@@ -609,3 +609,89 @@ code {
   .screen { max-width: 1240px; }
   .settings-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* --------------------------------------------------------------- pair --- */
+/* The approval page. It covers everything, because it is the only thing the
+   person came here to do and the app behind it is not the task. */
+.pair {
+  position: fixed;
+  inset: 0;
+  /* Above the tour, which is also 60 and comes later in the document. Nothing
+     should ever paint over a pairing: an agent is waiting on the answer. */
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  /* Not fully opaque: the shared backdrop still drifts behind it, so this
+     reads as a panel over the product rather than a different website. */
+  background: rgba(11, 11, 13, .82);
+  backdrop-filter: blur(6px);
+}
+.pair.hidden { display: none; }
+
+.pair-card {
+  width: min(560px, 100%);
+  padding: 32px;
+  border-radius: var(--r-panel, 16px);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
+}
+.pair-eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ember-ink);
+}
+.pair-card h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+.pair-lead { margin: 10px 0 22px; color: var(--ink-muted); font-size: 15px; }
+.pair-card .rows { margin-bottom: 22px; }
+.pair-card .actions-row { margin: 0; }
+
+/* The code, big enough to check against the one in the agent's window without
+   leaning in. Tabular figures so O and 0 cannot be confused after all the
+   trouble taken to keep them out of the alphabet. */
+.pair-code {
+  font-family: var(--mono);
+  font-size: 20px;
+  letter-spacing: .1em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.pair-warn { margin-top: 18px; }
+.pair-warn:empty { display: none; }
+
+@media (max-width: 520px) {
+  .pair { padding: 0; place-items: stretch; }
+  .pair-card { border: 0; border-radius: 0; min-height: 100%; padding: 28px 20px; }
+}
+
+/* The three things to do before an agent can run, in the panel that is
+   telling someone to do them. Numbered because the order matters: ffmpeg
+   missing is only discovered after the first two. */
+.steps-list {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.steps-list li + li { margin-top: 6px; }
+.steps-list code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-sunk);
+  color: var(--ink);
+}
+
+/* An <a> that has to sit in a row of <button>s without looking like a link. */
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

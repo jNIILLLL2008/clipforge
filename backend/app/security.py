@@ -144,6 +144,18 @@ _LIMITS: Dict[str, Tuple[int, float]] = {
     # An agent polls this on a timer; the ceiling is only here to stop a
     # runaway loop hammering the database.
     "/api/agent/claim": (60, 60.0),
+    # Pairing. Starting one is unauthenticated, so it is the cheapest thing on
+    # the site to abuse: ten per address is more than any real person needs.
+    "/api/agent/pair/start": (10, 600.0),
+    # The poll runs every 3s for the 15 minutes a code lives, which is 300
+    # requests before the flow gives up on its own. The limit sits above that
+    # so a legitimate pairing never trips it, and well below a flood.
+    "/api/agent/pair/poll": (420, 900.0),
+    # These two take a code. Neither is worth brute-forcing -- approving
+    # somebody else's code lends them your renders rather than taking theirs --
+    # but lookup does report a machine name, so it stays tight.
+    "/api/agent/pair/lookup": (30, 300.0),
+    "/api/agent/pair/approve": (20, 600.0),
     "/api/uploads": (30, 300.0),
     "/api/studio/run": (20, 300.0),
     "/api": (240, 60.0),

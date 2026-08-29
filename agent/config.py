@@ -1,10 +1,11 @@
 """
 config.py -- What the render agent needs to know.
 
-Two things are mandatory: which server to work for, and the token proving which
-account it works for. Everything else has a sane default, because this is
-installed by a subscriber on their own machine and every extra question is one
-more thing they can get wrong.
+Nothing here is mandatory any more. The server has a default, and the token is
+written by the pairing flow rather than pasted in by hand -- see pairing.py for
+why. Everything else has a sane default too, because this is installed by a
+subscriber on their own machine and every extra question is one more thing they
+can get wrong.
 
 Read from agent.env beside this file, or from the environment, in that order.
 """
@@ -32,6 +33,12 @@ def _here() -> Path:
 
 HERE = _here()
 DEFAULT_FILE = HERE / "agent.env"
+
+#: The hosted service. Baked in so a subscriber who downloads the .exe and
+#: double-clicks it has nothing to configure at all; anyone running their own
+#: instance overrides it with CLIPFORGE_SERVER, in agent.env or the
+#: environment, exactly as before.
+DEFAULT_SERVER = "https://clipforge-production-8f29.up.railway.app"
 
 
 def _read_file(path: Path) -> Dict[str, str]:
@@ -68,19 +75,25 @@ class AgentConfig:
         return self.work_dir / "storage"
 
 
-def load(path: Path = DEFAULT_FILE) -> AgentConfig:
+def load(path: Path = DEFAULT_FILE, require_token: bool = True) -> AgentConfig:
+    """Read the configuration.
+
+    ``require_token`` is False during startup, when an empty token is not an
+    error but the signal to go and pair. It stays True everywhere that is
+    about to make a request, so nothing reaches the server holding "".
+    """
     values = {**_read_file(path), **os.environ}
 
     def get(key: str, default: str = "") -> str:
         return str(values.get(key, default)).strip()
 
-    server = get("CLIPFORGE_SERVER").rstrip("/")
+    server = get("CLIPFORGE_SERVER", DEFAULT_SERVER).rstrip("/")
     token = get("CLIPFORGE_AGENT_TOKEN")
-    if not server or not token:
+    if not token and require_token:
         raise SystemExit(
-            f"Set CLIPFORGE_SERVER and CLIPFORGE_AGENT_TOKEN in {path}.\n"
-            "Both come from Settings on the website: pair a render agent and "
-            "it shows you the token once."
+            f"This agent is not paired yet. Run it with no arguments and it "
+            f"will open your browser to pair, or set CLIPFORGE_AGENT_TOKEN in "
+            f"{path} by hand."
         )
 
     work = Path(get("CLIPFORGE_WORK_DIR", str(HERE / "work"))).expanduser()
@@ -97,6 +110,48 @@ def load(path: Path = DEFAULT_FILE) -> AgentConfig:
         poll_seconds=float(get("CLIPFORGE_POLL_SECONDS", "5") or 5),
         idle_seconds=float(get("CLIPFORGE_IDLE_SECONDS", "20") or 20),
     )
+
+
+def save_pairing(server: str, token: str, path: Path = DEFAULT_FILE) -> Path:
+    """Write what pairing produced, keeping anything already in the file.
+
+    Rewriting the file rather than appending means running the flow twice does
+    not leave two CLIPFORGE_AGENT_TOKEN lines, where the winner depends on
+    parse order. Existing settings the person chose are preserved, in the file
+    they put them in.
+    """
+    values = _read_file(path)
+    values["CLIPFORGE_SERVER"] = server.rstrip("/")
+    values["CLIPFORGE_AGENT_TOKEN"] = token
+
+    lines = [
+        "# Written by the agent when you paired it. Delete the token line and",
+        "# run the agent again to pair a different account.",
+        "",
+    ]
+    lines += [f"{key}={value}" for key, value in values.items()]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # The token is a credential sitting in a home directory. On anything with
+    # POSIX permissions, keep it to the owner; Windows ignores this and relies
+    # on the user profile's own ACL, which is the same guarantee.
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return path
+
+
+def clear_token(path: Path = DEFAULT_FILE) -> None:
+    """Forget the token so the next run pairs again."""
+    values = _read_file(path)
+    values.pop("CLIPFORGE_AGENT_TOKEN", None)
+    if not values:
+        path.unlink(missing_ok=True)
+        return
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in values.items()) + "\n",
+        encoding="utf-8")
 
 
 def apply_paths(config: AgentConfig) -> None:

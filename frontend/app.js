@@ -13,6 +13,8 @@ const state = {
   // A plan chosen on the landing page, carried through sign-in so checkout
   // resumes on the other side instead of dumping them on the dashboard.
   pendingPlan: new URLSearchParams(location.search).get('plan'),
+  // Set when a render agent sent the browser here to be approved.
+  pairCode: '',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -101,6 +103,9 @@ async function enterApp() {
   await Promise.all([loadStudio(), loadSettings()]);
   state.poll = setInterval(tick, 2500);
 
+  // Covers both ways in: already signed in at load, and signed in just now.
+  if (state.pairCode) showPair();
+
   // Resume a purchase started from the landing page before anything else.
   if (state.pendingPlan) {
     const plan = state.pendingPlan;
@@ -109,7 +114,10 @@ async function enterApp() {
     await startCheckout(plan);
     return;
   }
-  if (state.studio && !state.studio.onboarded) openTour();
+  // Not while a pairing is waiting. Someone who arrived from an agent has a
+  // program open on another screen polling for their answer, and eight steps
+  // of welcome is not the thing to put in front of them first.
+  if (state.studio && !state.studio.onboarded && !state.pairCode) openTour();
 }
 
 async function startCheckout(plan) {
@@ -552,10 +560,36 @@ async function loadAgent() {
     ${state_.paired ? `<div class="row"><span class="row-label">Last seen</span>
       <span class="row-value">${esc(seen)}</span></div>` : ''}`;
 
+  // No "pair" button here any more. Pairing starts at the agent, because the
+  // agent is the thing that needs the token and it is the only participant
+  // that can put the token somewhere useful without a person carrying it.
   $('agent-actions').innerHTML = state_.paired
-    ? `<button class="ghost" id="agent-new">Replace token</button>
-       <button class="ghost danger" id="agent-unpair">Unpair</button>`
-    : '<button class="ghost" id="agent-pair">Pair a render agent</button>';
+    ? '<button class="ghost danger" id="agent-unpair">Unpair</button>'
+    : '';
+
+  $('agent-token').classList.toggle('hidden', state_.paired);
+  if (!state_.paired) {
+    // Only offer the download when there is one. A button that goes nowhere
+    // is worse than the sentence explaining where to get it.
+    const step1 = state_.download_url
+      ? `<li>Download it and put it in a folder of its own.</li>`
+      : `<li>Get <code>ClipForgeAgent.exe</code>, or run the agent from
+           source, and put it in a folder of its own.</li>`;
+    $('agent-token').innerHTML = `
+      <p class="note"><b>Run the agent and it pairs itself.</b> Start it and it
+        opens this site to ask for one click. There is no token to copy and no
+        file to edit.</p>
+      <ol class="steps-list">
+        ${step1}
+        <li>Install ffmpeg if you have not:
+          <code>winget install Gyan.FFmpeg</code></li>
+        <li>Run it, and approve the code it shows you.</li>
+      </ol>
+      ${state_.download_url ? `<div class="actions-row">
+        <a class="ghost btn-link" id="agent-download"
+           href="${esc(state_.download_url)}">Download the agent</a>
+      </div>` : ''}`;
+  }
 
   // Why anyone would want this, in the one place they are deciding.
   $('agent-note').textContent = state_.local_rendering
@@ -564,56 +598,10 @@ async function loadAgent() {
     : 'Optional. Running the agent uses your own computer and connection, '
       + 'which is the only way to reach footage our servers are blocked from.';
 
-  const pair = async () => {
-    const { token } = await api('/api/agent/token', { method: 'POST' });
-    showToken(token);
-    loadAgent();
-  };
-  if ($('agent-pair')) $('agent-pair').onclick = pair;
-  if ($('agent-new')) $('agent-new').onclick = async () => {
-    if (!confirm('The agent you are running now will stop working until you '
-                 + 'give it the new token. Continue?')) return;
-    await pair();
-  };
   if ($('agent-unpair')) $('agent-unpair').onclick = async () => {
-    if (!confirm('Any agent using this token stops immediately. Continue?')) return;
+    if (!confirm('The agent on that machine stops immediately. Continue?')) return;
     await api('/api/agent/token', { method: 'DELETE' });
-    $('agent-token').classList.add('hidden');
     loadAgent();
-  };
-}
-
-function showToken(token) {
-  // Shown once and never again: the server stores it to check against, and
-  // cannot hand it back. Say so plainly rather than letting someone close the
-  // tab and lose it.
-  //
-  // The address comes from the browser, not from the server's PUBLIC_URL. That
-  // setting defaults to localhost:8000, so an instance where nobody set it
-  // would hand out an address that cannot possibly work. Whatever the person
-  // is looking at right now is by definition reachable from their machine.
-  const box = $('agent-token');
-  box.classList.remove('hidden');
-  box.innerHTML = `
-    <p class="note"><b>Copy this now.</b> It is shown once. Put it in
-      <code>agent.env</code> beside the agent, then run
-      <code>python -m agent.main --check</code>.</p>
-    <div class="row"><span class="row-label">CLIPFORGE_SERVER</span>
-      <span class="row-value">${esc(location.origin)}</span></div>
-    <div class="row"><span class="row-label">CLIPFORGE_AGENT_TOKEN</span>
-      <span class="row-value" id="agent-token-value">${esc(token)}</span></div>
-    <div class="actions-row">
-      <button class="ghost" id="agent-copy">Copy token</button>
-    </div>`;
-  $('agent-copy').onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(token);
-      $('agent-copy').textContent = 'Copied';
-    } catch {
-      // Clipboard access is refused often enough that failing silently would
-      // look like the button is broken.
-      $('agent-copy').textContent = 'Select it and copy manually';
-    }
   };
 }
 
@@ -684,6 +672,107 @@ async function uploadFiles(files) {
   $('upload-hint').textContent = 'Your own footage has nothing to claim.';
   toast(`Uploaded ${videos.length} clip(s).`);
   loadUploads();
+}
+
+/* ---------------------------------------------------------- pair ------ */
+/* An agent sent the browser here with a code. The person approves it, the
+   server mints a token, and the agent -- which is sitting in a poll loop --
+   collects it. Nobody handles the secret.
+
+   Arriving signed out is normal rather than exceptional: the agent has just
+   been installed, often on a machine whose browser has never seen this site.
+   So this waits for the sign-in to finish rather than assuming a session. */
+function pairCodeFromUrl() {
+  if (location.pathname.replace(/\/+$/, '') !== '/pair') return '';
+  return (new URLSearchParams(location.search).get('code') || '')
+    .trim().toUpperCase().slice(0, 9);
+}
+
+function closePair() {
+  $('pair').classList.add('hidden');
+  state.pairCode = '';
+  // The tour it displaced, now that the screen is free.
+  if (state.studio && !state.studio.onboarded) openTour();
+  // Leave the URL clean so a refresh, or a bookmark, does not reopen a code
+  // that has already been used.
+  history.replaceState({}, '', '/app');
+}
+
+async function showPair() {
+  const code = state.pairCode;
+  if (!code) return;
+  const panel = $('pair');
+  panel.classList.remove('hidden');
+
+  const lead = $('pair-lead');
+  const rows = $('pair-rows');
+  const actions = $('pair-actions');
+  const warn = $('pair-warn');
+  const done = (message) => {
+    lead.textContent = message;
+    rows.innerHTML = '';
+    warn.textContent = '';
+    actions.innerHTML = '<button class="primary" id="pair-close">Done</button>';
+    $('pair-close').onclick = closePair;
+  };
+
+  let info;
+  try {
+    info = await api(`/api/agent/pair/lookup?code=${encodeURIComponent(code)}`);
+  } catch {
+    done('Could not check that code. Try starting the agent again.');
+    return;
+  }
+
+  if (!info.found) {
+    done(`The code ${code} has expired or was never issued. Start the agent `
+         + 'again and it will show you a new one.');
+    return;
+  }
+  if (info.approved) {
+    done(`${code} has already been used. If your agent is still waiting, `
+         + 'start it again for a fresh code.');
+    return;
+  }
+
+  lead.textContent = 'A render agent is asking to work for your account. '
+    + 'It will claim your runs and render them on that machine.';
+  rows.innerHTML = `
+    <div class="row"><span class="row-label">Computer</span>
+      <span class="row-value">${esc(info.label || 'not reported')}</span></div>
+    <div class="row"><span class="row-label">Code</span>
+      <span class="row-value pair-code">${esc(info.code)}</span></div>`;
+
+  // The one real weakness of this flow is somebody being talked into
+  // approving a code that is not theirs, so say so where the decision is.
+  warn.textContent = info.already_paired
+    ? 'You already have an agent paired. Approving this replaces it, and the '
+      + 'old one stops immediately. If you did not just start an agent '
+      + 'yourself, close this page.'
+    : 'If you did not just start the agent on that computer, close this page '
+      + 'and do not approve it.';
+
+  actions.innerHTML = `
+    <button class="primary" id="pair-yes">Pair it</button>
+    <button class="ghost" id="pair-no">Not now</button>`;
+  $('pair-no').onclick = closePair;
+  $('pair-yes').onclick = async () => {
+    $('pair-yes').disabled = true;
+    $('pair-yes').textContent = 'Pairing...';
+    try {
+      await api('/api/agent/pair/approve', {
+        method: 'POST', body: { code: info.code },
+      });
+    } catch (err) {
+      lead.textContent = err.message || 'That did not work. Try again.';
+      $('pair-yes').disabled = false;
+      $('pair-yes').textContent = 'Pair it';
+      return;
+    }
+    done('Paired. The agent picks this up within a few seconds and starts '
+         + 'working -- you can close this page.');
+    loadAgent();
+  };
 }
 
 /* ------------------------------------------------------- preview ------ */
@@ -1315,6 +1404,15 @@ function startGateDots() {
 /* ------------------------------------------------------------- boot ---- */
 (async function boot() {
   startGateDots();
+  state.pairCode = pairCodeFromUrl();
+  if (state.pairCode) {
+    // Shown on the sign-in screen, for the many people who land here logged
+    // out and would otherwise wonder what the form has to do with the agent.
+    $('gate-intent').textContent =
+      'Sign in to pair the render agent on your computer.';
+    $('gate-intent').classList.remove('hidden');
+  }
+
   try {
     state.user = await api('/api/me');
     await enterApp();

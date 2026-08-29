@@ -85,7 +85,7 @@ def health() -> JSONResponse:
 
 
 #: Paths whose content changes during development and must never be cached.
-_PAGE_PATHS = {"/", "/app"}
+_PAGE_PATHS = {"/", "/app", "/pair"}
 
 
 #: Assets that change on every deploy and whose filenames are not fingerprinted.
@@ -179,6 +179,7 @@ if FRONTEND.exists():
             # Nothing behind the sign-in is useful to a crawler, and the API
             # returns JSON that would only pollute an index.
             "Disallow: /app\n"
+            "Disallow: /pair\n"
             "Disallow: /api/\n"
             "\n"
             f"Sitemap: {settings.public_url}/sitemap.xml\n"
@@ -247,4 +248,15 @@ if FRONTEND.exists():
     @app.get("/app")
     def studio_app() -> FileResponse:
         """The product itself, which shows its own sign-in when logged out."""
+        return FileResponse(FRONTEND / "index.html")
+
+    @app.get("/pair")
+    def pair_page() -> FileResponse:
+        """Where a render agent sends the browser to be approved.
+
+        The same file as /app: it already knows how to show a sign-in when
+        logged out, which matters here because arriving signed out is the
+        common case. Somebody who has just installed the agent is, more often
+        than not, on a machine where they have not signed in yet.
+        """
         return FileResponse(FRONTEND / "index.html")
