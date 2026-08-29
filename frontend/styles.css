@@ -29,8 +29,8 @@
 
   /* One radius system, shared with the marketing page: controls 4, panels 8.
      Pills and circles keep 999px / 50%. */
-  --radius: 8px;
-  --radius-ctrl: 4px;
+  --radius: 16px;
+  --radius-ctrl: 12px;
 
   --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -132,7 +132,34 @@ button { font: inherit; cursor: pointer; border-radius: var(--radius-ctrl); tran
 .tab.active { background: var(--accent); color: var(--accent-text); }
 
 /* --------------------------------------------------------- shell ------ */
-.app { padding-bottom: 78px; }
+/* The same raked glow the marketing page opens with, so signing in does not
+   feel like arriving somewhere else. Fixed and behind everything, and it does
+   not scroll away because the app has no hero to anchor it to. */
+.app { padding-bottom: 78px; position: relative; isolation: isolate; }
+.app::before {
+  content: "";
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 34rem;
+  height: 70rem;
+  z-index: -1;
+  pointer-events: none;
+  transform: rotate(-45deg);
+  transform-origin: top left;
+  translate: -16% -40%;
+  border-radius: 999px;
+  background: radial-gradient(68% 68% at 55% 31%,
+              rgba(226, 96, 58, .10) 0, rgba(226, 96, 58, .03) 50%,
+              transparent 78%);
+}
+@media (prefers-color-scheme: light) {
+  .app::before {
+    background: radial-gradient(68% 68% at 55% 31%,
+                rgba(226, 96, 58, .09) 0, rgba(226, 96, 58, .03) 50%,
+                transparent 78%);
+  }
+}
 .screen { max-width: 620px; margin: 0 auto; padding: 1.2rem 1rem 2rem; }
 .screen-title { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; margin-bottom: 1rem; }
 
@@ -275,8 +302,10 @@ code {
 /* -------------------------------------------------------- tabbar ------ */
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
-  display: flex; background: rgba(19, 19, 22, .96);
-  backdrop-filter: blur(12px); border-top: 1px solid var(--border);
+  display: flex; background: rgba(19, 19, 22, .78);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tabitem {

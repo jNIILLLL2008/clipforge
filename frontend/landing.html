@@ -17,8 +17,10 @@
 
 <a class="skip-link" href="#main">Skip to content</a>
 
+<span id="top-sentinel" aria-hidden="true"></span>
+
 <header class="nav">
-  <div class="wrap">
+  <div class="nav-shell">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
     <nav class="nav-links" aria-label="Sections">
       <a href="#how">How it works</a>
@@ -36,27 +38,51 @@
 <main id="main">
 
   <!-- ============================== hero ==============================
-       Asymmetric split. Three text elements only: headline, subtext, CTAs.
-       The visual is real vertical footage frames, which is the thing the
-       product actually produces. -->
+       Centred, with the glow and the framed panel from the reference design.
+       The badge, headline, subtext and buttons rise and unblur in sequence.
+       What sits in the frame is three real renders rather than a stock app
+       screenshot, and the strip below names the one service this actually
+       talks to rather than a wall of logos belonging to strangers. -->
   <section class="hero">
-    <div class="wrap">
-      <div class="hero-grid">
-        <div class="hero-copy reveal">
-          <h1 class="display-xl">Short-form video, down to one button.</h1>
-          <p class="lede">
-            Set up your niche once. ClipForge cuts your footage, scores it
-            for retention, and uploads it to your channel.
-          </p>
-          <div class="hero-cta">
-            <a class="btn btn-primary" href="/app">Start free</a>
-            <a class="btn btn-secondary" href="#how">See how it works</a>
-          </div>
-        </div>
+    <div class="glow" aria-hidden="true">
+      <span class="glow-a"></span><span class="glow-b"></span>
+    </div>
 
-        <!-- Real renders from published runs. Each one shows the format the
-             pipeline produces: banner, numbered list, burned-in captions. -->
-        <div class="stills reveal reveal-d1">
+    <div class="wrap hero-inner">
+      <a class="badge rise" href="#retention">
+        <span class="badge-text">It refuses to make a bad video</span>
+        <span class="badge-rule" aria-hidden="true"></span>
+        <span class="badge-arrow" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 8h11M9.5 4l4 4-4 4"/>
+          </svg>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 8h11M9.5 4l4 4-4 4"/>
+          </svg>
+        </span>
+      </a>
+
+      <h1 class="display-xl rise rise-1">Short-form video, down to one button.</h1>
+
+      <p class="lede rise rise-2">
+        Set up your niche once. ClipForge cuts your footage, scores it for
+        retention, and uploads it to your channel.
+      </p>
+
+      <div class="hero-cta rise rise-3">
+        <span class="btn-shell"><a class="btn btn-primary" href="/app">Start free</a></span>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+    </div>
+
+    <!-- Real renders from published runs, framed the way the reference frames
+         its product shot. -->
+    <div class="panel-wrap rise rise-4">
+      <div class="panel-fade" aria-hidden="true"></div>
+      <div class="panel">
+        <div class="stills">
           <div class="still">
             <img src="/static/img/hero-frame-1.jpg"
                  width="265" height="480"
@@ -402,6 +428,22 @@
 (function () {
   /* Reveal on entry. IntersectionObserver rather than a scroll listener, and
      it degrades to plain visible content if either the API or JS is missing. */
+  /* The nav contracts into a glass pill once the top of the page has scrolled
+     away. Watching a one-pixel sentinel lets the browser report the crossing
+     itself, which is cheaper and smoother than recalculating on every scroll
+     event, and it needs no listener at all. */
+  var nav = document.querySelector('.nav');
+  var sentinel = document.getElementById('top-sentinel');
+  if (nav && sentinel && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      nav.classList.toggle('stuck', !entries[0].isIntersecting);
+      /* No rootMargin: the sentinel is 64px tall, so it stops intersecting
+         once that much of the page has scrolled away. A negative top margin
+         here would push the observed area past a sentinel pinned at y=0, and
+         the bar would come up already contracted. */
+    }).observe(sentinel);
+  }
+
   var nodes = document.querySelectorAll('.reveal');
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

@@ -34,9 +34,11 @@
   --ember-edge: rgba(226, 96, 58, .28);
   --on-ember:   #12100e;
 
-  --r-chip: 2px;
-  --r-ctrl: 4px;
-  --r-panel: 8px;
+  /* Softer than before, matching the reference: pills for chips, 12px for
+     controls, 16px for panels. */
+  --r-chip: 999px;
+  --r-ctrl: 12px;
+  --r-panel: 16px;
 
   --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
@@ -46,6 +48,9 @@
   --section: clamp(72px, 9vw, 128px);
 
   --ease: cubic-bezier(.16, 1, .3, 1);
+  /* The spring in the reference reads as a slow arrival with a slight
+     overshoot. This is the closest a plain transition gets to it. */
+  --ease-rise: cubic-bezier(.2, .8, .2, 1);
 }
 
 @media (prefers-color-scheme: light) {
@@ -191,22 +196,55 @@ section + section { padding-top: 0; }
 .btn-sm { font-size: 14px; padding: 10px 16px; }
 
 /* ----------------------------------------------------------------- nav -- */
+/* A floating bar that contracts into a glass pill once the page has moved.
+   The state comes from an IntersectionObserver on a sentinel at the top of the
+   document rather than a scroll listener, so the browser reports the crossing
+   itself instead of the page recalculating on every frame of every scroll. */
 .nav {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0 0 auto;
   z-index: 50;
-  height: 68px;
+  padding: 8px var(--gutter) 0;
+  pointer-events: none;
+}
+.nav-shell {
   display: flex;
   align-items: center;
-  background: color-mix(in srgb, var(--canvas) 82%, transparent);
-  backdrop-filter: saturate(150%) blur(12px);
-  -webkit-backdrop-filter: saturate(150%) blur(12px);
-  border-bottom: 1px solid var(--hairline);
+  gap: 32px;
+  width: 100%;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 12px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--r-panel);
+  pointer-events: auto;
+  transition: max-width .35s var(--ease), background .35s var(--ease),
+              border-color .35s var(--ease), padding .35s var(--ease),
+              box-shadow .35s var(--ease);
 }
-@supports not (background: color-mix(in srgb, red 50%, transparent)) {
-  .nav { background: var(--canvas); }
+.nav.stuck .nav-shell {
+  max-width: 940px;
+  padding: 10px 14px 10px 18px;
+  background: color-mix(in srgb, var(--canvas) 72%, transparent);
+  border-color: var(--hairline);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .28);
 }
-.nav .wrap { display: flex; align-items: center; gap: 32px; }
+@supports not (backdrop-filter: blur(1px)) {
+  .nav.stuck .nav-shell { background: var(--canvas); }
+}
+
+/* Tall enough that the bar only contracts after a real scroll, rather than
+   flickering on the first pixel. */
+#top-sentinel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 64px;
+  width: 1px;
+  pointer-events: none;
+}
 
 .brand {
   display: inline-flex;
@@ -230,30 +268,161 @@ section + section { padding-top: 0; }
 .nav-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
 /* ---------------------------------------------------------------- hero -- */
-.hero { padding-top: clamp(48px, 6vw, 88px); padding-bottom: clamp(56px, 7vw, 96px); }
-
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1.12fr .88fr;
-  gap: clamp(32px, 5vw, 72px);
-  align-items: center;
+.hero {
+  position: relative;
+  isolation: isolate;
+  padding: clamp(110px, 13vw, 168px) 0 0;
+  text-align: center;
+  overflow: hidden;
 }
-/* No ch-based clamp on this wrapper: ch resolves against the wrapper's own
-   16px font, not the display size, which crushed the column and pushed the
-   headline to four lines. The grid column governs the width instead, and the
-   lede carries its own measure. */
-.hero-copy h1 { text-wrap: balance; }
 
-.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+/* Two long soft ellipses raked across the top left, plus a vignette that
+   lifts the canvas back at the bottom so the glow has somewhere to end. */
+.glow {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+}
+.glow span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 999px;
+  transform: rotate(-45deg);
+  transform-origin: top left;
+}
+.glow-a {
+  width: 34rem;
+  height: 70rem;
+  translate: -12% -34%;
+  background: radial-gradient(68% 68% at 55% 31%,
+              rgba(226, 96, 58, .16) 0, rgba(226, 96, 58, .05) 50%,
+              transparent 78%);
+}
+.glow-b {
+  width: 14rem;
+  height: 70rem;
+  translate: 16% -46%;
+  background: radial-gradient(50% 50% at 50% 50%,
+              rgba(255, 255, 255, .05) 0, rgba(255, 255, 255, .02) 78%,
+              transparent 100%);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(125% 125% at 50% 100%,
+              transparent 0%, var(--canvas) 72%);
+}
+@media (prefers-color-scheme: light) {
+  .glow-a {
+    background: radial-gradient(68% 68% at 55% 31%,
+                rgba(226, 96, 58, .13) 0, rgba(226, 96, 58, .04) 50%,
+                transparent 78%);
+  }
+  .glow-b {
+    background: radial-gradient(50% 50% at 50% 50%,
+                rgba(0, 0, 0, .04) 0, rgba(0, 0, 0, .015) 78%,
+                transparent 100%);
+  }
+}
 
-/* Real footage stills, staggered. This is what the product actually handles,
-   vertical frames. The offsets carry the asymmetry instead of a decorative
-   shape, and they replace the div-built fake screenshot that was here. */
+.hero-inner { display: flex; flex-direction: column; align-items: center; }
+.hero .display-xl { margin-top: 26px; max-width: 18ch; text-wrap: balance; }
+.hero .lede { margin-top: 22px; max-width: 52ch; }
+
+/* --- the badge -------------------------------------------------------- */
+/* Two arrows in a track twice the visible width. On hover the track slides one
+   arrow-width, so the glyph appears to leave and a fresh one take its place. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 5px 5px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  transition: background .3s var(--ease), border-color .3s var(--ease);
+}
+.badge:hover { background: var(--surface-2); border-color: var(--hairline-firm); }
+.badge-text { font-size: 13.5px; color: var(--ink); }
+.badge-rule { width: 1px; height: 16px; background: var(--hairline-firm); }
+.badge-arrow {
+  display: block;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--canvas);
+  color: var(--ember-ink);
+  transition: background .3s var(--ease);
+}
+.badge:hover .badge-arrow { background: var(--surface); }
+.badge-arrow svg {
+  width: 24px;
+  height: 24px;
+  padding: 6px;
+  float: left;
+  transition: transform .5s var(--ease);
+}
+.badge:hover .badge-arrow svg { transform: translateX(-24px); }
+
+/* --- the buttons ------------------------------------------------------ */
+/* The primary sits in a faint shell, which is what gives the reference its
+   inset look without a second border on the button itself. */
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 34px;
+}
+.btn-shell {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--r-ctrl) + 3px);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.btn-ghost { background: transparent; color: var(--ink); }
+.btn-ghost:hover { background: var(--surface); }
+
+/* --- the framed panel ------------------------------------------------- */
+.panel-wrap {
+  position: relative;
+  margin: clamp(40px, 6vw, 76px) auto 0;
+  padding: 0 var(--gutter);
+  max-width: calc(var(--max) - 40px);
+}
+/* Fades the foot of the frame back into the page rather than letting a hard
+   edge cut across the glow. */
+.panel-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent 55%, var(--canvas) 100%);
+}
+.panel {
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--r-panel) + 6px);
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+}
+
 .stills {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  align-items: start;
+  gap: 14px;
+  max-width: 620px;
+  margin: 0 auto;
 }
 .still {
   position: relative;
@@ -264,21 +433,19 @@ section + section { padding-top: 0; }
   background: var(--surface-sunk);
 }
 .still img { width: 100%; height: 100%; object-fit: cover; }
-.still:nth-child(1) { transform: translateY(26px); }
-.still:nth-child(3) { transform: translateY(-22px); }
 
 /* The score sits on the middle still because the score is the product, not
    because the image needed a label on it. */
 .still-score {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border-radius: var(--r-ctrl);
   background: rgba(8, 8, 10, .82);
   backdrop-filter: blur(8px);
@@ -286,7 +453,7 @@ section + section { padding-top: 0; }
   border: 1px solid rgba(255, 255, 255, .12);
   color: #f4f2ef;
 }
-.still-score b { font-family: var(--mono); font-size: 17px; font-weight: 500; }
+.still-score b { font-family: var(--mono); font-size: 16px; font-weight: 500; }
 .still-score span {
   font-family: var(--mono);
   font-size: 10px;
@@ -592,23 +759,48 @@ footer .fine { color: var(--ink-subtle); font-size: 13.5px; max-width: 40ch; mar
 .foot-cols a:hover { color: var(--ink); }
 
 /* -------------------------------------------------------------- motion -- */
-/* MOTION_INTENSITY 5. Entry reveal as sections arrive, which carries sequence
-   and hierarchy, plus feedback on hover and press. Nothing loops and nothing
-   hijacks the scroll. Gated behind .js so the page is fully readable when the
-   script never runs. Driven by IntersectionObserver, never a scroll listener. */
+/* MOTION_INTENSITY 5. Two effects, both entrances.
+
+   .rise is the hero sequence: lift and unblur, each element a beat behind the
+   one above it, so the eye is walked down the page in reading order. The blur
+   is what the reference uses instead of a longer fade, and it is why the text
+   appears to resolve rather than simply appear.
+
+   .reveal is the same idea for everything below the fold, fired as sections
+   arrive. Both are gated behind .js so the page is fully readable when the
+   script never runs, and both use IntersectionObserver rather than a scroll
+   listener. Nothing loops and nothing hijacks the scroll. */
+.js .rise {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(14px);
+  animation: rise 1.15s var(--ease-rise) forwards;
+}
+.js .rise-1 { animation-delay: .10s; }
+.js .rise-2 { animation-delay: .20s; }
+.js .rise-3 { animation-delay: .30s; }
+.js .rise-4 { animation-delay: .42s; }
+
+@keyframes rise {
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
+
 .js .reveal {
   opacity: 0;
+  filter: blur(8px);
   transform: translateY(18px);
-  transition: opacity .65s var(--ease), transform .65s var(--ease);
+  transition: opacity .7s var(--ease-rise), transform .7s var(--ease-rise),
+              filter .7s var(--ease-rise);
 }
-.js .reveal.in { opacity: 1; transform: none; }
+.js .reveal.in { opacity: 1; filter: blur(0); transform: none; }
 .js .reveal-d1 { transition-delay: .07s; }
 .js .reveal-d2 { transition-delay: .14s; }
 .js .reveal-d3 { transition-delay: .21s; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .js .reveal { opacity: 1; transform: none; transition: none; }
+  .js .reveal { opacity: 1; filter: none; transform: none; transition: none; }
+  .js .rise { opacity: 1; filter: none; transform: none; animation: none; }
   *, *::before, *::after {
     animation-duration: .001ms !important;
     animation-iteration-count: 1 !important;
@@ -618,10 +810,8 @@ footer .fine { color: var(--ink-subtle); font-size: 13.5px; max-width: 40ch; mar
 
 /* ---------------------------------------------------------- responsive -- */
 @media (max-width: 1000px) {
-  .hero-grid { grid-template-columns: 1fr; gap: 44px; }
-  .hero-copy { max-width: 100%; }
   .stills { max-width: 460px; }
-  .still:nth-child(1), .still:nth-child(3) { transform: none; }
+  .panel-wrap { max-width: 100%; }
 
   .gate-grid { grid-template-columns: 1fr; }
 
@@ -638,12 +828,17 @@ footer .fine { color: var(--ink-subtle); font-size: 13.5px; max-width: 40ch; mar
 @media (max-width: 760px) {
   :root { --gutter: 18px; }
 
-  .nav { height: 60px; }
   .nav-links { display: none; }
   .nav-actions { margin-left: auto; }
+  .nav-shell { padding: 10px 14px; gap: 12px; }
+  .nav.stuck .nav-shell { max-width: 100%; }
 
-  .hero-cta { gap: 10px; }
-  .hero-cta .btn { flex: 1 1 auto; }
+  .hero { padding-top: 96px; }
+  .hero-cta { width: 100%; gap: 10px; }
+  .btn-shell, .hero-cta .btn { width: 100%; }
+  .badge-text { font-size: 12.5px; }
+  .stills { gap: 8px; }
+  .panel { padding: 8px; }
 
   .sources .wrap { gap: 18px; }
   .sources-logos { margin-left: 0; gap: 28px; }

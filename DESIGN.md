@@ -17,7 +17,7 @@ name: ClipForge-marketing
 description: "An instrument, not a brochure. The product's whole story is that it refuses: it refuses unlicensed footage per clip, and it refuses to render a video that scores below the retention bar. The page is built like a measuring device. Near-black neutral canvas, bone ink, one ember accent reserved for the parts that are actually running, and every number set in mono. Dark is the brand default and light is a first-class alternative driven by the same tokens."
 
 dials:
-  design_variance: 7      # asymmetric grids, no centred hero
+  design_variance: 6      # centred hero, asymmetric grids below it
   motion_intensity: 5     # entry reveal and hover feedback, nothing looping
   visual_density: 4       # standard marketing spacing
 
@@ -60,10 +60,11 @@ typography:
   body: "16px / 1.55"
 
 radius:
-  # One documented system. Do not introduce a fourth value.
-  chip: 2px      # tags, verdict pills
-  control: 4px   # buttons, inputs
-  panel: 8px     # cards, stills, the CTA band
+  # One documented system, softened to match the reference design. Do not
+  # introduce a fourth value.
+  chip: 999px    # tags, verdict pills, the hero badge
+  control: 12px  # buttons, inputs
+  panel: 16px    # cards, stills, the framed hero panel, the CTA band
 ---
 
 ## The rules this page is held to
@@ -91,25 +92,57 @@ section. Every other section leads with its headline. Do not add an eyebrow to
 a section just because it looks bare.
 
 **No fake product UI.** The hero previously contained a Studio screenshot built
-out of `<div>` rectangles. It is gone and it does not come back. If the page
-needs to show the product, use a real screenshot. Until one exists, the hero
-carries real vertical footage frames, which is what the product actually makes.
+out of `<div>` rectangles. It is gone and it does not come back. What sits in
+the framed panel is three real renders, which is what the product actually
+makes. The frame is the reference design's; the contents are not a stock app
+screenshot and must not become one.
+
+**No borrowed customers.** The reference this design comes from puts a wall of
+Nvidia, GitHub, Nike and OpenAI logos under the hero. Those are not ClipForge
+customers and the strip below the hero names the one service the product
+actually talks to instead. If that ever becomes a logo wall, it has to be
+companies who really use this.
 
 **No step numbers and no section numbering.** "01 / 02 / 03" above the three
 setup steps was removed. The verb is the label.
 
-**Layout families do not repeat.** Across the page: asymmetric hero split,
-hairline-separated step columns, a numeric-focal gate split, a three-cell bento,
-a pricing card grid, an accordion, a full-width band. If you add a section, it
-gets a family that is not already in that list.
+**Layout families do not repeat.** Across the page: centred hero over a framed
+panel, hairline-separated step columns, a numeric-focal gate split, a three-cell
+bento, a pricing card grid, an accordion, a full-width band. If you add a
+section, it gets a family that is not already in that list. The hero is the one
+centred thing on the page; everything below it stays asymmetric, which is what
+keeps the centring from reading as a default rather than a choice.
+
+## The hero, and where it comes from
+
+The hero follows a reference design: centred, opening on a pill badge, then the
+headline, then a framed product panel, over a raked radial glow. Three details
+are load-bearing.
+
+**The glow** is two long ellipses rotated 45 degrees out of the top left, with
+a `radial-gradient(125% 125% at 50% 100%)` vignette over the top pulling the
+canvas back up from the bottom. Without the vignette the glow has no edge to
+end on and the section just looks unevenly lit.
+
+**The badge arrow** is two copies of the same glyph in a track twice the
+visible width, with `overflow: hidden` on the parent. Hover slides the track
+one arrow-width, so the first appears to leave and a second to follow it in. It
+is one transform, not an animation loop.
+
+**The nav** contracts into a glass pill once the page has moved, driven by an
+IntersectionObserver on a 64px sentinel at the top of the document. Not a
+scroll listener. The sentinel has height on purpose: pinned at `y=0` with no
+height it would flicker on the first pixel of scroll, and a negative
+`rootMargin` on the observer pushes the observed area past the sentinel
+entirely, so the bar comes up already contracted.
 
 ## Layout notes worth keeping
 
-`.hero-copy` deliberately has no `max-width` in `ch`. A `ch` unit resolves
-against the element's own font size, and on a 16px wrapper `34ch` collapsed the
-column to roughly 272px, which pushed the 56px headline to four lines. The grid
-column governs the hero width; the lede carries its own `46ch` measure at its
-own font size.
+Measure limits in the hero go on the elements that set the type size, never on
+a wrapper. A `ch` unit resolves against the element's own font size, so `34ch`
+on a 16px wrapper once collapsed the column to roughly 272px and pushed the
+56px headline to four lines. `.hero .display-xl` carries `18ch` at its own size
+and `.lede` carries `52ch` at its own.
 
 The bento has exactly three cells for three pieces of content: a `.cell-wide`
 (2 columns) and a normal cell fill the first row, and a `.cell-full`
@@ -120,8 +153,16 @@ and never leave an empty tile to balance a row.
 
 ## Motion
 
-`MOTION_INTENSITY 5`. One effect: a translate-and-fade reveal as elements enter
-the viewport, driven by `IntersectionObserver`. Never a scroll listener.
+`MOTION_INTENSITY 5`. Two effects, both entrances, both lift-and-unblur.
+
+`.rise` is the hero sequence: a CSS animation with staggered delays, so the
+badge, headline, subtext, buttons and panel arrive in reading order. It is an
+animation rather than a transition because it fires on load with nothing to
+observe. The blur is what makes text appear to resolve rather than simply fade
+in, and it is the single thing that most carries the reference's feel.
+
+`.reveal` is the same idea below the fold, fired as sections arrive, driven by
+`IntersectionObserver`. Never a scroll listener.
 
 The reveal starts at `opacity: 0`, so anything that stops the observer from
 delivering would leave the page blank rather than merely unanimated. There is a
@@ -187,7 +228,9 @@ the `?plan=` query parameters are load-bearing. Do not rename them.
 
 `frontend/styles.css` reads its palette, type and radius scale from the same
 values documented above, so the Studio and the marketing page look like one
-product. Its structure was left alone; only the theme was remapped.
+product. Its structure was left alone; only the theme was remapped. It also
+carries the same raked glow behind the app shell and the same saturated glass
+on the tab bar, so signing in does not feel like arriving somewhere else.
 
 The one deliberate divergence is semantic colour. The marketing page has a
 single accent and no state colours at all. A product UI has to signal success
