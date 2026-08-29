@@ -16,6 +16,7 @@ from typing import Callable, Dict, List, Optional
 
 from ..config import settings
 from ..logging_setup import get_logger
+from .labels import clean as _clean_label, for_clips as build_labels
 from .. import sources as source_registry
 from ..sources.base import SourceClip
 from . import selection
@@ -130,6 +131,11 @@ def _download_all(pool: List[SourceClip], workspace: Path, wanted: int,
     return ready
 
 
+def label_for(clip, fmt) -> str:
+    """One clip's label, for the places that have no batch to compare with."""
+    return _clean_label(getattr(clip, "title", "") or "", fmt, limit=60) or "Clip"
+
+
 def _plan_segments(clips: List[SourceClip], fmt: Dict) -> List[Segment]:
     """Give every clip an even share of the target, inside the niche's bounds."""
     target = float(fmt.get("target_seconds", 105))
@@ -165,7 +171,7 @@ def _plan_segments(clips: List[SourceClip], fmt: Dict) -> List[Segment]:
             path=clip.local_path,
             start=round(start, 3),
             duration=round(length, 3),
-            label=clip.title[:60],
+            label=label_for(clip, fmt),
         ))
         remaining -= length
     return segments
@@ -255,12 +261,16 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
         raise RenderError("The clips were too short to build a video from.")
     clips = clips[:len(segments)]
 
-    labels = [c.title[:34] for c in clips]
+    # Not clip.title[:34]. A YouTube title carries the channel name after a
+    # separator, the series in brackets and emoji as bait, and cutting it at
+    # 34 characters leaves the viewer reading "The Spectacular Spider-Man
+    # (2008-2". See labels.py.
+    labels = build_labels(clips, fmt)
     if fmt.get("countdown"):
         # Countdown shows the payoff last, so reverse into the timeline.
         clips = list(reversed(clips))
         segments = list(reversed(segments))
-        labels = [c.title[:34] for c in clips]
+        labels = build_labels(clips, fmt)
 
     plan = _build_overlay_plan(clips, segments, fmt, labels)
 

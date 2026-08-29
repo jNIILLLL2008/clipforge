@@ -28,7 +28,15 @@ FAILURES: list = []
 def check(label: str, condition: bool, detail: object = "") -> None:
     mark = "ok  " if condition else "FAIL"
     suffix = f" -- {detail}" if detail != "" else ""
-    print(f"  [{mark}] {label}{suffix}")
+    line = f"  [{mark}] {label}{suffix}"
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        # A Windows console is cp1252 by default, and one music note in a
+        # caption test used to end the entire run with a traceback. The
+        # result of the check is what matters, not the glyph.
+        encoding = sys.stdout.encoding or "ascii"
+        print(line.encode(encoding, "replace").decode(encoding))
     if not condition:
         FAILURES.append(label)
 
@@ -139,6 +147,80 @@ check("min above max corrected",
       sanitise({"min_clip_seconds": 90, "max_clip_seconds": 10})["min_clip_seconds"] == 10)
 
 # --------------------------------------------------------------------------- #
+section("the numbered list")
+# The list was clip.title[:34]: the uploader's title, hard-truncated. A real
+# render read "The Spectacular Spider-Man (2008-2" and "Origin 2 | Marvel's
+# Spider-Man | D". Every case below is from that video.
+from backend.app.render import labels as _labels  # noqa: E402
+
+
+class _T:
+    def __init__(self, title):
+        self.title = title
+
+
+_REAL = [
+    "Real power loading \U0001F512 \u00b7The Spectacular Spider-Man",
+    "Flash Confronts Peter \U0001F621| The Spectacular Spider-Man",
+    "The Spectacular Spider-Man (2008-2009) - Peter meets Gwen",
+    "How Did I Ever Live Without You? | The Spectacular Spider-Man",
+    "Origin 2 | Marvel's Spider-Man | Disney XD",
+]
+_WANT = [
+    "Real power loading",
+    "Flash Confronts Peter",
+    "Peter meets Gwen",
+    "How Did I Ever Live Without You?",
+    "Origin 2",
+]
+_got = _labels.for_clips([_T(t) for t in _REAL],
+                         {"show_terms": ["spectacular spider-man"]})
+for _g, _w in zip(_got, _WANT):
+    check(f"label: {_w}", _g == _w, _g)
+
+# The channel name is identifiable without any configuration at all, because
+# it is the segment that appears on every clip and a moment never does.
+_blind = _labels.for_clips([_T(t) for t in _REAL], {})
+check("boilerplate is found with no show_terms set", _blind == _WANT, _blind)
+
+check("emoji are gone",
+      not any(ord(c) > 0x2500 for label in _got for c in label), _got)
+check("no dangling separator",
+      not any(label.rstrip().endswith(("|", "-", "\u00b7", ":")) for label in _got))
+check("nothing is cut mid-word",
+      all(label == label.strip() and "  " not in label for label in _got))
+
+check("a shouted title is calmed down",
+      _labels.clean("PETER PARKER FUNNY MOMENTS") == "Peter Parker Funny Moments")
+check("quality tags are dropped",
+      _labels.clean("Spider-Man vs Venom FIGHT [HD] 1080p")
+      == "Spider-Man vs Venom FIGHT")
+check("a title that is only the series still yields something",
+      _labels.clean("The Spectacular Spider-Man",
+                    {"show_terms": ["spectacular spider-man"]}) != "")
+check("an empty title falls back to a number",
+      _labels.for_clips([_T("")]) == ["Moment 1"])
+check("truncation lands on a word boundary",
+      not _labels.clean("Peter Parker fights Doctor Octopus on a moving train",
+                        limit=30).endswith(("Docto", "Octop", "movin")),
+      _labels.clean("Peter Parker fights Doctor Octopus on a moving train",
+                    limit=30))
+
+# The other thing burned into that video: [Music] across most of the runtime.
+from backend.app.render.overlay import _NON_SPEECH  # noqa: E402
+
+for _name, _cue in [("[Music]", "[Music]"), ("[music]", "[music]"),
+                    ("[Applause]", "[Applause]"), ("(laughter)", "(laughter)"),
+                    ("a music note", "\u266a"),
+                    ("two music notes", "\u266a\u266a"),
+                    ("[ Music ] with spaces", "[ Music ]")]:
+    check(f"non-speech cue dropped: {_name}",
+          bool(_NON_SPEECH.fullmatch(_cue)))
+for _cue in ["[Music] I am swinging", "the music was loud", "Peter, no!"]:
+    check(f"real speech kept: {_cue[:26]}",
+          not _NON_SPEECH.fullmatch(_cue))
+
+
 section("other people's edits")
 # Sourcing from a fan edit is the worst outcome available: their music, their
 # captions and their watermark come with it, and the moment is usually already

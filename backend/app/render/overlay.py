@@ -58,6 +58,20 @@ _VTT_TIME = re.compile(
 )
 _TAGS = re.compile(r"<[^>]*>")
 
+#: A whole cue that says only that something non-verbal happened. Matched
+#: against the entire cue, never a substring: "[Music] I'm swinging" still has
+#: speech in it and is worth keeping.
+_NON_SPEECH = re.compile(
+    r"[\[\(\u266a\u266b\s]*"
+    r"(music|applause|laughter|laughs|cheering|clapping|silence|"
+    r"instrumental|singing|sighs|gasps|screaming|theme|intro|outro)"
+    r"[\]\)\u266a\u266b\s.]*"
+    # Or no words at all: a cue of bare music notes, which is how many
+    # auto-caption tracks mark a song rather than spelling out [Music].
+    r"|[\u266a\u266b\u2669\u266c\s.\-]+",
+    re.IGNORECASE,
+)
+
 
 def parse_vtt(path: Path, limit: int = 4000) -> List[Caption]:
     """Read a WebVTT file into timed captions.
@@ -79,7 +93,11 @@ def parse_vtt(path: Path, limit: int = 4000) -> List[Caption]:
         if pending is None:
             return
         text = " ".join(_TAGS.sub("", " ".join(buffer)).split()).strip()
-        if text:
+        # A cue that is only a non-speech marker is not a caption. YouTube's
+        # auto-captions emit [Music] over every scored moment, and an animated
+        # series is scored end to end -- burning those in puts "[Music]"
+        # across the screen for most of the video.
+        if text and not _NON_SPEECH.fullmatch(text):
             cues.append(Caption(pending[0], pending[1], text))
 
     for line in raw.splitlines():
