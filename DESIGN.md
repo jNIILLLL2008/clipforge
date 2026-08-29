@@ -224,6 +224,41 @@ free plan returning `"Free"`, must clear the `/ month` suffix rather than render
 Anchor IDs `#how`, `#retention`, `#footage` and `#pricing`, the `/app` links and
 the `?plan=` query parameters are load-bearing. Do not rename them.
 
+## The background
+
+`backdrop.css`, linked by the marketing page, the app and the 404 page so all
+three share one file and cannot drift. Modelled on a WebGL "shadow blending"
+shader: three very large, very soft ember lights drifting past each other over
+near-black, with film grain over the top.
+
+It is gradients and one SVG noise tile rather than a shader. A WebGL canvas on
+every page means a renderer, a compile step and another thing keeping a laptop
+awake, to draw something three blurred divs already draw.
+
+Three layers, in this order:
+
+1. **The blooms.** Three circles at 70-90vw with `blur(60px)`, drifting on
+   34s, 46s and 58s. None of those divide into each other, so the arrangement
+   never visibly repeats.
+2. **The scrim.** A radial wash of the canvas colour that never reaches
+   transparent, floor `.78`.
+3. **The grain.** `feTurbulence` tiled at `soft-light`. It is what stops large
+   soft gradients banding on an 8-bit display, and most of why the original
+   reads as light rather than as CSS.
+
+**The scrim is load-bearing, not decoration.** With all three blooms
+overlapping, which the drift does produce, the raw background reaches
+rgb(153,72,49), where `--ink-muted` measures 3.7:1 and `--ink-subtle` 2.1:1.
+Both fail. Dimming the blooms alone to fix it needs roughly a quarter of their
+strength and leaves nothing worth looking at. Capping the composite instead
+lets the blooms be *brighter* than they started while the weakest ink still
+measures 4.71:1 at the darkest point of the scrim. If you brighten the blooms
+further, re-measure `--ink-subtle` against the `.78` floor before shipping it.
+
+The sign-in screen is transparent so the backdrop shows through behind its own
+dot field, and `body` on both pages is transparent for the same reason, with
+`html` carrying the base colour.
+
 ## The sign-in screen
 
 Also ported from a reference design, and the same trade as the hero: the

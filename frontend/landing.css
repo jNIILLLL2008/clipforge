@@ -276,38 +276,9 @@ section + section { padding-top: 0; }
   overflow: hidden;
 }
 
-/* Two long soft ellipses raked across the top left, plus a vignette that
-   lifts the canvas back at the bottom so the glow has somewhere to end. */
-.glow {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-}
-.glow span {
-  position: absolute;
-  left: 0;
-  top: 0;
-  border-radius: 999px;
-  transform: rotate(-45deg);
-  transform-origin: top left;
-}
-.glow-a {
-  width: 34rem;
-  height: 70rem;
-  translate: -12% -34%;
-  background: radial-gradient(68% 68% at 55% 31%,
-              rgba(226, 96, 58, .16) 0, rgba(226, 96, 58, .05) 50%,
-              transparent 78%);
-}
-.glow-b {
-  width: 14rem;
-  height: 70rem;
-  translate: 16% -46%;
-  background: radial-gradient(50% 50% at 50% 50%,
-              rgba(255, 255, 255, .05) 0, rgba(255, 255, 255, .02) 78%,
-              transparent 100%);
-}
+/* The page-wide light now lives in backdrop.css. What stays here is the
+   vignette, which pulls the canvas back up at the foot of the hero so the
+   headline has something solid underneath it. */
 .hero::after {
   content: "";
   position: absolute;
@@ -315,19 +286,7 @@ section + section { padding-top: 0; }
   z-index: -1;
   pointer-events: none;
   background: radial-gradient(125% 125% at 50% 100%,
-              transparent 0%, var(--canvas) 72%);
-}
-@media (prefers-color-scheme: light) {
-  .glow-a {
-    background: radial-gradient(68% 68% at 55% 31%,
-                rgba(226, 96, 58, .13) 0, rgba(226, 96, 58, .04) 50%,
-                transparent 78%);
-  }
-  .glow-b {
-    background: radial-gradient(50% 50% at 50% 50%,
-                rgba(0, 0, 0, .04) 0, rgba(0, 0, 0, .015) 78%,
-                transparent 100%);
-  }
+              transparent 0%, var(--canvas) 78%);
 }
 
 .hero-inner { display: flex; flex-direction: column; align-items: center; }
