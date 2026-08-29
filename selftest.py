@@ -616,6 +616,15 @@ check("and it carries the job's settings",
 settings.allow_unlicensed_sources = False
 
 from backend.app.db import session_scope as _session_scope  # noqa: E402
+
+
+def _db_id_of(public_id: str) -> int:
+    """The worker takes row ids; the API only ever exposes public ones."""
+    from backend.app.models import Job as _J
+    with _session_scope() as db:
+        return db.query(_J).filter(_J.public_id == public_id).first().id
+
+
 from backend.app.models import utcnow as _utcnow  # noqa: E402
 from datetime import timedelta as _timedelta  # noqa: E402
 
@@ -705,6 +714,72 @@ check("a finished job cannot be completed again",
 agent_owner.delete("/api/agent/token")
 check("revoking the token stops the agent at once",
       TestClient(app).get("/api/agent/hello", headers=AGENT).status_code == 401)
+
+
+section("the server stands down for a live agent")
+# Both the local pool and the agent claim from the same QUEUED pool, and the
+# pool is in-process, so it used to win every time -- sending the job to the
+# datacentre address that YouTube refuses, which is the exact thing the agent
+# exists to avoid.
+import backend.app.worker as _worker  # noqa: E402
+from backend.app.models import Job as _Job, JobStatus as _JobStatus  # noqa: E402
+
+
+class _FakeUser:
+    def __init__(self, token, seen):
+        self.agent_token = token
+        self.agent_last_seen = seen
+
+
+check("no agent means the server renders it",
+      _worker.agent_is_live(_FakeUser(None, _utcnow())) is False)
+# Paired months ago and never opened since. These people must still get
+# videos, so a token on its own is not enough to stand down for.
+check("paired but never started does not count",
+      _worker.agent_is_live(_FakeUser("tok", None)) is False)
+check("an agent that just polled counts",
+      _worker.agent_is_live(_FakeUser("tok", _utcnow())) is True)
+check("one that stopped polling does not",
+      _worker.agent_is_live(_FakeUser(
+          "tok", _utcnow() - _timedelta(seconds=3600))) is False)
+check("the cutoff is the configured window",
+      _worker.agent_is_live(_FakeUser("tok", _utcnow() - _timedelta(
+          seconds=settings.agent_online_seconds - 5))) is True)
+check("and just past it, it is not",
+      _worker.agent_is_live(_FakeUser("tok", _utcnow() - _timedelta(
+          seconds=settings.agent_online_seconds + 5))) is False)
+# Postgres returns aware datetimes and SQLite naive ones; comparing the wrong
+# one raises TypeError inside a worker thread, where nobody would see it.
+check("a naive timestamp does not explode",
+      _worker.agent_is_live(_FakeUser(
+          "tok", _utcnow().replace(tzinfo=None))) is True)
+
+# The heartbeat this all rests on. agent_user() stamps agent_last_seen, but
+# the idle path used to return 204 without committing, so an agent polling
+# every 20 seconds looked like it had never connected at all.
+_hb = TestClient(app)
+_hb.post("/api/auth/signup",
+         json={"email": "heartbeat@example.com", "password": "heartbeat-77"})
+_hb_token = _hb.post("/api/agent/token").json()["token"]
+_hb_head = {"Authorization": f"Bearer {_hb_token}"}
+check("a fresh agent has never been seen",
+      _hb.get("/api/agent/status").json()["last_seen"] == "")
+check("an empty queue still answers 204",
+      TestClient(app).post("/api/agent/claim", headers=_hb_head).status_code == 204)
+check("but polling an empty queue records the heartbeat",
+      _hb.get("/api/agent/status").json()["last_seen"] != "",
+      _hb.get("/api/agent/status").json()["last_seen"])
+
+# And the decision itself: a queued job belonging to someone with a live agent
+# is left alone rather than rendered here.
+_hb.put("/api/studio/settings", json={"settings": {"sources": ["upload"], "clips": 3}})
+_left = _hb.post("/api/jobs", json={"dry_run": True}).json()["id"]
+_worker._process(_db_id_of(_left))
+with _session_scope() as _db:
+    _row = _db.query(_Job).filter(_Job.public_id == _left).first()
+    _status, _detail = _row.status, _row.stage_detail
+check("the job is left queued for the agent", _status == _JobStatus.QUEUED, _status)
+check("and says so", _detail == "Waiting for your render agent", _detail)
 
 
 section("pairing an agent")

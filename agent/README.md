@@ -140,16 +140,31 @@ GitHub release, normally -- and the app shows a download button next to the
 pairing instructions. Left unset, it shows the run-from-source route instead of
 a button that leads nowhere.
 
-## Serving jobs from the server side
+## How work is shared with the server
 
-For an instance to leave its jobs to agents rather than rendering them itself:
+You do not have to choose. The server's own render pool stands down for any
+account whose agent is *currently polling*, so a running agent gets the work
+without a race, and an account with no agent -- or one that is closed -- is
+rendered on the server as usual. The handover is automatic in both directions
+and takes a couple of minutes at most.
+
+That matters because the two are not interchangeable: YouTube refuses the
+server's datacentre address and answers a home connection, so a job that
+lands on the server is the one likely to fail.
+
+`AGENT_ONLINE_SECONDS` (default 120) is how long after its last poll an agent
+still counts as live. The agent polls every 20 seconds when idle, so that is
+six missed polls.
+
+To take the server out entirely and make every job wait for an agent:
 
 ```bash
 RENDER_WORKERS=0
 ```
 
-Jobs then queue and wait. They do not fail while the agent is offline, so a
-machine that is asleep at 9am picks the run up when it wakes.
+Jobs then queue and wait rather than failing, so a machine asleep at 9am picks
+the run up when it wakes. Most instances do not want this -- it means a
+subscriber with no agent never gets a video.
 
 ## When something goes wrong
 

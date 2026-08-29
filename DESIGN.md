@@ -293,6 +293,26 @@ LGPL ffmpeg ships no software H.264 encoder. That carries redistribution
 obligations, which is why the .zip keeps `ffmpeg/LICENSE` and names the source
 in `READ ME FIRST.txt`.
 
+## Who renders a job
+
+The local pool and the render agent claim from the same QUEUED pool, and the
+pool is in-process, so it used to win the race essentially always. That was
+the wrong outcome: the agent exists because YouTube refuses the server's
+datacentre address, so the job the server won was the one most likely to fail.
+
+`worker._process` now stands down while `agent_is_live(user)` -- a token *and*
+a poll within `AGENT_ONLINE_SECONDS` (120 by default). It re-queues the job on
+a 15-second timer rather than blocking a worker thread on it.
+
+Both directions are automatic and need no setting. Paired-but-never-started
+does not count as live, so somebody who paired an agent months ago and never
+opened it still gets their videos.
+
+This rests on `agent_last_seen` being written on *every* poll. The idle branch
+of `/api/agent/claim` returns 204, and used to return it without committing,
+so the stamp `agent_user()` made was rolled back and an agent polling every 20
+seconds looked like it had never connected.
+
 ## Things the page must not disagree with
 
 Pricing is fetched from `/api/plans` on load and overwrites the printed values,

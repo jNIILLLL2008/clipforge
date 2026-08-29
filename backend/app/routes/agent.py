@@ -294,6 +294,13 @@ def claim(response: Response, user: User = Depends(agent_user),
              .order_by(Job.created_at.asc())
              .first())
     if job is None:
+        # agent_user() stamped agent_last_seen, and nothing else on this path
+        # writes, so without this the stamp is rolled back. An idle agent polls
+        # every 20 seconds and would still look like it had never connected --
+        # which is wrong on the Activity screen, and wrong for the worker
+        # below, which uses that timestamp to decide whether to stay out of
+        # the way.
+        db.commit()
         response.status_code = status.HTTP_204_NO_CONTENT
         return None
 

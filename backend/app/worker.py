@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import queue
 import threading
-from datetime import timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -30,9 +30,36 @@ _queue: "queue.Queue[int]" = queue.Queue()
 _threads: list = []
 _started = threading.Event()
 
+#: How long to wait before looking at a deferred job again. Shorter than the
+#: agent's 20-second idle poll, so the handover costs the subscriber nothing.
+_DEFER_SECONDS = 15.0
+
 
 def enqueue(job_id: int) -> None:
     _queue.put(job_id)
+
+
+def agent_is_live(user: User) -> bool:
+    """Is a render agent for this account polling right now?
+
+    Paired is not the same as running. Somebody who paired an agent months ago
+    and has not opened it since must still get their videos, so this asks when
+    it last spoke rather than whether a token exists.
+    """
+    if not user.agent_token or user.agent_last_seen is None:
+        return False
+    seen = user.agent_last_seen
+    if seen.tzinfo is None:
+        # SQLite hands back naive datetimes; Postgres does not.
+        seen = seen.replace(tzinfo=timezone.utc)
+    return (utcnow() - seen) < timedelta(seconds=settings.agent_online_seconds)
+
+
+def _defer(job_id: int, seconds: float) -> None:
+    """Put a job back in the queue shortly, without blocking a worker on it."""
+    timer = threading.Timer(seconds, enqueue, args=(job_id,))
+    timer.daemon = True
+    timer.start()
 
 
 def start_workers() -> None:
@@ -128,6 +155,21 @@ def _process(job_id: int) -> None:
         if user is None:
             job.status = JobStatus.FAILED
             job.error = "The account for this job no longer exists."
+            return
+
+        # Both this pool and the agent claim from the same QUEUED pool, and
+        # this one is in the same process as the queue, so it wins the race
+        # essentially always. That is the wrong outcome: the agent exists
+        # because YouTube refuses this machine's datacentre address and
+        # answers the subscriber's home connection, so a job rendered here is
+        # the one likely to fail.
+        #
+        # So stand down while an agent is actually polling. This is not a
+        # standoff -- agent_is_live goes false a couple of minutes after the
+        # agent stops asking, and the job is picked up here on the next pass.
+        if agent_is_live(user):
+            job.stage_detail = "Waiting for your render agent"
+            _defer(job_id, _DEFER_SECONDS)
             return
 
         # The user's own configuration is the source of truth; the job's

@@ -124,6 +124,12 @@ class Settings:
         # instance except one when scaling out.
         self.run_scheduler: bool = _bool("RUN_SCHEDULER", True)
 
+        # How long after its last poll an agent is still considered live.
+        # The agent asks for work every 20 seconds when idle, so this is six
+        # missed polls: long enough to ride out a slow network, short enough
+        # that a laptop closed at bedtime hands the queue back quickly.
+        self.agent_online_seconds: int = _int("AGENT_ONLINE_SECONDS", 120)
+
         # Where a subscriber gets the render agent. The .exe is a build
         # artefact rather than something in the repo, so this points at
         # wherever it was published -- a GitHub release, normally. Unset means
