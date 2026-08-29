@@ -144,7 +144,7 @@ function showTab(name, { focus = false } = {}) {
   $(`tab-${name}`).classList.remove('hidden');
   window.scrollTo(0, 0);
   if (name === 'history') loadJobs();
-  if (name === 'activity') { loadUploads(); loadSources(); loadPlans(); }
+  if (name === 'activity') { loadUploads(); loadSources(); loadPlans(); loadAgent(); }
   // Build the preview only when the screen showing it is opened, so it never
   // costs an ffmpeg run for someone who is not looking at it.
   if (name === 'settings') { fillPreviewClips(); previewSoon(150); }
@@ -532,6 +532,86 @@ async function loadSources() {
       <span class="row-sub">${esc(s.licence)}</span></span>
       <span class="pill ${pill}">${label}</span></div>`;
   }).join('');
+}
+
+async function loadAgent() {
+  const state_ = await api('/api/agent/status');
+  const seen = state_.last_seen
+    ? new Date(state_.last_seen).toLocaleString()
+    : 'not yet';
+
+  $('agent-rows').innerHTML = `
+    <div class="row"><span class="row-label">Status
+      <span class="row-sub">${state_.paired
+        ? 'An agent on your own machine can claim your runs.'
+        : 'Runs happen on our servers.'}</span></span>
+      <span class="pill ${state_.paired ? '' : 'off'}">${state_.paired ? 'paired' : 'not paired'}</span></div>
+    ${state_.paired ? `<div class="row"><span class="row-label">Last seen</span>
+      <span class="row-value">${esc(seen)}</span></div>` : ''}`;
+
+  $('agent-actions').innerHTML = state_.paired
+    ? `<button class="ghost" id="agent-new">Replace token</button>
+       <button class="ghost danger" id="agent-unpair">Unpair</button>`
+    : '<button class="ghost" id="agent-pair">Pair a render agent</button>';
+
+  // Why anyone would want this, in the one place they are deciding.
+  $('agent-note').textContent = state_.local_rendering
+    ? 'This server does not render anything itself, so runs wait until your '
+      + 'agent is running.'
+    : 'Optional. Running the agent uses your own computer and connection, '
+      + 'which is the only way to reach footage our servers are blocked from.';
+
+  const pair = async () => {
+    const { token } = await api('/api/agent/token', { method: 'POST' });
+    showToken(token);
+    loadAgent();
+  };
+  if ($('agent-pair')) $('agent-pair').onclick = pair;
+  if ($('agent-new')) $('agent-new').onclick = async () => {
+    if (!confirm('The agent you are running now will stop working until you '
+                 + 'give it the new token. Continue?')) return;
+    await pair();
+  };
+  if ($('agent-unpair')) $('agent-unpair').onclick = async () => {
+    if (!confirm('Any agent using this token stops immediately. Continue?')) return;
+    await api('/api/agent/token', { method: 'DELETE' });
+    $('agent-token').classList.add('hidden');
+    loadAgent();
+  };
+}
+
+function showToken(token) {
+  // Shown once and never again: the server stores it to check against, and
+  // cannot hand it back. Say so plainly rather than letting someone close the
+  // tab and lose it.
+  //
+  // The address comes from the browser, not from the server's PUBLIC_URL. That
+  // setting defaults to localhost:8000, so an instance where nobody set it
+  // would hand out an address that cannot possibly work. Whatever the person
+  // is looking at right now is by definition reachable from their machine.
+  const box = $('agent-token');
+  box.classList.remove('hidden');
+  box.innerHTML = `
+    <p class="note"><b>Copy this now.</b> It is shown once. Put it in
+      <code>agent.env</code> beside the agent, then run
+      <code>python -m agent.main --check</code>.</p>
+    <div class="row"><span class="row-label">CLIPFORGE_SERVER</span>
+      <span class="row-value">${esc(location.origin)}</span></div>
+    <div class="row"><span class="row-label">CLIPFORGE_AGENT_TOKEN</span>
+      <span class="row-value" id="agent-token-value">${esc(token)}</span></div>
+    <div class="actions-row">
+      <button class="ghost" id="agent-copy">Copy token</button>
+    </div>`;
+  $('agent-copy').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      $('agent-copy').textContent = 'Copied';
+    } catch {
+      // Clipboard access is refused often enough that failing silently would
+      // look like the button is broken.
+      $('agent-copy').textContent = 'Select it and copy manually';
+    }
+  };
 }
 
 async function loadPlans() {

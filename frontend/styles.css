@@ -162,6 +162,31 @@ button { font: inherit; cursor: pointer; border-radius: var(--radius-ctrl); tran
 .row-sub { display: block; font-size: .8rem; color: var(--muted); margin-top: .12rem; }
 .row-value { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .row-value.accent { color: var(--accent-ink); }
+
+/* An agent token and the env var names beside it. Mono because they are typed
+   into a file, and selectable because the whole point is copying them. */
+code {
+  font-family: var(--mono);
+  font-size: .86em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ctrl);
+  padding: .08rem .3rem;
+}
+#agent-token .row-value {
+  font-family: var(--mono);
+  color: var(--text);
+  user-select: all;
+  word-break: break-all;
+  text-align: right;
+}
+#agent-token {
+  margin-top: .6rem;
+  padding: .2rem .9rem .6rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
 .chev { color: var(--muted); margin-left: .3rem; }
 
 .pill {
