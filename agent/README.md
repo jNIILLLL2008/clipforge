@@ -36,7 +36,26 @@ pulls, and your channel's refresh token stays on the server.
 
 ## Setup
 
-You need Python 3.11+ and **ffmpeg on PATH**. Check with `ffmpeg -version`.
+Either run it from source, or use the packaged `.exe` and skip installing
+Python. **ffmpeg has to be on PATH either way** -- check with `ffmpeg -version`,
+and install it with `winget install Gyan.FFmpeg` if it is missing.
+
+### From the .exe
+
+Three things in one folder, and nothing else:
+
+```
+ClipForgeAgent.exe
+agent.env         copied from agent.env.example, with your token
+footage/          your own clips
+```
+
+Then `ClipForgeAgent.exe --check`. The .exe reads everything from the folder it
+sits in, so keep those three together if you move it.
+
+### From source
+
+You need Python 3.11+.
 
 1. On the website, sign in and open **Settings**, then pair a render agent.
    The token is shown once. Copy it.
@@ -74,6 +93,20 @@ Everything lives in `agent.env`. Only the first two are required.
 `agent.env`, `footage/` and `work/` are all gitignored. The token is a
 credential: anything holding it can claim your jobs. Revoking it on the website
 stops it immediately.
+
+## Building the .exe
+
+```bash
+python agent/build_exe.py --clean
+```
+
+Around 24MB, and it lands at `agent/ClipForgeAgent.exe`. ffmpeg is left out on
+purpose: it is roughly 90MB, it is better installed and updated by the person
+using it, and `--check` reports clearly when it is missing.
+
+The server half of the repo is excluded from the build, so SQLAlchemy, FastAPI,
+Stripe and the Google client are not along for the ride. The .exe is gitignored
+because it is a build artefact; the spec and this script are what is kept.
 
 ## Serving jobs from the server side
 

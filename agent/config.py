@@ -12,11 +12,25 @@ Read from agent.env beside this file, or from the environment, in that order.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
 
-HERE = Path(__file__).resolve().parent
+
+def _here() -> Path:
+    """The folder the agent should read and write beside.
+
+    A PyInstaller onefile build unpacks itself into a temporary directory and
+    deletes it on exit, so __file__ points somewhere that will not exist next
+    run. Anything the user owns has to sit next to the .exe instead.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+HERE = _here()
 DEFAULT_FILE = HERE / "agent.env"
 
 
