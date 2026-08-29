@@ -1418,9 +1418,25 @@ function startGateDots() {
     await enterApp();
   } catch { showGate(); }
 
-  if (new URLSearchParams(location.search).get('billing') === 'success') {
-    toast('Subscription active.');
-    history.replaceState({}, '', '/');
+  const billing = new URLSearchParams(location.search).get('billing');
+  if (billing === 'success') {
+    // Do not just say it worked. The webhook may not have arrived yet, or may
+    // not be configured at all, and telling somebody their subscription is
+    // active while the screen still says Free is worse than saying nothing.
+    toast('Confirming your subscription…');
+    try {
+      const { plan } = await api('/api/billing/sync', { method: 'POST' });
+      await loadPlans();
+      toast(plan && plan !== 'free'
+        ? `You are on ${plan}.`
+        : 'Payment received. Your plan will update shortly.');
+    } catch {
+      toast('Payment received. Your plan will update shortly.');
+    }
+    history.replaceState({}, '', '/app');
+  } else if (billing === 'cancelled') {
+    toast('Checkout cancelled. Nothing was charged.');
+    history.replaceState({}, '', '/app');
   }
   window.addEventListener('message', (e) => {
     if (e.data === 'clipforge-youtube') loadStudio();

@@ -78,8 +78,13 @@ def checkout(plan: str, user: User = Depends(current_user),
             mode="subscription",
             customer=user.stripe_customer_id,
             line_items=[{"price": price, "quantity": 1}],
-            success_url=f"{settings.public_url}/?billing=success",
-            cancel_url=f"{settings.public_url}/?billing=cancelled",
+            # /app, not /. Stripe was returning paying customers to the
+            # marketing page, which has no idea what ?billing=success means
+            # and no sign-in state on screen -- so a completed purchase looked
+            # like being thrown out of the product.
+            success_url=(f"{settings.public_url}/app?billing=success"
+                         "&session_id={CHECKOUT_SESSION_ID}"),
+            cancel_url=f"{settings.public_url}/app?billing=cancelled",
             # Lets the webhook identify the account without trusting the browser.
             subscription_data={"metadata": {"user_id": str(user.id)}},
             allow_promotion_codes=True,
@@ -111,6 +116,17 @@ def portal(user: User = Depends(current_user)):
     return {"url": session.url}
 
 
+@router.post("/sync")
+def sync(user: User = Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """Re-read this account's subscription from Stripe.
+
+    Called when somebody lands back in the app from checkout, so the plan is
+    right on the first paint instead of whenever a webhook turns up.
+    """
+    changed = sync_from_stripe(db, user)
+    return {"plan": user.plan.value, "changed": changed}
+
+
 @router.post("/webhook")
 async def webhook(request: Request, db: Session = Depends(get_db)):
     """Apply plan changes. This is the only place a plan is trusted from."""
@@ -136,10 +152,70 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
         _apply_subscription(db, obj)
     elif kind == "customer.subscription.deleted":
         _downgrade(db, obj)
+    elif kind == "checkout.session.completed":
+        # Belt and braces. subscription.created normally arrives too, but the
+        # order is not guaranteed and an operator who subscribed only to
+        # checkout events would otherwise see nothing happen at all.
+        _apply_checkout(db, obj)
     else:
         log.debug("Ignoring webhook %s", kind)
 
     return {"received": True}
+
+
+def _apply_checkout(db: Session, obj: dict) -> None:
+    """A finished checkout: look the subscription up and apply it."""
+    subscription_id = obj.get("subscription")
+    if not subscription_id:
+        return
+    user = _find_user(db, obj)
+    if user is None and obj.get("customer"):
+        user = (db.query(User)
+                  .filter(User.stripe_customer_id == obj["customer"])
+                  .one_or_none())
+    if user is None:
+        log.warning("checkout.session.completed for an unknown customer.")
+        return
+    try:
+        subscription = _stripe().Subscription.retrieve(subscription_id)
+    except Exception as exc:  # noqa: BLE001 - a lookup failure is not fatal
+        log.warning("Could not read subscription %s: %s", subscription_id, exc)
+        return
+    _apply_subscription(db, dict(subscription))
+
+
+def sync_from_stripe(db: Session, user: User) -> bool:
+    """Ask Stripe what this customer is actually paying for, and apply it.
+
+    Webhooks are the right mechanism and they are not a guarantee: the
+    endpoint may not be registered yet, may be subscribed to the wrong events,
+    or may simply arrive after the customer is already looking at the screen.
+    Any of those leaves somebody who has just paid staring at "free", which is
+    the worst possible moment to look broken.
+
+    So when they come back from checkout, ask directly. Returns True when the
+    plan changed.
+    """
+    if not user.stripe_customer_id:
+        return False
+    try:
+        subscriptions = _stripe().Subscription.list(
+            customer=user.stripe_customer_id, status="all", limit=10)
+    except Exception as exc:  # noqa: BLE001 - never break the page over this
+        log.warning("Could not list subscriptions for user %s: %s", user.id, exc)
+        return False
+
+    before = user.plan
+    live = [s for s in (subscriptions.get("data") or [])
+            if s.get("status") in {"active", "trialing"}]
+    if live:
+        # Newest first, so an upgrade beats the subscription it replaced.
+        live.sort(key=lambda s: s.get("created") or 0, reverse=True)
+        _apply_subscription(db, dict(live[0]))
+    else:
+        log.info("No live subscription for user %s.", user.id)
+    db.refresh(user)
+    return user.plan != before
 
 
 def _find_user(db: Session, obj: dict) -> Optional[User]:
@@ -165,6 +241,19 @@ def _apply_subscription(db: Session, obj: dict) -> None:
     price_id = items[0]["price"]["id"] if items else ""
     plan = _plan_for_price(price_id)
     active = obj.get("status") in {"active", "trialing"}
+
+    if active and not plan:
+        # Stripe says they are paying for something this server has never
+        # heard of, so nothing happens and they stay on free while being
+        # charged. Almost always STRIPE_PRICE_* not matching the price the
+        # checkout actually used.
+        log.error(
+            "User %s has an active subscription on price %r, which matches "
+            "neither STRIPE_PRICE_STARTER (%r) nor STRIPE_PRICE_PRO (%r). "
+            "They are being charged and left on free.",
+            user.id, price_id, settings.stripe_price_starter,
+            settings.stripe_price_pro)
+        return
 
     if plan and active:
         if user.plan != plan:

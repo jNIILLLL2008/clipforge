@@ -660,6 +660,97 @@ check("webhook cannot be spoofed",
       client.post("/api/billing/webhook", json={"type": "x"}).status_code
       in (400, 503))
 
+# sync is deliberately lenient: with no Stripe customer there is nothing to
+# ask about, so it reports the current plan rather than erroring.
+_sync = client.post("/api/billing/sync")
+check("sync answers without Stripe configured", _sync.status_code == 200,
+      _sync.status_code)
+check("and reports the current plan", _sync.json().get("plan") == "free",
+      _sync.json())
+check("sync needs a session",
+      TestClient(app).post("/api/billing/sync").status_code == 401)
+
+# Where Stripe sends somebody after they pay. This was "/", the marketing
+# page, which has no handling for ?billing=success and no sign-in state on
+# screen: a completed purchase looked like being thrown out of the product.
+_billing_src = Path("backend/app/routes/billing.py").read_text(encoding="utf-8")
+check("checkout returns you to the app, not the landing page",
+      '/app?billing=success' in _billing_src)
+check("and so does cancelling",
+      '/app?billing=cancelled' in _billing_src)
+check("no redirect still points at the landing page",
+      '"/?billing=' not in _billing_src.replace("'", '"'))
+check("the app rewrites the url to /app afterwards",
+      "'/app'" in Path("frontend/app.js").read_text(encoding="utf-8")
+      .split("billing === 'success'")[1][:900])
+
+# Relying on one webhook event is fragile: an operator who subscribed only to
+# checkout events would have seen nothing happen.
+check("checkout.session.completed is handled",
+      "checkout.session.completed" in _billing_src)
+check("subscription events still are",
+      "customer.subscription.created" in _billing_src
+      and "customer.subscription.deleted" in _billing_src)
+
+# The plan is applied from a subscription object without any Stripe call, so
+# this half is testable directly -- and it is the half that decides the plan.
+from backend.app.routes.billing import _apply_subscription, _find_user  # noqa: E402
+
+_buyer = TestClient(app)
+_buyer.post("/api/auth/signup",
+            json={"email": "buyer@example.com", "password": "buyer-pass-77"})
+with session_scope() as _db:
+    _b = _db.query(User).filter(User.email == "buyer@example.com").one()
+    _bid, _ = _b.id, _b.stripe_customer_id
+    _b.stripe_customer_id = "cus_test_123"
+    check("a new account starts free", _b.plan == Plan.FREE, _b.plan)
+
+# The price has to be one this server recognises, or _plan_for_price returns
+# None and the account is left alone -- which is the failure mode below.
+settings.stripe_price_pro = "price_test_pro"
+settings.stripe_price_starter = "price_test_starter"
+_sub = {
+    "id": "sub_test_1", "status": "active", "customer": "cus_test_123",
+    "metadata": {"user_id": str(_bid)},
+    "items": {"data": [{"price": {"id": "price_test_pro"}}]},
+}
+with session_scope() as _db:
+    _apply_subscription(_db, _sub)
+with session_scope() as _db:
+    _b = _db.get(User, _bid)
+    check("an active pro subscription makes the account pro",
+          _b.plan == Plan.PRO, _b.plan)
+    check("and the subscription id is kept",
+          _b.stripe_subscription_id == "sub_test_1")
+    check("and the allowance resets for the new period",
+          _b.renders_this_period == 0)
+
+# The webhook must find the account even when the metadata is missing, which
+# is the case for events Stripe generates itself later on.
+with session_scope() as _db:
+    check("the customer id alone identifies the account",
+          _find_user(_db, {"customer": "cus_test_123"}) is not None)
+    check("and an unknown customer resolves to nobody",
+          _find_user(_db, {"customer": "cus_nobody"}) is None)
+
+# A price the server does not recognise is how somebody ends up paying and
+# staying free. It must not silently succeed.
+with session_scope() as _db:
+    _apply_subscription(_db, {**_sub, "items": {"data": [
+        {"price": {"id": "price_someone_changed_in_stripe"}}]}})
+with session_scope() as _db:
+    check("an unknown price leaves the plan alone rather than downgrading",
+          _db.get(User, _bid).plan == Plan.PRO,
+          _db.get(User, _bid).plan)
+
+# Cancelling has to take it away again.
+with session_scope() as _db:
+    _apply_subscription(_db, {**_sub, "status": "canceled"})
+with session_scope() as _db:
+    check("a cancelled subscription drops back to free",
+          _db.get(User, _bid).plan == Plan.FREE)
+
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)
