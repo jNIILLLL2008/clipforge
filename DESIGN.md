@@ -224,6 +224,33 @@ free plan returning `"Free"`, must clear the `/ month` suffix rather than render
 Anchor IDs `#how`, `#retention`, `#footage` and `#pricing`, the `/app` links and
 the `?plan=` query parameters are load-bearing. Do not rename them.
 
+## The sign-in screen
+
+Also ported from a reference design, and the same trade as the hero: the
+original renders a dot field as a WebGL fragment shader through three.js and
+`@react-three/fiber`. Pulling a 3D engine and a renderer into a buildless
+frontend to fade in a grid of squares is not a trade worth making, so
+`startGateDots()` in `app.js` draws the same field on a 2D canvas. The per-cell
+hash, the distance-based delay and the flicker are ported from the shader; the
+dependency is not.
+
+Three things about it are deliberate:
+
+* **It stops.** The loop ends when the gate is hidden, watched with a
+  MutationObserver on the class, and when the tab goes to the background. A
+  requestAnimationFrame loop running behind a signed-in app is pure battery.
+* **Reduced motion gets a settled frame**, and that frame skips the flicker
+  term rather than inheriting whatever phase the sine happened to be at when it
+  was drawn.
+* **The form sits on the field, not on a card.** That is what makes the dots
+  read as the page rather than as a picture hung behind one. The two washes
+  over the top, a radial one opening a dark hole in the middle and a linear one
+  settling the top edge, are what keep the text legible on it.
+
+The submit button holds its label in a `.label` span. `app.js` rewrites that
+span, never the button, because the button also contains the arrow that slides
+on hover and `textContent` on the parent deletes it.
+
 ## The app
 
 `frontend/styles.css` reads its palette, type and radius scale from the same

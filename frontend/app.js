@@ -47,7 +47,10 @@ document.querySelectorAll('.tab').forEach((tab) => {
   tab.onclick = () => {
     authMode = tab.dataset.mode;
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-    $('auth-submit').textContent = authMode === 'login' ? 'Sign in' : 'Create account';
+    // Only the label, never the button: its textContent also holds the arrow
+    // that slides on hover, and rewriting the lot would delete it.
+    $('auth-submit').querySelector('.label').textContent =
+      authMode === 'login' ? 'Sign in' : 'Create account';
     $('auth-error').textContent = '';
   };
 });
@@ -1198,8 +1201,120 @@ $('tour-back').onclick = () => { if (tourAt > 0) { tourAt -= 1; renderTour(); } 
 $('tour-skip').onclick = () => closeTour();
 $('replay-tour').onclick = () => openTour();
 
+/* ------------------------------------------------------------------ dots --
+   The sign-in backdrop: a grid of squares that resolves outward from the
+   centre, then keeps twinkling.
+
+   The design this comes from runs it as a WebGL fragment shader through
+   three.js and @react-three/fiber. That is a 3D engine and a renderer to fade
+   in a grid of squares, so this is the same field drawn on a 2D canvas: the
+   per-cell hash, the distance-based delay and the flicker are ported from the
+   shader, the dependency is not.
+
+   Stops itself when the gate is hidden, when the tab is in the background, and
+   when the viewer prefers reduced motion, in which case it paints the settled
+   state once and leaves it there. */
+function startGateDots() {
+  const canvas = document.getElementById('gate-dots');
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+
+  const SPACING = 20;          // grid pitch, matching u_total_size
+  const DOT = 6;               // square size, matching u_dot_size
+  const SPEED = 1.25;          // how fast the reveal sweeps outward
+  const still = window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let dpr = 1, cols = 0, rows = 0, cx = 0, cy = 0, started = 0, raf = 0;
+
+  // The shader's random(): a cheap hash, stable per cell, so a dot keeps its
+  // brightness and its delay between frames instead of boiling.
+  function hash(x, y) {
+    const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cols = Math.ceil(w / SPACING) + 1;
+    rows = Math.ceil(h / SPACING) + 1;
+    cx = cols / 2;
+    cy = rows / 2;
+  }
+
+  function draw(elapsed, settled) {
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const seed = hash(i, j);
+        // Distance sets when a cell arrives, the hash jitters it so the front
+        // is ragged rather than a clean expanding ring.
+        const delay = Math.hypot(i - cx, j - cy) * 0.03 + seed * 0.35;
+        const age = elapsed * SPEED - delay;
+        if (age <= 0) continue;
+
+        // A slow per-cell flicker, the 2D reading of the shader's time-stepped
+        // random pick. The settled frame skips it: a still image should not
+        // inherit whatever phase the sine happened to be at.
+        const flicker = settled
+          ? 1
+          : 0.55 + 0.45 * Math.sin(elapsed * 1.6 + seed * 42);
+        const alpha = Math.min(1, age * 3) * (0.10 + seed * 0.34) * flicker;
+        if (alpha <= 0.004) continue;
+        ctx.globalAlpha = alpha;
+        ctx.fillRect(i * SPACING, j * SPACING, DOT, DOT);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function frame(now) {
+    if (!started) started = now;
+    draw((now - started) / 1000);
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  function run() {
+    stop();
+    // A hidden gate has no size, and drawing behind the app is wasted work.
+    if (!canvas.clientWidth || !canvas.clientHeight) return;
+    resize();
+    if (still) { draw(999, true); return; }
+    started = 0;
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', run);
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stop(); else run();
+  });
+
+  // The gate is shown and hidden by toggling .hidden on it, which no event
+  // reports. Watching the attribute keeps the canvas in step without the rest
+  // of the app having to know it exists.
+  const gate = document.getElementById('gate');
+  if (gate && 'MutationObserver' in window) {
+    new MutationObserver(function () {
+      if (gate.classList.contains('hidden')) stop(); else run();
+    }).observe(gate, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  run();
+}
+
 /* ------------------------------------------------------------- boot ---- */
 (async function boot() {
+  startGateDots();
   try {
     state.user = await api('/api/me');
     await enterApp();

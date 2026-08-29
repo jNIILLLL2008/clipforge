@@ -16,20 +16,22 @@
 
 <!-- =========================== signed out =========================== -->
 <div id="gate" class="gate">
+  <!-- The dot matrix resolving out of the centre is the whole effect. The
+       reference runs it as a WebGL fragment shader through three.js; this is
+       the same field on a 2D canvas, because pulling in a 3D engine to fade in
+       a grid of squares is not a trade worth making. -->
+  <canvas id="gate-dots" class="gate-dots" aria-hidden="true"></canvas>
+  <div class="gate-vignette" aria-hidden="true"></div>
+
   <div class="gate-panel">
     <div class="brand"><span class="logo" aria-hidden="true">&#9670;</span> ClipForge</div>
+
     <h1>One button. A finished Short on your channel.</h1>
     <p class="lede">
-      Set it up once. Press Publish and it finds footage, cuts it to a
-      retention-tested format, and uploads it. On a paid plan it does that
-      every day without you.
+      Set it up once. Press Publish and it cuts your footage to a
+      retention-tested format and uploads it. On a paid plan it does that every
+      day without you.
     </p>
-
-    <ul class="points">
-      <li><b>Your footage, or footage licensed for reuse.</b> Every clip carries its licence.</li>
-      <li><b>A retention gate.</b> Each video is scored before it renders. Weak ones are rejected and cost you nothing.</li>
-      <li><b>Every setting in one screen.</b> The same options the desktop studio has.</li>
-    </ul>
 
     <p id="gate-intent" class="gate-intent hidden" role="status"></p>
 
@@ -42,9 +44,20 @@
       <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required>
       <label class="sr-only" for="password">Password</label>
       <input id="password" type="password" placeholder="Password (8+ characters)" autocomplete="current-password" required>
-      <button class="primary" type="submit" id="auth-submit">Sign in</button>
+      <button class="primary" type="submit" id="auth-submit">
+        <span class="label">Sign in</span>
+        <span class="arrow" aria-hidden="true">
+          <span>&#8594;</span><span>&#8594;</span>
+        </span>
+      </button>
       <p class="error" id="auth-error" role="alert"></p>
     </form>
+
+    <ul class="points">
+      <li><b>Your own footage.</b> Nothing is sourced on your behalf, so there is nothing to claim.</li>
+      <li><b>A retention gate.</b> Every video is scored before it renders. Weak ones are rejected and cost you nothing.</li>
+      <li><b>Every setting in one screen.</b> The same options the desktop studio has.</li>
+    </ul>
   </div>
 </div>
 
