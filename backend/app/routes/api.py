@@ -72,6 +72,7 @@ def signup(body: Credentials, response: Response, db: Session = Depends(get_db))
     db.commit()
     token = create_token(user.id)
     response.set_cookie("cf_token", token, httponly=True, samesite="lax",
+                        secure=settings.secure_cookies,
                         max_age=settings.token_hours * 3600)
     return {"token": token, "user": _user_payload(user)}
 
@@ -86,6 +87,7 @@ def login(body: Credentials, response: Response, db: Session = Depends(get_db)):
                             "Email or password is incorrect.")
     token = create_token(user.id)
     response.set_cookie("cf_token", token, httponly=True, samesite="lax",
+                        secure=settings.secure_cookies,
                         max_age=settings.token_hours * 3600)
     return {"token": token, "user": _user_payload(user)}
 

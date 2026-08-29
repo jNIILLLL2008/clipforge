@@ -41,6 +41,10 @@ os.environ["DATABASE_URL"] = f"sqlite:///{(TMP / 'test.db').as_posix()}"
 os.environ["STORAGE_DIR"] = str(TMP / "storage")
 os.environ["ENABLED_SOURCES"] = "upload"
 os.environ["RENDER_WORKERS"] = "1"
+# The suite signs up several accounts in a few seconds, which is precisely
+# what the signup limit is meant to refuse. The limiter is tested directly
+# in the security section rather than through the whole suite.
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["SECRET_KEY"] = "test-key-not-used-anywhere-real"
 # Never inherit the deployment's real Stripe or Google credentials: the suite
 # must behave the same on a machine that has them and one that does not, and it
@@ -746,6 +750,91 @@ finally:
     for k, v in _saved2.items():
         if v is not None:
             os.environ[k] = v
+
+
+section("security")
+from backend.app.security import _CSP, _Buckets, _limit_for  # noqa: E402
+
+# --- the response headers a browser acts on --------------------------- #
+_h = client.get("/api/health").headers
+check("a CSP is sent", "content-security-policy" in _h)
+check("framing is refused", _h.get("x-frame-options") == "DENY", _h.get("x-frame-options"))
+check("MIME sniffing is refused", _h.get("x-content-type-options") == "nosniff")
+check("a referrer policy is set", "referrer-policy" in _h)
+check("a permissions policy is set", "permissions-policy" in _h)
+
+# The CSP has to allow exactly what the pages load, or it silently breaks them.
+for _origin in ("https://fonts.googleapis.com", "https://fonts.gstatic.com",
+                "https://cdn.simpleicons.org", "https://picsum.photos"):
+    check(f"CSP allows {_origin.split('//')[1]}", _origin in _CSP)
+check("CSP forbids plugins", "object-src 'none'" in _CSP)
+check("CSP forbids being framed", "frame-ancestors 'none'" in _CSP)
+check("CSP pins the base URI", "base-uri 'self'" in _CSP)
+
+# HSTS must not be sent over plain HTTP: a browser would pin localhost to
+# HTTPS for a year on a developer's machine.
+check("no HSTS over plain http", "strict-transport-security" not in _h)
+check("HSTS behind an HTTPS proxy",
+      "strict-transport-security" in
+      client.get("/api/health", headers={"X-Forwarded-Proto": "https"}).headers)
+
+# --- the limiter itself ------------------------------------------------ #
+_b = _Buckets()
+_allowed = [_b.hit("someone", 3, 60.0)[0] for _ in range(5)]
+check("the first requests inside the limit pass", _allowed[:3] == [True] * 3)
+check("the ones over it are refused", _allowed[3:] == [False, False])
+check("a refusal says how long to wait", _b.hit("someone", 3, 60.0)[1] >= 1)
+check("a different caller has its own budget", _b.hit("someone-else", 3, 60.0)[0])
+check("a window that has passed frees up",
+      _Buckets().hit("fresh", 1, 0.0001)[0] and
+      (time.sleep(0.01) or _Buckets().hit("fresh", 1, 0.0001)[0]))
+
+# Longest prefix wins, so /api/auth/login is stricter than /api.
+check("login is limited more tightly than the rest of the api",
+      _limit_for("/api/auth/login")[1][0] < _limit_for("/api/me")[1][0],
+      f"{_limit_for('/api/auth/login')[1]} vs {_limit_for('/api/me')[1]}")
+check("an unknown path is not limited", _limit_for("/static/x.css")[1] is None)
+
+# --- cookies ----------------------------------------------------------- #
+# secure_cookies follows the environment: on in production, off in
+# development, because a Secure cookie is never returned over plain http.
+from backend.app.config import Settings  # noqa: E402
+
+_saved_env = os.environ.get("ENV")
+os.environ["ENV"] = "production"
+check("cookies are Secure in production", Settings().secure_cookies)
+os.environ["ENV"] = "dev"
+check("cookies are not Secure in development", not Settings().secure_cookies)
+if _saved_env is None:
+    os.environ.pop("ENV", None)
+else:
+    os.environ["ENV"] = _saved_env
+
+_set = client.post("/api/auth/signup",
+                   json={"email": "cookie@example.com",
+                         "password": "cookie-pass-9"}).headers.get("set-cookie", "")
+check("the session cookie is HttpOnly", "HttpOnly" in _set, _set[:40])
+check("and SameSite is set", "SameSite" in _set)
+
+# --- what the crawlers and assistants get ------------------------------ #
+_robots = client.get("/robots.txt")
+check("robots.txt is served", _robots.status_code == 200)
+check("it points at the sitemap", "Sitemap:" in _robots.text)
+check("it keeps crawlers out of the app", "Disallow: /app" in _robots.text)
+check("sitemap.xml is served", client.get("/sitemap.xml").status_code == 200)
+_llms = client.get("/llms.txt")
+check("llms.txt is served", _llms.status_code == 200)
+check("and says what the product does not do",
+      "does not" in _llms.text.lower())
+
+# --- 404 ---------------------------------------------------------------- #
+_missing = client.get("/no-such-page")
+check("a missing page is a real page", _missing.status_code == 404
+      and "text/html" in _missing.headers.get("content-type", ""),
+      _missing.headers.get("content-type"))
+_missing_api = client.get("/api/no-such-thing")
+check("a missing api route stays JSON", _missing_api.status_code == 404
+      and _missing_api.json().get("detail"))
 
 
 section("licence gate")

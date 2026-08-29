@@ -94,6 +94,14 @@ class Settings:
         self.cors_origins: List[str] = _list(
             "CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
         )
+        # Off only for a local test that needs to hammer the API. Leaving it
+        # off in production means an unlimited password-guessing budget.
+        self.rate_limit_enabled: bool = _bool("RATE_LIMIT_ENABLED", True)
+        # The session cookie is marked Secure whenever the site is served over
+        # HTTPS, which it always is in production. Development over plain HTTP
+        # would never receive the cookie back if this were forced on.
+        self.secure_cookies: bool = _bool(
+            "SECURE_COOKIES", self.env == "production")
 
         # --- storage ----------------------------------------------------- #
         self.storage_dir: Path = Path(_str("STORAGE_DIR", str(ROOT / "storage")))
