@@ -12,6 +12,13 @@ terms, so the guided setup can stop them before they run it.
 
 from __future__ import annotations
 
+import re
+
+#: Whole-word match, so "edit" in a search term is not found
+#: inside "credits". Named because an inline r"" is one
+#: escaping mistake away from a literal backspace.
+BOUNDARY = r"\b"
+
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -83,6 +90,27 @@ def review(cfg: Dict, *, upload_count: int = 0,
                     "either repeat itself or come out short.",
                     f"Upload at least {clips}, or lower the clip count.",
                     "clips"))
+
+    # --- searching for the thing you just told it to refuse --------------- #
+    # "funny moments compilation" is the obvious search to write, and with the
+    # derivative filter on it returns a pool that is then thrown away whole.
+    if cfg.get("reject_derivative", True) and terms:
+        from .selection import _DERIVATIVE_PHRASES, _DERIVATIVE_TERMS
+
+        clash = sorted({
+            word
+            for term in terms
+            for word in tuple(_DERIVATIVE_TERMS) + tuple(_DERIVATIVE_PHRASES)
+            if re.search(BOUNDARY + re.escape(word) + BOUNDARY, term)
+        })
+        if clash:
+            add(Finding(
+                "warning", "You are searching for edits and refusing them",
+                f"{', '.join(repr(c) for c in clash)} appears in your search "
+                "terms, but \"Skip other people's edits\" throws those results "
+                "away. The run will look busy and find nothing.",
+                "Drop that word from the search, or turn the filter off.",
+                "search_terms"))
 
     # --- the show filter -------------------------------------------------- #
     if cfg.get("require_show_match"):

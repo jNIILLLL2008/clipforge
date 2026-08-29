@@ -131,8 +131,17 @@ FIELDS: List[Dict[str, Any]] = [
           "their own banner into their uploads."),
     field("trusted_uploaders", "filters", "list", [],
           "Trusted channels",
-          "Channels exempt from the compilation checks, because their footage "
-          "is the original rather than someone else's edit of it."),
+          "Channels exempt from the checks below, because their footage is the "
+          "original rather than someone else's edit of it."),
+    field("reject_derivative", "filters", "bool", True,
+          "Skip other people's edits",
+          "Refuse fan edits, AMVs and compilations. Re-cutting one gives you "
+          "their music, their captions and their watermark burned into your "
+          "video, and the moment is usually already speed-ramped."),
+    field("derivative_terms", "filters", "list", [],
+          "Also treat as an edit",
+          "Added to the built-in list. Whole words only, so \"edit\" does not "
+          "match \"credits\"."),
     field("long_clip_seconds", "filters", "float", 75.0,
           "Treat as a full segment above",
           "Longer clips get a timed transcript so the moment can be located "

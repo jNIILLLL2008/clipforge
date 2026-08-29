@@ -139,6 +139,97 @@ check("min above max corrected",
       sanitise({"min_clip_seconds": 90, "max_clip_seconds": 10})["min_clip_seconds"] == 10)
 
 # --------------------------------------------------------------------------- #
+section("other people's edits")
+# Sourcing from a fan edit is the worst outcome available: their music, their
+# captions and their watermark come with it, and the moment is usually already
+# speed-ramped. The settings screen has always claimed there was a check for
+# this; there was not.
+from backend.app.render.selection import (  # noqa: E402
+    is_derivative as _is_deriv, _split_camel as _camel,
+)
+from backend.app.sources.base import SourceClip as _SC  # noqa: E402
+
+
+def _cand(title, author="", tags=None, description=""):
+    return _SC(source="youtube", external_id="x", title=title, url="",
+               author=author, tags=tags or [],
+               extra={"description": description})
+
+
+_ON = {"reject_derivative": True}
+
+for _title, _term in [
+    ("Spectacular Spider-Man EDIT | phonk", "edit"),
+    ("spider-man amv - Ready For It", "amv"),
+    ("Peter Parker funny moments compilation", "compilation"),
+    ("Spidey twixtor clips 4k", "twixtor"),
+    ("every scene of Venom in season 2", "every scene"),
+    ("Gwen Stacy tribute", "tribute"),
+]:
+    _got, _hit = _is_deriv(_cand(_title), _ON)
+    check(f"caught: {_title[:38]}", _got and _hit == _term, _hit)
+
+# The whole reason the match is whole-word. A substring test rejects most of
+# the pool: "edit" lives inside credits, editorial and meditation.
+for _clean in [
+    "Spectacular Spider-Man - Peter meets Gwen",
+    "End credits scene",
+    "Editorial: why season 3 never happened",
+    "A meditation on power and responsibility",
+    "The Sinister Six attack | Season 2",
+]:
+    _got, _hit = _is_deriv(_cand(_clean), _ON)
+    check(f"kept: {_clean[:40]}", not _got, _hit)
+
+# Channel names run words together where a word boundary cannot see them.
+check("camelCase channel names are split", _camel("SpideyEdits") == "Spidey Edits")
+check("so an edits channel is caught",
+      _is_deriv(_cand("Peter vs Doc Ock", author="SpideyEdits"), _ON)[0] is True)
+
+# The three ways out.
+check("the filter can be turned off",
+      _is_deriv(_cand("spider-man edit"), {"reject_derivative": False})[0] is False)
+check("a trusted channel is exempt",
+      _is_deriv(_cand("spider-man edit", author="Marvel HQ"),
+                {"reject_derivative": True,
+                 "trusted_uploaders": ["Marvel HQ"]})[0] is False,
+      "this is what the Trusted channels box always said it did")
+check("a niche can add its own terms",
+      _is_deriv(_cand("spidey slideshow"),
+                {"reject_derivative": True,
+                 "derivative_terms": ["slideshow"]})[0] is True)
+
+# On by default, for every niche, which is the point.
+from backend.app.settings_schema import BY_KEY as _KEYS  # noqa: E402
+check("on by default for every niche",
+      _KEYS["reject_derivative"]["default"] is True)
+
+# Searching for the thing you just refused is the obvious mistake, and one I
+# put in the setup guide myself before this check existed.
+from backend.app.render.advice import review as _review  # noqa: E402
+
+_clash = _review({"sources": ["youtube"], "clips": 5, "target_seconds": 105,
+                  "banner_enabled": True,
+                  "search_terms": ["spiderman funny compilation"]})
+check("searching for edits while refusing them warns",
+      any("refusing them" in f.title for f in _clash.findings),
+      [f.title for f in _clash.findings])
+_ok = _review({"sources": ["youtube"], "clips": 5, "target_seconds": 105,
+               "banner_enabled": True,
+               "search_terms": ["peter parker funny scene"]})
+check("and a clean search does not",
+      not any("refusing them" in f.title for f in _ok.findings))
+
+# A backspace byte got into this file once, through a shell escaping layer,
+# and turned the word-boundary regex into something that matched nothing.
+import backend.app.render.advice as _adv  # noqa: E402
+check("the boundary is a real regex escape", _adv.BOUNDARY == chr(92) + "b",
+      repr(_adv.BOUNDARY))
+for _mod in ("backend/app/render/advice.py", "backend/app/render/selection.py"):
+    check(f"no stray control bytes in {_mod.split('/')[-1]}",
+          chr(8) not in Path(_mod).read_text(encoding="utf-8"))
+
+
 section("show filter")
 
 

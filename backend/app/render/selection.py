@@ -4,10 +4,15 @@ selection.py -- Decide which candidate clips qualify.
 Ported from the single-channel tool, where these rules were learned the hard
 way, and generalised so any subscriber can express them for their own subject.
 
-Two independent gates:
+Three independent gates:
 
 * **Clip filters** -- duration, views, age, blocked channels. Cheap, and they
   run before anything is downloaded.
+* **The derivative filter** -- is this somebody else's edit? Sourcing from a
+  fan edit or a compilation is the worst outcome available: their music, their
+  captions and their watermark come with it, the moment is usually already
+  speed-ramped, and the copyright position is worse than the original because
+  now two people have a claim.
 * **The show filter** -- optional, and the interesting one. It insists a clip
   is from *one specific programme* rather than merely featuring the same
   people. A clip qualifies on an explicit show keyword, or on naming two or
@@ -20,6 +25,7 @@ meant to catch panel moments. Aliases are grouped per person with "|".
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Sequence, Tuple
 
 from ..logging_setup import get_logger
@@ -27,14 +33,72 @@ from ..sources.base import SourceClip
 
 log = get_logger("render.selection")
 
+#: What a re-edit calls itself. Two families, and both are disqualifying for
+#: the same reason: the footage has already been cut by somebody else.
+#:
+#: These are matched as whole words. A substring test is unusable here --
+#: "edit" is inside "credits", "editor" and "meditation", and a naive check
+#: throws away most of the pool for no reason.
+_DERIVATIVE_TERMS = (
+    # Music-video style edits.
+    "amv", "edit", "edits", "editz", "fanedit", "twixtor", "capcut",
+    "velocity", "phonk", "shitpost", "sigma",
+    # Somebody else's assembly of the same footage.
+    "compilation", "supercut", "montage", "mashup", "tribute",
+    "allscenes", "marathon",
+    # Re-uploads that carry another layer of somebody else on top.
+    "reupload", "screenrecord", "screenrecording",
+)
+
+#: Phrases, kept separate because they need the space matched literally.
+_DERIVATIVE_PHRASES = (
+    "fan edit", "all scenes", "every scene", "whatsapp status",
+    "status video", "edit audio", "after effects",
+)
+
+
+def _split_camel(text: str) -> str:
+    """"SpideyEdits" -> "Spidey Edits".
+
+    Channel names run words together far more often than titles do, and a
+    word-boundary match cannot see inside them.
+    """
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text or "")
+
 
 def _haystack(clip: SourceClip) -> str:
     return " ".join(part.lower() for part in (
         clip.title or "",
         (clip.extra.get("description") or "")[:800],
         " ".join(clip.tags or []),
-        clip.author or "",
+        _split_camel(clip.author or ""),
     ))
+
+
+def is_derivative(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
+    """Is this someone's edit rather than the footage? (yes, which_term)."""
+    if not settings.get("reject_derivative", True):
+        return False, ""
+
+    # A channel the subscriber has vouched for posts originals by definition,
+    # which is what the Trusted channels box has always said it meant.
+    trusted = [t.lower() for t in settings.get("trusted_uploaders", []) if t]
+    if trusted and any(t in (clip.author or "").lower() for t in trusted):
+        return False, ""
+
+    text = _haystack(clip)
+    extra = [str(t).strip().lower() for t in
+             settings.get("derivative_terms", []) if str(t).strip()]
+
+    for phrase in _DERIVATIVE_PHRASES:
+        if phrase in text:
+            return True, phrase
+    for word in tuple(_DERIVATIVE_TERMS) + tuple(extra):
+        # \b on both ends: "edit" must be the whole word, never the tail of
+        # "credits" or the head of "editorial".
+        if re.search(r"\b" + re.escape(word) + r"\b", text):
+            return True, word
+    return False, ""
 
 
 def passes_filters(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
@@ -105,11 +169,15 @@ def matches_show(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
 
 
 def apply(clips: Sequence[SourceClip], settings: Dict) -> List[SourceClip]:
-    """Run both gates, logging why anything was dropped."""
+    """Run all three gates, logging why anything was dropped."""
     kept: List[SourceClip] = []
     dropped = 0
     for clip in clips:
         ok, reason = passes_filters(clip, settings)
+        if ok:
+            derivative, term = is_derivative(clip, settings)
+            if derivative:
+                ok, reason = False, f"looks like an edit ({term!r})"
         if ok:
             ok, reason = matches_show(clip, settings)
         if not ok:
