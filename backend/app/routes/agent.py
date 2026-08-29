@@ -44,6 +44,13 @@ from ..models import (
 log = get_logger("agent")
 router = APIRouter(prefix="/api/agent")
 
+#: What this server's render pipeline expects an agent to be built from. An
+#: agent reports its own; anything lower is rendering with code we have since
+#: fixed, and it is told so on every hello.
+#:
+#: Bump it together with agent/__init__.py PIPELINE_VERSION.
+PIPELINE_VERSION = 2
+
 #: Stages an agent may report, mapped to the status the job takes. Anything
 #: else is ignored rather than trusted: the agent does not get to declare a job
 #: finished by naming a status.
@@ -269,15 +276,41 @@ def pair_approve(body: PairApprove, user: User = Depends(current_user),
 # Claiming work
 # --------------------------------------------------------------------------- #
 @router.get("/hello")
-def hello(user: User = Depends(agent_user),
+def hello(request: Request, user: User = Depends(agent_user),
           db: Session = Depends(get_db)) -> dict:
-    """Confirm a token works, before an agent starts polling with it."""
+    """Confirm a token works, before an agent starts polling with it.
+
+    Also the version handshake. The agent carries its own copy of the render
+    pipeline, so an old build keeps producing old output no matter what has
+    been fixed here -- and it has no way to know. It reports what it was built
+    from and is told plainly when that is behind.
+    """
     db.commit()
+
+    try:
+        reported = int(request.headers.get("x-clipforge-pipeline") or 0)
+    except ValueError:
+        reported = 0
+    stale = 0 < reported < PIPELINE_VERSION or reported == 0
+
+    if stale:
+        log.info("Agent for %s reports pipeline %s; this server is %s.",
+                 user.email, reported or "unknown", PIPELINE_VERSION)
+
     return {
         "email": user.email,
         "plan": user.plan.value,
         "renders_left": user.renders_left(),
         "server": settings.public_url,
+        "pipeline_version": PIPELINE_VERSION,
+        "your_pipeline_version": reported,
+        "update_available": stale,
+        "update_note": (
+            "This agent was built before the current render pipeline, so it "
+            "will keep producing the old output -- old clip labels, and none "
+            "of the newer source filtering. Download the current agent and "
+            "replace the .exe."
+        ) if stale else "",
     }
 
 

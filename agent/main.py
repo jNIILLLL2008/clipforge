@@ -150,6 +150,17 @@ def preflight(cfg, server: Server) -> bool:
         log.info("Paired with %s as %s (%s plan, %s runs left this month).",
                  cfg.server, who.get("email"), who.get("plan"),
                  who.get("renders_left"))
+        if who.get("update_available"):
+            # Loud, and not fatal. It renders fine; it renders *old*, which is
+            # invisible in the output until somebody watches a finished video
+            # and wonders why a fix did not take.
+            log.warning("=" * 66)
+            log.warning("THIS AGENT IS OUT OF DATE")
+            log.warning("%s", who.get("update_note") or "")
+            log.warning("Built from pipeline %s; the server is on %s.",
+                        who.get("your_pipeline_version") or "unknown",
+                        who.get("pipeline_version"))
+            log.warning("=" * 66)
     except AuthError as exc:
         # Recoverable, and main() recovers from it by pairing again.
         log.warning("%s", exc)

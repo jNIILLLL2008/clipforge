@@ -955,6 +955,59 @@ check("the job is left queued for the agent", _status == _JobStatus.QUEUED, _sta
 check("and says so", _detail == "Waiting for your render agent", _detail)
 
 
+section("a stale agent says so")
+# The agent is a PyInstaller build with the render pipeline inside it, so
+# fixing the pipeline here does nothing for an older .exe -- and because the
+# server stands down for a live agent, an old .exe renders everything. A build
+# from 17:42 kept producing 17:42 output for hours after the fixes deployed,
+# and nothing anywhere said so.
+import backend.app.routes.agent as _agent_routes  # noqa: E402
+
+_ver = TestClient(app)
+_ver.post("/api/auth/signup",
+          json={"email": "stale@example.com", "password": "stale-pass-77"})
+_ver_tok = _ver.post("/api/agent/token").json()["token"]
+_VH = {"Authorization": f"Bearer {_ver_tok}"}
+
+_current = TestClient(app).get(
+    "/api/agent/hello",
+    headers={**_VH, "X-ClipForge-Pipeline": str(_agent_routes.PIPELINE_VERSION)}
+).json()
+check("a current agent is not nagged",
+      _current["update_available"] is False, _current.get("update_note"))
+check("and is told the server's version",
+      _current["pipeline_version"] == _agent_routes.PIPELINE_VERSION)
+
+_old = TestClient(app).get(
+    "/api/agent/hello",
+    headers={**_VH, "X-ClipForge-Pipeline": "1"}).json()
+check("an older build is told to update", _old["update_available"] is True)
+check("and told what it costs it",
+      "old clip labels" in _old["update_note"], _old["update_note"][:60])
+check("and what it is running", _old["your_pipeline_version"] == 1)
+
+# Every build before this change sends no header at all. That is precisely the
+# build that needs telling, so a missing header counts as stale.
+_none = TestClient(app).get("/api/agent/hello", headers=_VH).json()
+check("a build too old to report a version still counts as stale",
+      _none["update_available"] is True, _none["your_pipeline_version"])
+
+_junk = TestClient(app).get(
+    "/api/agent/hello", headers={**_VH, "X-ClipForge-Pipeline": "banana"}).json()
+check("a malformed version does not 500", _junk["update_available"] is True)
+
+# The two numbers are edited by hand in two files, so check they agree.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import agent as _agent_pkg  # noqa: E402
+
+check("agent and server agree on the pipeline version",
+      _agent_pkg.PIPELINE_VERSION == _agent_routes.PIPELINE_VERSION,
+      f"agent {_agent_pkg.PIPELINE_VERSION} vs server "
+      f"{_agent_routes.PIPELINE_VERSION}")
+check("the agent sends the header",
+      "X-ClipForge-Pipeline" in Path("agent/client.py").read_text(encoding="utf-8"))
+
+
 section("re-pairing after a revoke")
 # Unpairing on the website revokes the token, but the agent still has it in
 # agent.env. It saw a token, skipped pairing, failed authentication, and

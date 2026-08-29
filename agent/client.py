@@ -45,6 +45,11 @@ class Server:
         self.config = config
         self.session = requests.Session()
         self.session.headers["Authorization"] = f"Bearer {config.token}"
+        # So the server can tell us when this build is behind its pipeline.
+        from . import PIPELINE_VERSION, __version__
+
+        self.session.headers["X-ClipForge-Pipeline"] = str(PIPELINE_VERSION)
+        self.session.headers["User-Agent"] = f"ClipForgeAgent/{__version__}"
 
     def _url(self, path: str) -> str:
         return f"{self.config.server}{path}"
