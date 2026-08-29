@@ -63,7 +63,15 @@ def run(job: dict, config: AgentConfig, server: Server) -> str:
                 "description": str(job_settings.get("description", "")),
                 "settings": job_settings,
             },
-            options=job.get("options") or {},
+            options={
+                **(job.get("options") or {}),
+                # Back into tuples: the server sent pairs as lists.
+                "already_used": {
+                    (str(pair[0]), str(pair[1]))
+                    for pair in (job.get("already_used") or [])
+                    if isinstance(pair, (list, tuple)) and len(pair) == 2
+                },
+            },
             user_id=LOCAL_USER,
             workspace=workspace,
             output=output,

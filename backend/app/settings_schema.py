@@ -92,6 +92,11 @@ FIELDS: List[Dict[str, Any]] = [
     field("candidate_pool_size", "subject", "int", 40,
           "Candidates to consider", "How many clips to look at before picking.",
           min=5, max=300),
+    field("reuse_after_days", "subject", "int", 60,
+          "Reuse a clip after (days)",
+          "A clip you have already published is skipped for this long. 0 "
+          "reuses freely, which makes every run pick the same best clips.",
+          min=0, max=3650),
 
     # ------------------------------------------------------------- gate --- #
     field("require_show_match", "gate", "bool", False,

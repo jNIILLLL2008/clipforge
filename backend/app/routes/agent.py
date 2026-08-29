@@ -344,6 +344,15 @@ def claim(response: Response, user: User = Depends(agent_user),
     job.status = JobStatus.SOURCING
     job.stage_detail = "Claimed by your render agent"
 
+    # The agent renders on somebody's laptop and has no database, so the list
+    # of clips this account has already published has to travel with the job.
+    # Without it the agent picks the same five every run, which is exactly
+    # what it was doing.
+    from ..render.history import recently_used
+
+    used = recently_used(db, user.id,
+                         int(job_settings.get("reuse_after_days", 60) or 0))
+
     db.commit()
     log.info("Job %s claimed by the agent for %s.", job.public_id, user.email)
     return {
@@ -354,6 +363,8 @@ def claim(response: Response, user: User = Depends(agent_user),
         "dry_run": job.dry_run,
         # The agent burns the watermark in, so it has to be told to.
         "watermark": "clipforge.app" if user.limits["watermark"] else "",
+        # Tuples do not survive JSON, so pairs go over as two-item lists.
+        "already_used": [[source, external] for source, external in sorted(used)],
     }
 
 

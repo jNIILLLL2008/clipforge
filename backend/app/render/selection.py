@@ -141,6 +141,47 @@ def passes_filters(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
     return True, ""
 
 
+def derived_show_terms(settings: Dict) -> List[str]:
+    """What the search terms agree on, which is the subject.
+
+    Used only when the show filter is on and nothing was typed into it. The
+    alternative is rejecting every clip, which fails the run and teaches
+    people to turn the filter off -- and a niche with the filter off is how
+    clips from two other Spider-Man series end up in a Spectacular
+    Spider-Man video.
+    """
+    terms = [str(t).strip().lower() for t in
+             (settings.get("search_terms") or []) if str(t).strip()]
+    if len(terms) < 2:
+        return []
+
+    # Every 2-to-4 word phrase in every search term, counted across terms.
+    counts: Dict[str, int] = {}
+    for term in terms:
+        words = re.findall(r"[\w'-]+", term)
+        seen = set()
+        for size in (4, 3, 2):
+            for start in range(len(words) - size + 1):
+                phrase = " ".join(words[start:start + size])
+                if phrase not in seen:
+                    seen.add(phrase)
+                    counts[phrase] = counts.get(phrase, 0) + 1
+
+    threshold = max(2, int(len(terms) * 0.6))
+    shared = [p for p, n in counts.items() if n >= threshold]
+    if not shared:
+        return []
+
+    # Prefer the longest, and drop any phrase contained in a longer one, so
+    # "spectacular spider-man" wins over "spider-man".
+    shared.sort(key=lambda p: (-len(p.split()), -len(p)))
+    kept: List[str] = []
+    for phrase in shared:
+        if not any(phrase in longer for longer in kept):
+            kept.append(phrase)
+    return kept[:4]
+
+
 def matches_show(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
     """The show filter. Returns (ok, reason_if_not)."""
     if not settings.get("require_show_match"):
@@ -148,6 +189,21 @@ def matches_show(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
 
     text = _haystack(clip)
     show_terms = [t.lower() for t in settings.get("show_terms", []) if t]
+    people = [p for p in settings.get("show_people", []) if str(p).strip()]
+    if not show_terms and not people:
+        # Nothing configured. Rather than refuse everything, work out what the
+        # niche is about from what it searches for.
+        show_terms = derived_show_terms(settings)
+        if show_terms:
+            log.info("Show filter had no keywords; using %s from the search "
+                     "terms.", show_terms)
+        else:
+            # Genuinely nothing to go on -- one vague search term and no
+            # names. Refusing the whole run helps nobody.
+            log.warning("Show filter is on but nothing identifies the show, "
+                        "and the search terms are too thin to guess from. "
+                        "Letting clips through; add Show keywords.")
+            return True, ""
     if any(term in text for term in show_terms):
         return True, ""
 

@@ -178,6 +178,16 @@ def _process(job_id: int) -> None:
 
         job_settings = sanitise(dict(job.options or {}).get("format") or {},
                                 base=user.settings or {})
+
+        # Which clips this account has already published, so the same five do
+        # not win every run. Read here, inside the session that already has
+        # the user open.
+        from .render.history import recently_used
+
+        # user.id, not user_id: that local is assigned a few lines below and
+        # reading it here is an UnboundLocalError.
+        used_clips = recently_used(
+            db, user.id, int(job_settings.get("reuse_after_days", 60) or 0))
         niche_data = {"name": job.title or "Compilation",
                       "description": job_settings.get("description", ""),
                       "settings": job_settings}
@@ -203,7 +213,8 @@ def _process(job_id: int) -> None:
 
     try:
         result = run_job(
-            niche=niche_data, options=options, user_id=user_id,
+            niche=niche_data, options={**options, "already_used": used_clips},
+            user_id=user_id,
             workspace=workspace, output=output, watermark=watermark,
             progress=progress,
         )

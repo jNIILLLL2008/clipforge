@@ -47,7 +47,8 @@ def _noop(stage: str, detail: str) -> None:
 
 
 def gather(niche_settings: Dict, wanted: int,
-           user_id: Optional[int]) -> List[SourceClip]:
+           user_id: Optional[int],
+           already_used: Optional[set] = None) -> List[SourceClip]:
     """Collect candidates across every permitted source, then filter them."""
     adapters = source_registry.for_job(niche_settings.get("sources") or [],
                                        user_id, niche_settings)
@@ -78,6 +79,24 @@ def gather(niche_settings: Dict, wanted: int,
             raw.append(clip)
 
     pool = selection.apply(raw, niche_settings)
+
+    # Everything above ranks the same way every time, so without this the
+    # same five clips win every run. Drop what this account has already
+    # published and the next run is pushed further down its own ranking.
+    if already_used:
+        fresh = [c for c in pool
+                 if (c.source, c.external_id) not in already_used]
+        if len(fresh) >= 2:
+            log.info("Skipped %d clip(s) already published.",
+                     len(pool) - len(fresh))
+            pool = fresh
+        elif len(pool) > len(fresh):
+            # Refusing to repeat is a preference, not a reason to ship
+            # nothing. A niche with a small catalogue will run dry, and a
+            # repeat beats a failed run.
+            log.info("Only %d unused clip(s) left; allowing repeats this run.",
+                     len(fresh))
+
     log.info("Gathered %d candidate clip(s) from %d source(s).",
              len(pool), len(adapters))
 
@@ -240,7 +259,8 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
     workspace.mkdir(parents=True, exist_ok=True)
 
     progress("sourcing", "Looking for clips")
-    pool = gather(fmt, wanted, user_id)
+    already_used = options.get("already_used") or set()
+    pool = gather(fmt, wanted, user_id, already_used)
     if not pool:
         raise RenderError(
             "No clips matched this niche. Try broader search terms, or upload "

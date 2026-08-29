@@ -221,6 +221,122 @@ for _cue in ["[Music] I am swinging", "the music was loud", "Peter, no!"]:
           not _NON_SPEECH.fullmatch(_cue))
 
 
+section("clips are not reused")
+# Every clip a job used was written to job_clips and never read back, so each
+# run scored the same pool with the same model and picked the same five. The
+# subscriber sees the same moments over and over.
+from datetime import timedelta as _timedelta  # noqa: E402
+from backend.app.db import session_scope as _session_scope  # noqa: E402
+from backend.app.render.history import recently_used as _recent  # noqa: E402
+from backend.app.models import (  # noqa: E402
+    Job as _J, JobClip as _JC, JobStatus as _JS, User as _U, utcnow as _utcnow,
+)
+from backend.app.sources.base import SourceClip as _SC  # noqa: E402
+
+_ru = TestClient(app)
+_ru.post("/api/auth/signup",
+         json={"email": "reuse@example.com", "password": "reuse-pass-77"})
+with _session_scope() as _db:
+    _uid = _db.query(_U).filter(_U.email == "reuse@example.com").first().id
+
+check("a fresh account has no history", _recent(None, _uid, 60) == set())
+
+with _session_scope() as _db:
+    _done = _J(owner_id=_uid, public_id="hist-done", status=_JS.DONE,
+               title="Done", finished_at=_utcnow())
+    _failed = _J(owner_id=_uid, public_id="hist-failed", status=_JS.FAILED,
+                 title="Failed", finished_at=_utcnow())
+    _db.add_all([_done, _failed])
+    _db.flush()
+    _db.add_all([
+        _JC(job_id=_done.id, source="youtube", external_id="USED1", position=1),
+        _JC(job_id=_done.id, source="youtube", external_id="USED2", position=2),
+        _JC(job_id=_failed.id, source="youtube", external_id="NEVERSHIPPED",
+            position=1),
+    ])
+
+with _session_scope() as _db:
+    _hist = _recent(_db, _uid, 60)
+check("clips from a finished job are remembered",
+      ("youtube", "USED1") in _hist and ("youtube", "USED2") in _hist, sorted(_hist))
+# A failed run published nothing, so burning its clips punishes somebody for a
+# video that never went out.
+check("clips from a failed job are not",
+      ("youtube", "NEVERSHIPPED") not in _hist, sorted(_hist))
+
+with _session_scope() as _db:
+    check("the window is respected", _recent(_db, _uid, 0) == set())
+    _old = _recent(_db, _uid, 60)
+check("another account sees none of it",
+      _recent(None, _uid + 999, 60) == set())
+
+# The filter itself, and the rule that a repeat beats a failed run.
+class _PC:
+    def __init__(self, ext):
+        self.source, self.external_id = "youtube", ext
+
+
+_pool = [_PC("USED1"), _PC("USED2"), _PC("FRESH1"), _PC("FRESH2"), _PC("FRESH3")]
+_used = {("youtube", "USED1"), ("youtube", "USED2")}
+_fresh = [c for c in _pool if (c.source, c.external_id) not in _used]
+check("used clips are dropped when there is enough left", len(_fresh) == 3)
+
+_thin = [_PC("USED1"), _PC("USED2"), _PC("FRESH1")]
+_thin_fresh = [c for c in _thin if (c.source, c.external_id) not in _used]
+check("but a run with only one unused clip may repeat rather than fail",
+      len(_thin_fresh) < 2)
+
+from backend.app.settings_schema import BY_KEY as _SK  # noqa: E402
+check("reuse window defaults to something non-zero",
+      _SK["reuse_after_days"]["default"] > 0, _SK["reuse_after_days"]["default"])
+
+# The agent has no database, so the history travels with the claimed job.
+check("the claim payload carries the history",
+      "already_used" in Path("backend/app/routes/agent.py").read_text(encoding="utf-8"))
+check("and the agent turns it back into pairs",
+      "already_used" in Path("agent/runner.py").read_text(encoding="utf-8"))
+
+
+section("a show filter with nothing in it")
+# On with no keywords used to reject every clip, so the run failed and the
+# obvious response was to switch the filter off -- which is how a Spectacular
+# Spider-Man niche ended up with Marvel's Spider-Man and The Amazing
+# Spider-Man in the same video.
+from backend.app.render.selection import (  # noqa: E402
+    derived_show_terms as _derive, matches_show as _matches,
+)
+
+
+def _clip(title):
+    return _SC(source="youtube", external_id="x", title=title, url="", extra={})
+
+
+_niche = {"require_show_match": True, "search_terms": [
+    "spectacular spider-man funny moments",
+    "spectacular spider-man best scenes",
+    "spectacular spider-man peter parker funny",
+]}
+check("the show is derived from the search terms",
+      _derive(_niche) == ["spectacular spider-man"], _derive(_niche))
+check("the right show is kept",
+      _matches(_clip("The Spectacular Spider-Man - Peter meets Gwen"), _niche)[0])
+for _wrong in ["Origin 2 | Marvel's Spider-Man | Disney XD",
+               "The Amazing Spider-Man - Bad Days"]:
+    check(f"wrong show dropped: {_wrong[:34]}",
+          not _matches(_clip(_wrong), _niche)[0])
+
+# Configuration still wins over the guess.
+_typed = {**_niche, "show_terms": ["amazing spider-man"]}
+check("typed keywords beat the derived ones",
+      _matches(_clip("The Amazing Spider-Man - Bad Days"), _typed)[0])
+
+# And with nothing to go on it must not silently reject the entire run.
+_thin_niche = {"require_show_match": True, "search_terms": ["funny"]}
+check("one vague term derives nothing", _derive(_thin_niche) == [])
+check("and clips are let through rather than the run failing",
+      _matches(_clip("Anything at all"), _thin_niche)[0])
+
+
 section("other people's edits")
 # Sourcing from a fan edit is the worst outcome available: their music, their
 # captions and their watermark come with it, and the moment is usually already
@@ -229,9 +345,6 @@ section("other people's edits")
 from backend.app.render.selection import (  # noqa: E402
     is_derivative as _is_deriv, _split_camel as _camel,
 )
-from backend.app.sources.base import SourceClip as _SC  # noqa: E402
-
-
 def _cand(title, author="", tags=None, description=""):
     return _SC(source="youtube", external_id="x", title=title, url="",
                author=author, tags=tags or [],
@@ -788,18 +901,12 @@ check("and it carries the job's settings",
       opted_in and opted_in[0].config.get("source_channels") == ["@x"])
 settings.allow_unlicensed_sources = False
 
-from backend.app.db import session_scope as _session_scope  # noqa: E402
-
-
 def _db_id_of(public_id: str) -> int:
     """The worker takes row ids; the API only ever exposes public ones."""
     from backend.app.models import Job as _J
     with _session_scope() as db:
         return db.query(_J).filter(_J.public_id == public_id).first().id
 
-
-from backend.app.models import utcnow as _utcnow  # noqa: E402
-from datetime import timedelta as _timedelta  # noqa: E402
 
 section("the render agent")
 # The agent is the same pipeline on the subscriber's machine. The server still
