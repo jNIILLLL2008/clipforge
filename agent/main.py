@@ -33,9 +33,13 @@ import requests
 from . import config as agent_config
 from . import ffmpeg as agent_ffmpeg
 from . import pairing
-from .client import Server, ServerError
+from .client import AuthError, Server, ServerError
 
 log = logging.getLogger("agent")
+
+#: Set by preflight when the server rejected the token, so main() knows the
+#: failure is one it can fix by pairing rather than one to report and stop on.
+_token_was_rejected = False
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -104,15 +108,15 @@ def ensure_ffmpeg(args) -> bool:
     return True
 
 
-def ensure_paired(args) -> Optional[object]:
-    """Load the configuration, pairing first if there is no token yet.
+def ensure_paired(args, force: bool = False) -> Optional[object]:
+    """Load the configuration, pairing first if there is no usable token.
 
     Returns None when pairing did not happen, which is not an error: somebody
     closed the browser, or the code timed out. They run it again.
     """
     cfg = agent_config.load(require_token=False)
 
-    if args.pair or not cfg.token:
+    if args.pair or force or not cfg.token:
         if args.pair and cfg.token:
             log.info("Pairing again. The token this agent uses now will stop "
                      "working as soon as the new one is approved.")
@@ -139,11 +143,18 @@ def preflight(cfg, server: Server) -> bool:
     if not os.environ.get("FFMPEG_BINARY"):
         ok = False
 
+    global _token_was_rejected
+    _token_was_rejected = False
     try:
         who = server.hello()
         log.info("Paired with %s as %s (%s plan, %s runs left this month).",
                  cfg.server, who.get("email"), who.get("plan"),
                  who.get("renders_left"))
+    except AuthError as exc:
+        # Recoverable, and main() recovers from it by pairing again.
+        log.warning("%s", exc)
+        _token_was_rejected = True
+        ok = False
     except ServerError as exc:
         log.error("%s", exc)
         ok = False
@@ -225,6 +236,11 @@ def loop(cfg, server: Server) -> int:
     while True:
         try:
             busy = work_once(cfg, server)
+        except AuthError as exc:
+            # Deliberately not re-paired here. Mid-run, opening a browser
+            # nobody asked for is worse than stopping and saying why.
+            log.error("%s", exc)
+            return 1
         except ServerError:
             # A revoked or invalid token will not fix itself by retrying.
             return 1
@@ -278,6 +294,20 @@ def main(argv: Optional[list] = None) -> int:
 
     server = Server(cfg)
     healthy = preflight(cfg, server)
+
+    # A token in agent.env is not the same as a token the server still
+    # accepts. Unpairing on the website revokes it, and the agent then holds a
+    # file that stops it ever reaching the pairing flow -- it sees a token,
+    # skips pairing, and fails authentication forever. Pair again instead.
+    if not healthy and _token_was_rejected:
+        log.info("Pairing again, because that token has been revoked.")
+        agent_config.clear_token()
+        cfg = ensure_paired(args, force=True)
+        if cfg is None:
+            return _hold_window(1)
+        agent_config.apply_paths(cfg)
+        server = Server(cfg)
+        healthy = preflight(cfg, server)
     if args.check:
         log.info("Ready." if healthy else "Not ready. Fix the errors above.")
         return _hold_window(0 if healthy else 1)

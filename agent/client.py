@@ -31,6 +31,15 @@ class ServerError(RuntimeError):
     """The server answered, and the answer was no."""
 
 
+class AuthError(ServerError):
+    """The token was rejected.
+
+    Separate from ServerError because it is the one failure the agent can fix
+    by itself: a rejected token means this machine needs pairing again, which
+    is exactly what pairing is for. Everything else needs a person.
+    """
+
+
 class Server:
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
@@ -48,9 +57,9 @@ class Server:
         response = self.session.get(self._url("/api/agent/hello"),
                                     timeout=TIMEOUT)
         if response.status_code == 401:
-            raise ServerError(
-                "The server did not accept this agent token. Generate a new "
-                "one under Settings on the website and put it in agent.env."
+            raise AuthError(
+                "The server rejected this agent's token. It was most likely "
+                "unpaired on the website."
             )
         response.raise_for_status()
         return response.json()
@@ -65,7 +74,10 @@ class Server:
         if response.status_code == 204:
             return None
         if response.status_code == 401:
-            raise ServerError("This agent token is no longer valid.")
+            raise AuthError(
+                "This agent's token is no longer valid. Unpaired on the "
+                "website, most likely. Start the agent again and it will pair."
+            )
         response.raise_for_status()
         return response.json()
 

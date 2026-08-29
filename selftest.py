@@ -955,6 +955,63 @@ check("the job is left queued for the agent", _status == _JobStatus.QUEUED, _sta
 check("and says so", _detail == "Waiting for your render agent", _detail)
 
 
+section("re-pairing after a revoke")
+# Unpairing on the website revokes the token, but the agent still has it in
+# agent.env. It saw a token, skipped pairing, failed authentication, and
+# printed an instruction to press a button that no longer exists.
+import agent.client as _ac  # noqa: E402
+import agent.main as _am  # noqa: E402
+import agent.config as _acfg  # noqa: E402
+
+check("a rejected token has its own error type",
+      issubclass(_ac.AuthError, _ac.ServerError))
+
+_revoked = TestClient(app)
+_revoked.post("/api/auth/signup",
+              json={"email": "revoked@example.com", "password": "revoked-pw-9"})
+_rev_token = _revoked.post("/api/agent/token").json()["token"]
+check("the token works while paired",
+      TestClient(app).get("/api/agent/hello",
+                          headers={"Authorization": f"Bearer {_rev_token}"}
+                          ).status_code == 200)
+_revoked.delete("/api/agent/token")
+check("and 401s once unpaired on the website",
+      TestClient(app).get("/api/agent/hello",
+                          headers={"Authorization": f"Bearer {_rev_token}"}
+                          ).status_code == 401)
+
+# The agent's side of that. A config file holding the dead token must not stop
+# it reaching the pairing flow.
+_dead = TMP / "revoked-agent.env"
+_dead.write_text(
+    "CLIPFORGE_SERVER=https://example.invalid\n"
+    f"CLIPFORGE_AGENT_TOKEN={_rev_token}\n", encoding="utf-8")
+_deadcfg = _acfg.load(path=_dead, require_token=False)
+check("a revoked token still loads as a token", bool(_deadcfg.token))
+check("so pairing would be skipped without the recovery",
+      _deadcfg.token != "")
+
+# clear_token is what breaks the loop, and it must not lose the server.
+_acfg.clear_token(path=_dead)
+_after = _acfg.load(path=_dead, require_token=False)
+check("clearing the token frees it to pair", _after.token == "")
+check("and keeps the server address", _after.server == "https://example.invalid")
+
+# The message must not send anyone to a button that was removed.
+_msg = ""
+try:
+    raise _ac.AuthError(
+        "The server rejected this agent's token. It was most likely "
+        "unpaired on the website.")
+except _ac.AuthError as _exc:
+    _msg = str(_exc)
+check("the error does not describe the removed Settings button",
+      "Generate a new one" not in _msg, _msg)
+check("main knows how to recover", hasattr(_am, "_token_was_rejected"))
+check("ensure_paired can be forced past an existing token",
+      "force" in _am.ensure_paired.__code__.co_varnames)
+
+
 section("pairing an agent")
 # The flow that replaced "copy this token into a file". Its whole reason for
 # existing is that a subscriber never handles the secret, so the checks are
