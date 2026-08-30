@@ -183,6 +183,21 @@ button { font: inherit; cursor: pointer; border-radius: var(--radius-ctrl); tran
 }
 .auth .primary:hover .arrow span { transform: translateY(-1.2em); }
 
+/* The clickwrap line. It sits inside the form, under the button that accepts
+   it, because a link to the terms buried in a page footer is the version that
+   gets argued about later. Quiet, but not so quiet it fails contrast: the gate
+   is dark in both colour schemes, so this is a fixed white rather than a
+   token. */
+.auth-legal {
+  margin: .35rem 0 0;
+  font-size: .8rem;
+  line-height: 1.5;
+  text-align: center;
+  color: rgba(255, 255, 255, .58);
+}
+.auth-legal a { color: rgba(255, 255, 255, .82); text-decoration: underline; text-underline-offset: 2px; }
+.auth-legal a:hover { color: #fff; }
+
 .tabs { display: flex; gap: .3rem; padding: .25rem; margin-bottom: .4rem;
         border: 1px solid rgba(255, 255, 255, .1); border-radius: 999px; }
 .tab { flex: 1; background: transparent; border: 0; padding: .55rem; border-radius: 999px; color: var(--muted); }

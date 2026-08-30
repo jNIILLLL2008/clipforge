@@ -30,6 +30,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
 <link rel="stylesheet" href="/static/landing.css?v=2">
+<link rel="stylesheet" href="/static/legal.css?v=1">
 <script>document.documentElement.className += " js";</script>
 
 <script type="application/ld+json">
@@ -474,6 +475,15 @@
           <li><a href="/app">Start free</a></li>
         </ul>
       </div>
+      <div>
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+          <li><a href="/cookies">Cookies</a></li>
+          <li><a href="/cookies" data-cookie-prefs>Cookie preferences</a></li>
+        </ul>
+      </div>
     </div>
   </div>
 </footer>
@@ -552,5 +562,6 @@
     .catch(function () { /* keep the printed prices */ });
 })();
 </script>
+<script src="/static/consent.js?v=1" data-optional="__CONSENT_OPTIONAL__" data-ga="__GA_ID__"></script>
 </body>
 </html>

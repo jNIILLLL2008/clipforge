@@ -118,6 +118,17 @@ renders but reports what is weak.
 |---|---|
 | `/` | `frontend/landing.html` — the marketing page |
 | `/app` | `frontend/index.html` — the studio, which shows its own sign-in |
+| `/privacy` | `frontend/privacy.html` — what is collected, and the rights over it |
+| `/terms` | `frontend/terms.html` — the agreement accepted at sign-up |
+| `/cookies` | `frontend/cookies.html` — every cookie by name, and the consent control |
+
+Every page is served through one token substitution rather than as a static
+file. `__ORIGIN__` is the obvious reason — `canonical` and `og:url` have to be
+absolute, and a file on disk cannot know its own domain — but the policy pages
+need it for a second: the controller's name, the contact address and the
+governing law belong in config, not in markup a fork would forget to change.
+They come from `LEGAL_*` in `.env`, and `check_deploy.py` warns when they are
+still the defaults.
 
 The landing page follows `DESIGN.md` in the repo root, taken from
 [VoltAgent/awesome-design-md](https://github.com/VoltAgent/awesome-design-md)
@@ -369,3 +380,10 @@ That is deliberate and fine for one instance, but if you run several:
       for paying subscribers on daily automation.
 - [ ] Google OAuth verification, needed before non-test users can connect a
       channel without a warning screen
+- [ ] `LEGAL_ENTITY`, `LEGAL_CONTACT_EMAIL` and `LEGAL_JURISDICTION` set to
+      real values. The policies are served with these substituted in, so the
+      defaults publish a controller who does not exist — `check_deploy.py`
+      warns about it
+- [ ] Have a lawyer read `/terms` and `/privacy` against how you actually
+      operate. They are written to match what this code does, which is the
+      hard part and not the whole job

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -85,7 +85,7 @@ def health() -> JSONResponse:
 
 
 #: Paths whose content changes during development and must never be cached.
-_PAGE_PATHS = {"/", "/app", "/pair"}
+_PAGE_PATHS = {"/", "/app", "/pair", "/privacy", "/terms", "/cookies"}
 
 
 #: Assets that change on every deploy and whose filenames are not fingerprinted.
@@ -137,17 +137,120 @@ async def not_found(request, exc):
     return JSONResponse({"detail": "Not found."}, status_code=404)
 
 
-#: Rendered once. PUBLIC_URL is fixed for the life of the process.
-_LANDING_CACHE: Optional[str] = None
+#: Rendered once each. Everything substituted below is fixed for the life of
+#: the process, so the work is done on first request and then kept.
+_PAGE_CACHE: Dict[str, str] = {}
+
+
+def _optional_section() -> str:
+    """The "Optional" block of the cookie policy.
+
+    Two different pages depending on whether this deployment actually runs a
+    tracker, because the honest answer differs and a policy that describes
+    cookies the site does not set is as wrong as one that omits cookies it
+    does.
+    """
+    if not settings.optional_trackers:
+        return (
+            "<p>\n"
+            "  <strong>There are currently none.</strong> This deployment runs no\n"
+            "  analytics, so nothing is set beyond the two entries above and there\n"
+            "  is nothing to accept or decline. That is why you have not been shown\n"
+            "  a cookie banner: a notice with no choice behind it is theatre.\n"
+            "</p>\n"
+            "<p>\n"
+            "  If that changes, this table fills in, the banner appears, and nothing\n"
+            "  optional loads until you have answered it.\n"
+            "</p>"
+        )
+
+    return (
+        "<p>\n"
+        "  Off until you accept. Nothing below is loaded, and no request is made\n"
+        "  to the domains involved, until you have said yes -- declining is not a\n"
+        "  setting applied after the fact, it stops the script being fetched at\n"
+        "  all. You can change your answer at any time.\n"
+        "</p>\n"
+        '<div class="legal-table-wrap">\n'
+        '  <table class="legal-table">\n'
+        "    <thead>\n"
+        "      <tr><th>Name</th><th>Set by</th><th>What it does</th><th>Expires</th></tr>\n"
+        "    </thead>\n"
+        "    <tbody>\n"
+        "      <tr>\n"
+        "        <td>_ga</td>\n"
+        "        <td>Google Analytics</td>\n"
+        "        <td>Tells repeat visits apart so a page view is not counted as a new\n"
+        "            person each time. We ask Google to truncate your IP address and\n"
+        "            we switch off its advertising signals.</td>\n"
+        "        <td>2 years</td>\n"
+        "      </tr>\n"
+        "      <tr>\n"
+        "        <td>_ga_*</td>\n"
+        "        <td>Google Analytics</td>\n"
+        "        <td>Holds the state of the current visit for the specific property.</td>\n"
+        "        <td>2 years</td>\n"
+        "      </tr>\n"
+        "    </tbody>\n"
+        "  </table>\n"
+        "</div>\n"
+        "<p>\n"
+        "  We use this to see which pages get read and where people give up. We do\n"
+        "  not use it for advertising, and we have not enabled the settings that\n"
+        "  would let Google build an advertising profile from it. Declining changes\n"
+        "  nothing about how the product works.\n"
+        "</p>"
+    )
+
+
+#: Token -> value, applied to every page served through _page_html. Kept in one
+#: place so a policy page cannot drift from the config the app actually runs on
+#: -- printing a company name or a contact address that nobody reads is how a
+#: privacy notice ends up naming a controller who does not exist.
+def _substitutions() -> Dict[str, str]:
+    address = settings.legal_address.strip()
+    trackers = settings.optional_trackers
+    return {
+        "__ORIGIN__": settings.public_url,
+        "__LEGAL_ENTITY__": settings.legal_entity,
+        "__LEGAL_EMAIL__": settings.legal_contact_email,
+        "__LEGAL_JURISDICTION__": settings.legal_jurisdiction,
+        "__LEGAL_UPDATED__": settings.legal_updated,
+        # Written as a whole sentence, or omitted entirely. A policy with a
+        # dangling "Registered at ." reads as unmaintained.
+        "__LEGAL_ADDRESS_LINE__": f"We are at {address}." if address else "",
+        "__PRICE_STARTER__": settings.price_label_starter,
+        "__PRICE_PRO__": settings.price_label_pro,
+        "__CONSENT_OPTIONAL__": ",".join(trackers),
+        "__GA_ID__": settings.ga_measurement_id,
+        "__TRACKER_COUNT__": str(len(trackers)) if trackers else "none",
+        "__OPTIONAL_SECTION__": _optional_section(),
+    }
+
+
+def _page_html(name: str) -> str:
+    """A frontend page with its tokens filled in.
+
+    Served through substitution rather than as a static file because canonical
+    and og:url have to be absolute, and a file on disk cannot know what domain
+    it is being served from. The policy pages need it for a second reason: the
+    contact address and the governing law belong in config, not in markup that
+    a fork would forget to change.
+    """
+    cached = _PAGE_CACHE.get(name)
+    if cached is not None and not settings.debug:
+        return cached
+
+    html = (FRONTEND / name).read_text(encoding="utf-8")
+    for token, value in _substitutions().items():
+        html = html.replace(token, value)
+    _PAGE_CACHE[name] = html
+    return html
 
 
 def _landing_html() -> str:
-    """landing.html with __ORIGIN__ replaced by the real public URL."""
-    global _LANDING_CACHE
-    if _LANDING_CACHE is None or settings.debug:
-        raw = (FRONTEND / "landing.html").read_text(encoding="utf-8")
-        _LANDING_CACHE = raw.replace("__ORIGIN__", settings.public_url)
-    return _LANDING_CACHE
+    """Kept as a name because it reads better at the call site."""
+    return _page_html("landing.html")
 
 
 # Pages are served last so /api routes always win.
@@ -164,6 +267,21 @@ if FRONTEND.exists():
         kept, because the answer only changes when PUBLIC_URL does.
         """
         return HTMLResponse(_landing_html())
+
+    @app.get("/privacy")
+    def privacy() -> HTMLResponse:
+        """What we collect and what you can make us do about it."""
+        return HTMLResponse(_page_html("privacy.html"))
+
+    @app.get("/terms")
+    def terms() -> HTMLResponse:
+        """The agreement somebody accepts by creating an account."""
+        return HTMLResponse(_page_html("terms.html"))
+
+    @app.get("/cookies")
+    def cookies() -> HTMLResponse:
+        """Every cookie by name, and the consent control for the optional ones."""
+        return HTMLResponse(_page_html("cookies.html"))
 
     @app.get("/robots.txt", include_in_schema=False)
     def robots() -> Response:
@@ -186,14 +304,29 @@ if FRONTEND.exists():
         )
         return Response(body, media_type="text/plain")
 
+    #: Public pages, with how often each is worth recrawling. The policies
+    #: change rarely but must be indexable: a privacy notice nobody can find
+    #: is not much better than one that does not exist.
+    _SITEMAP = (
+        ("/", "weekly", "1.0"),
+        ("/privacy", "yearly", "0.4"),
+        ("/terms", "yearly", "0.4"),
+        ("/cookies", "yearly", "0.3"),
+    )
+
     @app.get("/sitemap.xml", include_in_schema=False)
     def sitemap() -> Response:
-        """One public page, listed properly rather than not at all."""
+        """The public pages, listed properly rather than not at all."""
+        urls = "".join(
+            f"  <url><loc>{settings.public_url}{path}</loc>"
+            f"<changefreq>{freq}</changefreq>"
+            f"<priority>{priority}</priority></url>\n"
+            for path, freq, priority in _SITEMAP
+        )
         body = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-            f"  <url><loc>{settings.public_url}/</loc>"
-            "<changefreq>weekly</changefreq><priority>1.0</priority></url>\n"
+            f"{urls}"
             "</urlset>\n"
         )
         return Response(body, media_type="application/xml")
@@ -242,16 +375,26 @@ if FRONTEND.exists():
 
 - Home: {settings.public_url}/
 - App: {settings.public_url}/app
+- Privacy: {settings.public_url}/privacy
+- Terms: {settings.public_url}/terms
+- Cookies: {settings.public_url}/cookies
 """
         return Response(body, media_type="text/plain")
 
     @app.get("/app")
-    def studio_app() -> FileResponse:
-        """The product itself, which shows its own sign-in when logged out."""
-        return FileResponse(FRONTEND / "index.html")
+    def studio_app() -> HTMLResponse:
+        """The product itself, which shows its own sign-in when logged out.
+
+        Rendered rather than sent from disk because the cookie notice is
+        configured through the same token substitution as the marketing pages.
+        Serving this as a static file would ship the tokens unreplaced, and the
+        consent script would treat the placeholder as the name of a tracker to
+        ask about.
+        """
+        return HTMLResponse(_page_html("index.html"))
 
     @app.get("/pair")
-    def pair_page() -> FileResponse:
+    def pair_page() -> HTMLResponse:
         """Where a render agent sends the browser to be approved.
 
         The same file as /app: it already knows how to show a sign-in when
@@ -259,4 +402,4 @@ if FRONTEND.exists():
         common case. Somebody who has just installed the agent is, more often
         than not, on a machine where they have not signed in yet.
         """
-        return FileResponse(FRONTEND / "index.html")
+        return HTMLResponse(_page_html("index.html"))

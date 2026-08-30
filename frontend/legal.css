@@ -1,0 +1,293 @@
+/* ClipForge policy pages and the cookie notice.
+
+   These sit on top of landing.css and borrow its tokens, so a policy page is
+   the marketing page's typography at a reading measure rather than a second
+   design. Nothing here redefines a colour: change --ink or --ember once and
+   the policies follow.
+
+   The one rule worth stating is the measure. Legal text is the only prose on
+   the site somebody reads top to bottom, so the column is capped at ~68
+   characters and the line height is looser than the marketing copy. */
+
+/* --------------------------------------------------------------- page -- */
+.legal {
+  padding: clamp(96px, 12vw, 152px) 0 clamp(64px, 8vw, 104px);
+}
+
+.legal-wrap {
+  width: min(var(--max), 100% - (var(--gutter) * 2));
+  margin: 0 auto;
+  max-width: 760px;
+}
+
+.legal-head { margin-bottom: clamp(36px, 5vw, 56px); }
+
+.legal-head .eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ember-ink);
+  margin: 0 0 14px;
+}
+
+.legal-head h1 { margin: 0 0 18px; }
+
+.legal-head .lede { margin: 0; max-width: 62ch; }
+
+/* The date sits in mono with the other measured values on the site. */
+.legal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-subtle);
+}
+
+/* ------------------------------------------------------------- prose -- */
+.legal-body { font-size: 16px; line-height: 1.72; color: var(--ink-muted); }
+
+.legal-body h2 {
+  font-size: clamp(20px, 2.2vw, 25px);
+  line-height: 1.25;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  margin: clamp(44px, 5vw, 60px) 0 14px;
+  padding-top: clamp(28px, 3.5vw, 40px);
+  border-top: 1px solid var(--hairline);
+  scroll-margin-top: 96px;
+}
+
+/* The first section should not carry a rule directly under the header block,
+   which already ends in one. */
+.legal-body > h2:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+
+.legal-body h3 {
+  font-size: 16.5px;
+  letter-spacing: -.01em;
+  color: var(--ink);
+  margin: 30px 0 8px;
+}
+
+.legal-body p { margin: 0 0 16px; }
+
+.legal-body ul, .legal-body ol { margin: 0 0 18px; padding-left: 22px; }
+.legal-body li { margin-bottom: 9px; }
+.legal-body li::marker { color: var(--ink-subtle); }
+
+.legal-body a { color: var(--ember-ink); text-decoration: underline; text-underline-offset: 3px; }
+.legal-body a:hover { color: var(--ink); }
+
+.legal-body strong { color: var(--ink); font-weight: 500; }
+
+.legal-body code, .legal-body .mono {
+  font-family: var(--mono);
+  font-size: .92em;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* A pulled-out statement of what the section actually means in practice.
+   Used sparingly: a policy that is all emphasis emphasises nothing. */
+.legal-note {
+  margin: 22px 0;
+  padding: 16px 18px;
+  background: var(--ember-wash);
+  border: 1px solid var(--ember-edge);
+  border-left-width: 2px;
+  border-radius: var(--r-ctrl);
+  color: var(--ink);
+  font-size: 15px;
+}
+.legal-note p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------- table -- */
+/* Used for the cookie inventory and the subprocessor list. Wide content on a
+   narrow screen scrolls inside its own box rather than the page. */
+.legal-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 22px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+}
+
+.legal-table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 520px; }
+
+.legal-table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+  font-weight: 500;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.legal-table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+  color: var(--ink-muted);
+}
+
+.legal-table tr:last-child td { border-bottom: 0; }
+.legal-table td:first-child { color: var(--ink); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+
+/* ----------------------------------------------------------- summary -- */
+/* The "what this says" box at the top of each policy. Not a substitute for
+   the text below it, and it says so. */
+.legal-summary {
+  margin: 0 0 clamp(36px, 5vw, 52px);
+  padding: clamp(20px, 3vw, 26px);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+}
+
+.legal-summary h2 {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+  font-weight: 500;
+  margin: 0 0 14px;
+  border: 0;
+  padding: 0;
+}
+
+.legal-summary ul { margin: 0; padding-left: 20px; }
+.legal-summary li { color: var(--ink); margin-bottom: 8px; font-size: 15px; }
+.legal-summary li:last-child { margin-bottom: 0; }
+
+.legal-summary .fine { margin: 14px 0 0; font-size: 13px; color: var(--ink-subtle); }
+
+/* -------------------------------------------------------------- nav ---- */
+/* Sibling policies, so somebody who lands on one can reach the others. */
+.legal-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: clamp(48px, 6vw, 68px);
+  padding-top: 28px;
+  border-top: 1px solid var(--hairline);
+}
+
+.legal-more a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 14px;
+  text-decoration: none;
+  transition: color .18s var(--ease), border-color .18s var(--ease);
+}
+.legal-more a:hover { color: var(--ink); border-color: var(--hairline-firm); }
+.legal-more a[aria-current="page"] { color: var(--ink); border-color: var(--ember-edge); background: var(--ember-wash); }
+
+/* ====================================================== cookie notice == */
+/* Bottom-left rather than a full-width bar: it has to be dismissible without
+   covering the primary call to action, and a banner that hides the button is
+   how consent gets clicked without being read.
+
+   It is hidden until the script decides it is needed, so a returning visitor
+   who already chose never sees it flash.
+
+   Every colour below is written as var(--marketing, var(--app)). The notice
+   appears on both the marketing pages, which load landing.css, and the studio,
+   which loads styles.css -- and the two name their tokens differently. The
+   fallback chain resolves to whichever sheet is present, in that sheet's own
+   light and dark values, without this file having to know which one it is. */
+.cc {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 90;
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--hairline-firm, var(--border-firm));
+  border-radius: var(--r-panel, var(--radius));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .38), 0 2px 8px rgba(0, 0, 0, .22);
+  color: var(--ink, var(--text));
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+@media (prefers-color-scheme: light) {
+  .cc { box-shadow: 0 18px 44px rgba(20, 20, 22, .14), 0 2px 6px rgba(20, 20, 22, .07); }
+}
+
+.cc[hidden] { display: none; }
+
+/* Arrival. Skipped entirely under reduced motion. */
+.cc { animation: cc-in .34s var(--ease-rise, cubic-bezier(.2, .8, .2, 1)) both; }
+@keyframes cc-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc { animation: none; }
+}
+
+.cc-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-subtle, var(--muted));
+  margin: 0 0 10px;
+}
+.cc-title .brand-mark { font-size: 11px; color: var(--ember, var(--accent)); }
+
+.cc p { margin: 0 0 14px; color: var(--ink-muted, var(--muted)); }
+.cc a { color: var(--ember-ink, var(--accent-ink)); text-decoration: underline; text-underline-offset: 3px; }
+.cc a:hover { color: var(--ink, var(--text)); }
+
+.cc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.cc-btn {
+  flex: 1 1 auto;
+  min-width: 120px;
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: var(--r-ctrl, var(--radius-ctrl));
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .18s var(--ease, ease), border-color .18s var(--ease, ease), color .18s var(--ease, ease);
+}
+
+.cc-accept { background: var(--ember, var(--accent)); color: var(--on-ember, var(--accent-text)); }
+.cc-accept:hover { background: #f0714b; }
+
+/* Same size and prominence as accept. A reject button that is quieter than
+   accept is the pattern regulators fine people for. */
+.cc-reject { background: var(--surface-2); color: var(--ink, var(--text)); border-color: var(--hairline-firm, var(--border-firm)); }
+.cc-reject:hover { background: var(--surface-sunk, var(--bg)); border-color: var(--ink-subtle, var(--muted)); }
+
+.cc-btn:focus-visible, .legal-more a:focus-visible {
+  outline: 2px solid var(--ember-ink, var(--accent-ink));
+  outline-offset: 2px;
+}

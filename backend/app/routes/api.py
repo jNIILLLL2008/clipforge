@@ -14,7 +14,7 @@ from typing import List, Optional
 from fastapi import (
     APIRouter, Depends, File, HTTPException, Response, UploadFile, status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,9 @@ from ..auth import create_token, current_user, register, verify_password
 from ..config import settings
 from ..db import get_db
 from ..logging_setup import get_logger
-from ..models import PLAN_LIMITS, Job, JobStatus, User
+from ..models import (
+    PLAN_LIMITS, AgentPairing, Job, JobStatus, Niche, User, utcnow,
+)
 from ..sources.upload import VIDEO_SUFFIXES, user_dir
 from ..worker import enqueue
 
@@ -235,6 +237,173 @@ def delete_upload(name: str, user: User = Depends(current_user)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such upload.")
     target.unlink()
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Your data
+# --------------------------------------------------------------------------- #
+# A privacy policy that promises access and erasure without shipping either is
+# a worse position than having no policy, because the promise is now written
+# down. These two endpoints are what make section 6 of /privacy true.
+class DeleteAccount(BaseModel):
+    """Deleting an account asks for the password again.
+
+    A signed-in session is enough to change most things, but not to destroy
+    everything irreversibly: a borrowed laptop should not be able to do it, and
+    neither should a link somebody was tricked into clicking.
+    """
+
+    password: str
+    # Typed out in full, so the request cannot be made by accident and cannot
+    # be forged by a form post that guessed the shape of the body.
+    confirm: str = ""
+
+
+@router.get("/me/export")
+def export_my_data(user: User = Depends(current_user),
+                   db: Session = Depends(get_db)):
+    """Everything held about this account, as JSON.
+
+    Covers the right of access and the right to portability in one file:
+    machine-readable, and complete enough to be worth having.
+
+    Two things are deliberately absent. The password hash, because handing back
+    a hash helps nobody and helps an attacker who has the file. And the YouTube
+    refresh token, because it is a live credential -- exporting it would turn a
+    download into a way to walk off with the ability to post to somebody's
+    channel. Both are described rather than dumped.
+    """
+    jobs = (db.query(Job).filter(Job.owner_id == user.id)
+            .order_by(Job.id.asc()).all())
+
+    uploads = []
+    directory = user_dir(user.id)
+    if directory.exists():
+        uploads = [
+            {"name": path.name, "size_bytes": path.stat().st_size,
+             "modified": path.stat().st_mtime}
+            for path in sorted(directory.iterdir())
+            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
+        ]
+
+    niches = (db.query(Niche).filter(Niche.owner_id == user.id)
+              .order_by(Niche.id.asc()).all())
+
+    payload = {
+        "exported_at": utcnow().isoformat(),
+        "account": {
+            "email": user.email,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "plan": user.plan.value,
+            "plan_renews_at": (user.plan_renews_at.isoformat()
+                               if user.plan_renews_at else None),
+            "renders_this_period": user.renders_this_period,
+            "period_started_at": (user.period_started_at.isoformat()
+                                  if user.period_started_at else None),
+            "onboarded": user.onboarded,
+            "is_active": user.is_active,
+            "password": "Stored only as a salted PBKDF2-HMAC-SHA256 hash, "
+                        "which is not included here and cannot be reversed.",
+        },
+        "settings": user.settings or {},
+        "billing": {
+            "stripe_customer_id": user.stripe_customer_id,
+            "stripe_subscription_id": user.stripe_subscription_id,
+            "note": "Card details are held by Stripe and never reach "
+                    "ClipForge. Ask Stripe for those directly.",
+        },
+        "youtube": {
+            "connected": bool(user.youtube_refresh_token),
+            "channel_title": user.youtube_channel_title,
+            "channel_id": user.youtube_channel_id,
+            "connected_at": (user.youtube_connected_at.isoformat()
+                             if user.youtube_connected_at else None),
+            "refresh_token": "Held, but withheld from this export: it is a "
+                             "live credential for your channel. Disconnecting "
+                             "in Settings deletes it.",
+        },
+        "automation": {
+            "daily": user.automate_daily,
+            "time": user.automate_time,
+            "timezone": user.automate_timezone,
+            "last_run": (user.automate_last_run.isoformat()
+                         if user.automate_last_run else None),
+        },
+        "render_agent": {
+            "paired": bool(user.agent_token),
+            "last_seen": (user.agent_last_seen.isoformat()
+                          if user.agent_last_seen else None),
+        },
+        "niches": [niche.to_dict() for niche in niches],
+        "jobs": [job.to_dict(include_clips=True) for job in jobs],
+        "uploads": uploads,
+    }
+
+    stamp = utcnow().strftime("%Y-%m-%d")
+    return JSONResponse(
+        payload,
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="clipforge-my-data-{stamp}.json"',
+        },
+    )
+
+
+@router.post("/me/delete")
+def delete_my_account(body: DeleteAccount,
+                      response: Response,
+                      user: User = Depends(current_user),
+                      db: Session = Depends(get_db)):
+    """Erasure. Irreversible, and it happens now rather than in 30 days.
+
+    Order matters here. Files go first, because a row deleted before its files
+    are removed leaves footage on disk that nothing points at any more -- an
+    orphan nobody will ever find to delete. The database rows go last, in one
+    transaction, so a failure halfway leaves the account intact rather than
+    half-erased.
+    """
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "That password is not right.")
+    if body.confirm.strip().upper() != "DELETE":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            'Type DELETE to confirm.')
+
+    user_id = user.id
+    email = user.email
+
+    # 1. Rendered videos and thumbnails.
+    jobs = db.query(Job).filter(Job.owner_id == user_id).all()
+    for job in jobs:
+        for candidate in (job.output_path, job.thumbnail_path):
+            if candidate:
+                try:
+                    Path(candidate).unlink(missing_ok=True)
+                except OSError as exc:  # noqa: PERF203
+                    log.warning("Could not remove %s: %s", candidate, exc)
+
+    # 2. Uploaded footage, the whole per-user directory.
+    directory = user_dir(user_id)
+    if directory.exists():
+        shutil.rmtree(directory, ignore_errors=True)
+
+    # 3. The rows. Clips cascade from their job; pairings are cleared by hand
+    #    because they carry a nullable owner and would otherwise be left
+    #    pointing at a user that no longer exists.
+    for job in jobs:
+        db.delete(job)
+    db.query(Niche).filter(Niche.owner_id == user_id).delete(
+        synchronize_session=False)
+    db.query(AgentPairing).filter(AgentPairing.user_id == user_id).delete(
+        synchronize_session=False)
+    db.delete(user)
+    db.commit()
+
+    # The session cookie is now a token for an account that is gone. Clearing
+    # it means the browser is not left holding a credential to nothing.
+    response.delete_cookie("cf_token")
+    log.info("Deleted account %s (id=%s) at the owner's request.", email, user_id)
+    return {"ok": True, "deleted": True}
 
 
 # --------------------------------------------------------------------------- #
