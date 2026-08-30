@@ -224,10 +224,10 @@ class Settings:
         # from anyone in the EU or the UK: a privacy notice has to name the
         # controller, and "the website" is not a legal person you can complain
         # about to a regulator.
-        self.legal_entity: str = _str("LEGAL_ENTITY", "ClipForge")
+        self.legal_entity: str = _str("LEGAL_ENTITY", "Jainil Ramji")
         self.legal_address: str = _str("LEGAL_ADDRESS", "")
         self.legal_contact_email: str = _str(
-            "LEGAL_CONTACT_EMAIL", "support@clipforge.app")
+            "LEGAL_CONTACT_EMAIL", "switchjainil@gmail.com")
         # The law the terms are read under, and the courts that hear a dispute.
         self.legal_jurisdiction: str = _str(
             "LEGAL_JURISDICTION", "England and Wales")

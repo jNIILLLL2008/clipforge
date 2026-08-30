@@ -244,7 +244,7 @@ ok(f"{settings.render_workers} render worker thread(s)")
 # bypass.
 print("\nLegal")
 if settings.legal_entity.strip().lower() in ("", "clipforge"):
-    warn("LEGAL_ENTITY is still the default",
+    warn("LEGAL_ENTITY names no real controller",
          "A privacy notice has to name the controller -- the actual person or "
          "company the contract is with. 'ClipForge' is a product name, not a "
          "legal person a regulator can act against.")
@@ -252,7 +252,7 @@ else:
     ok(f"Controller is {settings.legal_entity}")
 
 if settings.legal_contact_email.strip().lower() in ("", "support@clipforge.app"):
-    warn("LEGAL_CONTACT_EMAIL is still the default",
+    warn("LEGAL_CONTACT_EMAIL points nowhere real",
          "Data requests, complaints and copyright notices all go here. Point "
          "it at an address somebody reads.")
 else:
