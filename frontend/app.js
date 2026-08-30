@@ -648,6 +648,45 @@ $('manage-billing').onclick = async () => {
   } catch (err) { toast(err.message); }
 };
 
+/* ------------------------------------------------------------------ data --
+   Access and erasure. Both are promised on /privacy, so both are reachable
+   from the screen that page names, in the number of clicks it implies. */
+
+/* The export is a plain link to an endpoint that already answers with
+   Content-Disposition: attachment, matching how the agent download and the
+   finished renders work. No blob, no object URL, and nothing to clean up. */
+
+$('delete-account').onclick = async () => {
+  /* Two prompts, because the server asks for two things and neither should be
+     satisfiable by one stray click. The typed word goes first: someone who is
+     not sure stops here, before being asked for a password. */
+  const confirmation = window.prompt(
+    'This deletes your account, your uploads and your renders. It cannot be '
+    + 'undone.\n\nType DELETE to confirm.');
+  if (confirmation === null) return;
+  if (confirmation.trim().toUpperCase() !== 'DELETE') {
+    toast('Not deleted. You need to type DELETE exactly.');
+    return;
+  }
+
+  const password = window.prompt('Enter your password to confirm.');
+  if (!password) return;
+
+  try {
+    await api('/api/me/delete', {
+      method: 'POST',
+      body: { password, confirm: 'DELETE' },
+    });
+    /* The session is gone server-side and the cookie has been cleared, so
+       there is nothing left to show. A reload lands on the signed-out gate. */
+    state.user = null;
+    toast('Account deleted.');
+    setTimeout(() => { window.location = '/'; }, 1200);
+  } catch (err) {
+    toast(err.message);
+  }
+};
+
 const drop = $('drop');
 $('browse').onclick = () => $('file-input').click();
 $('file-input').onchange = (e) => uploadFiles([...e.target.files]);

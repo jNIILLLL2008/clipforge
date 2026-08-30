@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy: ClipForge</title>
+<meta name="description" content="What ClipForge collects, why it holds it, how long it keeps it, and how to get a copy or have it deleted.">
+<link rel="canonical" href="__ORIGIN__/privacy">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0b0d'/><path d='M16 7l7 9-7 9-7-9z' fill='%23e2603a'/></svg>">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/backdrop.css?v=2">
+<link rel="stylesheet" href="/static/landing.css?v=2">
+<link rel="stylesheet" href="/static/legal.css?v=1">
+<script>document.documentElement.className += " js";</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true">
+  <span class="b1"></span><span class="b2"></span><span class="b3"></span>
+</div>
+<div class="backdrop-scrim" aria-hidden="true"></div>
+<div class="backdrop-grain" aria-hidden="true"></div>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="nav-shell">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
+    <div class="nav-actions" style="margin-left:auto">
+      <a class="btn btn-quiet btn-sm" href="/app">Sign in</a>
+      <a class="btn btn-primary btn-sm" href="/app">Start free</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="legal">
+  <div class="legal-wrap">
+
+    <div class="legal-head">
+      <p class="eyebrow">Privacy</p>
+      <h1 class="display-lg">What we hold, and why.</h1>
+      <p class="lede">
+        This describes the personal data we collect when you use ClipForge,
+        what it is used for, who else sees it, and how to get it back or have
+        it erased.
+      </p>
+      <div class="legal-meta">
+        <span>Last updated: __LEGAL_UPDATED__</span>
+        <span>Controller: __LEGAL_ENTITY__</span>
+        <span>Contact: <a href="mailto:__LEGAL_EMAIL__">__LEGAL_EMAIL__</a></span>
+      </div>
+    </div>
+
+    <div class="legal-summary">
+      <h2>The short version</h2>
+      <ul>
+        <li>An account is an email address and a password. That is the whole sign-up.</li>
+        <li>Card numbers never reach our servers. Stripe handles payment and we store its customer reference.</li>
+        <li>Connecting YouTube stores a token that lets us upload to your channel. Disconnecting deletes it.</li>
+        <li>We do not sell personal data, and we do not share it for advertising.</li>
+        <li>You can download everything we hold, or delete the account outright, from inside the app.</li>
+      </ul>
+      <p class="fine">A summary is not the policy. The sections below are.</p>
+    </div>
+
+    <div class="legal-body">
+
+      <h2 id="who">1. Who is responsible</h2>
+      <p>
+        __LEGAL_ENTITY__ is the data controller for the personal data described
+        here — meaning we decide what is collected and why. __LEGAL_ADDRESS_LINE__
+        Questions, requests and complaints go to
+        <a href="mailto:__LEGAL_EMAIL__">__LEGAL_EMAIL__</a>, and we aim to
+        answer within 30 days.
+      </p>
+
+      <h2 id="what">2. What we collect</h2>
+      <p>
+        Everything below is either given to us directly or produced by using
+        the product. There is no third-party data broker in this list, and
+        nothing is bought in.
+      </p>
+
+      <h3>Account</h3>
+      <ul>
+        <li><strong>Email address.</strong> Your identifier for signing in, and how we reach you about the account.</li>
+        <li><strong>Password.</strong> Stored only as a salted PBKDF2-HMAC-SHA256 hash. We cannot read it, and cannot tell you what it is.</li>
+        <li><strong>Account timestamps</strong> — when it was created, which plan it is on, and how many renders it has used in the current period.</li>
+      </ul>
+
+      <h3>Billing</h3>
+      <ul>
+        <li><strong>Stripe customer and subscription references.</strong> Short opaque identifiers that let us ask Stripe about your subscription.</li>
+        <li><strong>Plan and renewal date.</strong></li>
+      </ul>
+      <div class="legal-note">
+        <p>
+          <strong>We never see your card.</strong> Payment details are entered
+          on Stripe's own checkout and are held by Stripe. Nothing resembling a
+          card number, expiry or security code reaches ClipForge, and there is
+          no field in our database that could store one.
+        </p>
+      </div>
+
+      <h3>Your footage and the videos we make</h3>
+      <ul>
+        <li><strong>Files you upload</strong>, kept in storage scoped to your account.</li>
+        <li><strong>Render records</strong> — the title, format settings, retention score and the reasons behind it, duration, file size, and whether the run succeeded or was rejected.</li>
+        <li><strong>Clip records</strong> — for each segment used, its source, source URL, original title and author, licence, and where in the source it was taken from.</li>
+        <li><strong>Finished videos and thumbnails</strong>, until you delete them.</li>
+      </ul>
+
+      <h3>Connected YouTube account</h3>
+      <ul>
+        <li><strong>An OAuth refresh token</strong> for the channel you connect. This is what allows uploading on your behalf, and it is the most sensitive item we hold.</li>
+        <li><strong>Channel name and channel ID</strong>, so the app can show which channel it is about to publish to.</li>
+        <li><strong>The video ID and URL</strong> of anything we upload for you.</li>
+      </ul>
+      <p>
+        We ask Google only for the permission needed to upload to your channel.
+        We do not read your comments, your subscriber list, or your analytics.
+        Our use of information received from Google APIs follows the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>,
+        including its Limited Use requirements.
+      </p>
+
+      <h3>Render agent</h3>
+      <p>
+        If you run the render agent on your own machine, we store a token for
+        it, the time it was last seen, and the machine name it reported during
+        pairing, so the approval screen can tell you which computer is asking.
+      </p>
+
+      <h3>Technical logs</h3>
+      <ul>
+        <li><strong>IP address</strong>, held in memory to enforce rate limits and in server logs for a short period.</li>
+        <li><strong>Request and error logs</strong>, used to find faults.</li>
+      </ul>
+
+      <h2 id="why">3. Why we hold it, and on what legal basis</h2>
+      <div class="legal-table-wrap">
+        <table class="legal-table">
+          <thead>
+            <tr><th>Data</th><th>Purpose</th><th>Basis (UK/EU GDPR)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Email, password</td><td>Creating your account and signing you in</td><td>Performance of a contract</td></tr>
+            <tr><td>Uploads, renders, clips</td><td>Producing and storing the videos you asked for</td><td>Performance of a contract</td></tr>
+            <tr><td>YouTube token</td><td>Publishing to the channel you connected</td><td>Performance of a contract</td></tr>
+            <tr><td>Stripe references, plan</td><td>Taking payment and applying plan limits</td><td>Performance of a contract</td></tr>
+            <tr><td>IP address, logs</td><td>Rate limiting, abuse prevention, fault finding</td><td>Legitimate interests — keeping the service up and not being abused</td></tr>
+            <tr><td>Invoices and tax records</td><td>Meeting accounting obligations</td><td>Legal obligation</td></tr>
+            <tr><td>Optional analytics</td><td>Understanding which pages get used</td><td>Consent — and only if you give it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Where the basis is legitimate interests, you can object at any time and
+        we will stop unless there is a reason we must continue. Where it is
+        consent, you can withdraw it as easily as you gave it — see the
+        <a href="/cookies">Cookie Policy</a>.
+      </p>
+
+      <h2 id="sharing">4. Who else sees it</h2>
+      <p>
+        We do not sell personal data. We do not share it with advertisers. It
+        goes to the following processors, each because the product cannot work
+        without them:
+      </p>
+      <div class="legal-table-wrap">
+        <table class="legal-table">
+          <thead>
+            <tr><th>Processor</th><th>What it receives</th><th>Why</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Railway</td><td>Everything stored by the app; server logs</td><td>Hosting the application and its database</td></tr>
+            <tr><td>Stripe</td><td>Email, payment details you enter with them</td><td>Subscriptions and payment</td></tr>
+            <tr><td>Google / YouTube</td><td>The videos you publish and the token authorising it</td><td>Uploading to your channel</td></tr>
+            <tr><td>Anthropic</td><td>Title and description text generated for a render</td><td>Writing video titles and descriptions, where that feature is enabled</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        We may also disclose data where the law requires it, or to establish or
+        defend a legal claim. If ClipForge is ever sold or merged, account data
+        would transfer with it, and we would tell you before that happened.
+      </p>
+
+      <h3>Transfers outside the UK and EEA</h3>
+      <p>
+        Some of these providers process data in the United States. Those
+        transfers rely on the European Commission's Standard Contractual
+        Clauses, the UK Addendum where applicable, or the provider's
+        certification under the EU–US Data Privacy Framework.
+      </p>
+
+      <h2 id="keeping">5. How long we keep it</h2>
+      <div class="legal-table-wrap">
+        <table class="legal-table">
+          <thead>
+            <tr><th>Data</th><th>Kept for</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Account record</td><td>Until you delete the account</td></tr>
+            <tr><td>Uploads and renders</td><td>Until you delete them, or the account</td></tr>
+            <tr><td>YouTube token</td><td>Until you disconnect the channel, or delete the account</td></tr>
+            <tr><td>Pairing requests</td><td>15 minutes, then discarded whether used or not</td></tr>
+            <tr><td>Rate-limit records</td><td>In memory only, minutes at most</td></tr>
+            <tr><td>Server logs</td><td>Up to 30 days</td></tr>
+            <tr><td>Invoices and tax records</td><td>Six years, because accounting law requires it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Deleting your account removes the account record, your uploads, your
+        renders and thumbnails, your clip history, your render-agent tokens and
+        your YouTube token. Billing records that we are legally required to keep
+        survive it; nothing else does.
+      </p>
+      <div class="legal-note">
+        <p>
+          Deleting your ClipForge account does not delete videos already
+          published to YouTube. Those live on your own channel and only you can
+          remove them.
+        </p>
+      </div>
+
+      <h2 id="rights">6. Your rights</h2>
+      <p>
+        If you are in the UK or the EEA you have the rights below. We honour
+        them for everyone, wherever you are, because operating two standards is
+        how the wrong one gets applied.
+      </p>
+      <ul>
+        <li><strong>Access.</strong> Get a copy of what we hold. <span class="mono">Activity &rarr; Your data &rarr; Download my data</span>, or ask us.</li>
+        <li><strong>Portability.</strong> That copy is machine-readable JSON, so you can take it elsewhere.</li>
+        <li><strong>Rectification.</strong> Correct anything wrong. Most of it is editable in the app.</li>
+        <li><strong>Erasure.</strong> Delete the account and its contents. <span class="mono">Activity &rarr; Your data &rarr; Delete account</span>. It is immediate and cannot be undone.</li>
+        <li><strong>Restriction and objection.</strong> Ask us to stop a particular use, including anything based on legitimate interests.</li>
+        <li><strong>Withdraw consent.</strong> For anything you consented to, at any time, without affecting what was lawful beforehand.</li>
+      </ul>
+      <p>
+        None of these cost anything, and using one will never get your account
+        treated differently. If you think we have handled your data badly, tell
+        us first at <a href="mailto:__LEGAL_EMAIL__">__LEGAL_EMAIL__</a> — and
+        if we do not put it right, you can complain to your national data
+        protection authority. In the UK that is the Information Commissioner's
+        Office at <a href="https://ico.org.uk/make-a-complaint/" rel="noopener">ico.org.uk</a>.
+      </p>
+
+      <h2 id="security">7. How it is protected</h2>
+      <ul>
+        <li>Everything is served over HTTPS, with HSTS set on live traffic.</li>
+        <li>Passwords are salted and hashed with PBKDF2-HMAC-SHA256. Plaintext is never stored.</li>
+        <li>The session cookie is <span class="mono">HttpOnly</span>, <span class="mono">SameSite=Lax</span> and <span class="mono">Secure</span> in production, so scripts cannot read it and other sites cannot ride on it.</li>
+        <li>Every request for a render, an upload or a job is checked against the account that owns it before anything is returned.</li>
+        <li>Sign-in, sign-up and pairing are rate limited, so guessing is slow.</li>
+        <li>A Content Security Policy restricts what the pages may load, and the API refuses cross-origin credentialed requests.</li>
+      </ul>
+      <p>
+        No system is beyond compromise. If a breach happens that is likely to
+        put your rights at risk, we will notify the relevant supervisory
+        authority within 72 hours of becoming aware of it, and tell you
+        directly without undue delay.
+      </p>
+
+      <h2 id="children">8. Children</h2>
+      <p>
+        ClipForge is not for people under 16, and we do not knowingly collect
+        their data. If you believe a child has created an account, write to
+        <a href="mailto:__LEGAL_EMAIL__">__LEGAL_EMAIL__</a> and we will remove it.
+      </p>
+
+      <h2 id="cookies">9. Cookies</h2>
+      <p>
+        One cookie is needed to keep you signed in. Anything beyond it is
+        optional and asked for first. The
+        <a href="/cookies">Cookie Policy</a> lists every one by name.
+      </p>
+
+      <h2 id="changes">10. Changes</h2>
+      <p>
+        If this policy changes in a way that materially affects you, we will
+        email the address on your account before the change takes effect. The
+        date at the top always reflects the current version.
+      </p>
+
+    </div>
+
+    <nav class="legal-more" aria-label="Policies">
+      <a href="/privacy" aria-current="page">Privacy Policy</a>
+      <a href="/terms">Terms of Service</a>
+      <a href="/cookies">Cookie Policy</a>
+    </nav>
+
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
+      <p class="fine">
+        Short-form video that finds its own clips, scores itself for
+        retention, and publishes on a schedule.
+      </p>
+    </div>
+    <div class="foot-cols">
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="/#how">How it works</a></li>
+          <li><a href="/#retention">Retention gate</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+          <li><a href="/cookies">Cookies</a></li>
+          <li><a href="/cookies" data-cookie-prefs>Cookie preferences</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script src="/static/consent.js?v=1" data-optional="__CONSENT_OPTIONAL__" data-ga="__GA_ID__"></script>
+</body>
+</html>

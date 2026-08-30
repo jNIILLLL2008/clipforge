@@ -237,6 +237,42 @@ else:
     ok("Scheduler disabled here (another instance must run it)")
 ok(f"{settings.render_workers} render worker thread(s)")
 
+# --------------------------------------------------------------- legal --- #
+# These are warnings rather than blockers on purpose. Shipping with the
+# defaults is a real problem, but it is not the kind that should stop a deploy
+# at 2am -- and a blocker somebody has to bypass is a blocker they learn to
+# bypass.
+print("\nLegal")
+if settings.legal_entity.strip().lower() in ("", "clipforge"):
+    warn("LEGAL_ENTITY is still the default",
+         "A privacy notice has to name the controller -- the actual person or "
+         "company the contract is with. 'ClipForge' is a product name, not a "
+         "legal person a regulator can act against.")
+else:
+    ok(f"Controller is {settings.legal_entity}")
+
+if settings.legal_contact_email.strip().lower() in ("", "support@clipforge.app"):
+    warn("LEGAL_CONTACT_EMAIL is still the default",
+         "Data requests, complaints and copyright notices all go here. Point "
+         "it at an address somebody reads.")
+else:
+    ok(f"Legal contact is {settings.legal_contact_email}")
+
+if not settings.legal_jurisdiction.strip():
+    warn("LEGAL_JURISDICTION is empty",
+         "The terms need a governing law, and it should match where the "
+         "entity above is established.")
+else:
+    ok(f"Governed by the law of {settings.legal_jurisdiction}")
+
+if settings.ga_measurement_id:
+    ok("Analytics is on, behind the consent notice")
+    print("          -> nothing loads until a visitor accepts. Verify in "
+          "DevTools that no request to googletagmanager.com is made before "
+          "clicking, and that the CSP names it after.")
+else:
+    ok("No analytics configured, so no cookie banner is shown")
+
 # --------------------------------------------------------------- verdict - #
 print("\n" + "=" * 64)
 if BLOCKERS:

@@ -1690,18 +1690,41 @@ check("a permissions policy is set", "permissions-policy" in _h)
 # The CSP has to allow exactly what the pages load, or it silently breaks
 # them: the response is a 200 and the image renders its alt text. A hardcoded
 # list of origins here is what let that ship, so read the pages instead.
+#
+# Only what the browser *fetches* counts. A src= is always a subresource, and
+# so is an href on <link>, but an href on an <a> is somewhere the reader may
+# choose to go -- CSP does not govern navigation, and the policy pages link
+# out to Stripe, Google and the ICO on purpose. Adding those to the CSP would
+# grant fetch permissions to origins nothing ever fetches, which is the
+# opposite of what this check is for.
 _HTML = Path(__file__).resolve().parent / "frontend"
 _page_origins: set = set()
-for _f in ("landing.html", "index.html", "404.html"):
-    _page_origins |= set(re.findall(
-        r'(?:href|src)="(https://[a-z0-9.-]+)',
-        (_HTML / _f).read_text(encoding="utf-8")))
+for _f in ("landing.html", "index.html", "404.html",
+           "privacy.html", "terms.html", "cookies.html"):
+    _markup = (_HTML / _f).read_text(encoding="utf-8")
+    _page_origins |= set(re.findall(r'src="(https://[a-z0-9.-]+)', _markup))
+    for _tag in re.findall(r"<link\b[^>]*>", _markup):
+        _page_origins |= set(re.findall(r'href="(https://[a-z0-9.-]+)', _tag))
 # A JSON-LD vocabulary URL. It is an identifier, nothing fetches it.
 _page_origins.discard("https://schema.org")
 check("the pages were scanned for origins", len(_page_origins) >= 2,
       sorted(_page_origins))
 for _origin in sorted(_page_origins):
     check(f"CSP allows {_origin.split('//')[1]}", _origin in _CSP)
+
+# The other half of the same rule: an origin the pages only ever link to must
+# stay out of the CSP. This is what stops somebody "fixing" a failure above by
+# pasting every hostname on the page into the header.
+_linked_only = set()
+for _f in ("privacy.html", "terms.html", "cookies.html"):
+    _markup = (_HTML / _f).read_text(encoding="utf-8")
+    for _tag in re.findall(r"<a\b[^>]*>", _markup):
+        _linked_only |= set(re.findall(r'href="(https://[a-z0-9.-]+)', _tag))
+_linked_only -= _page_origins
+check("the policy pages link out to somewhere", len(_linked_only) >= 2,
+      sorted(_linked_only))
+for _origin in sorted(_linked_only):
+    check(f"CSP does not grant {_origin.split('//')[1]}", _origin not in _CSP)
 
 # blob: is the one that cannot be caught by scanning markup. app.js turns the
 # /api/studio/preview PNG body into an object URL, in the settings preview and
@@ -1733,6 +1756,9 @@ check("a window that has passed frees up",
       (time.sleep(0.01) or _Buckets().hit("fresh", 1, 0.0001)[0]))
 
 # Longest prefix wins, so /api/auth/login is stricter than /api.
+check("deleting an account is limited far more tightly than logging in",
+      _limit_for("/api/me/delete")[1][0] < _limit_for("/api/auth/login")[1][0],
+      f'{_limit_for("/api/me/delete")[1]} vs {_limit_for("/api/auth/login")[1]}')
 check("login is limited more tightly than the rest of the api",
       _limit_for("/api/auth/login")[1][0] < _limit_for("/api/me")[1][0],
       f"{_limit_for('/api/auth/login')[1]} vs {_limit_for('/api/me')[1]}")
@@ -1778,6 +1804,169 @@ check("a missing page is a real page", _missing.status_code == 404
 _missing_api = client.get("/api/no-such-thing")
 check("a missing api route stays JSON", _missing_api.status_code == 404
       and _missing_api.json().get("detail"))
+
+
+section("policies and consent")
+
+# The policy pages are rendered through token substitution rather than served
+# from disk, so the failure mode is a page that ships "__LEGAL_EMAIL__" to a
+# regulator. Every page is checked for leftovers, including the two that are
+# not policies but go through the same renderer.
+_POLICY_PATHS = ("/privacy", "/terms", "/cookies")
+
+for _path in _POLICY_PATHS + ("/", "/app"):
+    _page = client.get(_path)
+    check(f"{_path} is served", _page.status_code == 200, _page.status_code)
+    _left = set(re.findall(r"__[A-Z_]+__", _page.text))
+    check(f"{_path} has no unreplaced tokens", not _left, _left or "")
+
+# A privacy notice has to name a controller and a way to reach them. Both come
+# from config, so this fails loudly on a deployment that has not set them.
+_privacy = client.get("/privacy").text
+check("the privacy policy names the controller",
+      settings.legal_entity in _privacy)
+check("and gives a contact address",
+      settings.legal_contact_email in _privacy)
+check("and states the erasure right",
+      "Erasure" in _privacy)
+_terms = client.get("/terms").text
+# Collapsed, because the sentences being looked for are wrapped in the source
+# and a raw substring match would only be testing where the line breaks fall.
+_terms_flat = " ".join(_terms.split())
+check("the terms name the governing law",
+      settings.legal_jurisdiction in _terms)
+check("and address rights in third-party footage",
+      "does not give you the right to it" in _terms_flat)
+check("and do not claim ownership of the user's videos",
+      "You own the footage you upload" in _terms_flat)
+
+# The cookie policy has to describe this deployment, not a generic one.
+_cookies = client.get("/cookies").text
+check("the cookie policy names the session cookie", "cf_token" in _cookies)
+if settings.optional_trackers:
+    check("it lists the optional cookies", "_ga" in _cookies)
+else:
+    check("it says there is nothing optional to accept",
+          "There are currently none" in _cookies)
+    check("and does not describe cookies it never sets",
+          "_ga" not in _cookies)
+
+# The gate itself. Nothing optional may be reachable from the markup, because
+# a tracker in the page loads before anybody has answered the notice.
+for _path in ("/", "/app") + _POLICY_PATHS:
+    _page = client.get(_path).text
+    check(f"{_path} loads the consent script", "/static/consent.js" in _page)
+    check(f"{_path} inlines no tracker",
+          "googletagmanager" not in _page and "google-analytics" not in _page)
+
+_declared = re.search(r'data-optional="([^"]*)"', client.get("/").text)
+check("the page declares what it will ask about",
+      _declared is not None and
+      _declared.group(1) == ",".join(settings.optional_trackers),
+      _declared.group(1) if _declared else "absent")
+
+# The CSP must move with the config. Listing analytics origins on a deployment
+# that does not run analytics grants a permission for nothing; omitting them on
+# one that does blocks the script after consent was given, which is worse.
+from backend.app.security import _build_csp  # noqa: E402
+
+_saved_ga = settings.ga_measurement_id
+settings.ga_measurement_id = ""
+check("no analytics origins in the CSP when it is off",
+      "googletagmanager" not in _build_csp())
+settings.ga_measurement_id = "G-SELFTEST"
+_csp_on = _build_csp()
+check("the tag manager is allowed when it is on",
+      "https://www.googletagmanager.com" in _csp_on)
+check("and so is the endpoint it reports to",
+      "https://www.google-analytics.com" in _csp_on)
+settings.ga_measurement_id = _saved_ga
+
+# Somebody has to be able to find these.
+_sitemap = client.get("/sitemap.xml").text
+for _path in _POLICY_PATHS:
+    check(f"the sitemap lists {_path}", f"<loc>{settings.public_url}{_path}</loc>" in _sitemap)
+
+# And reach them from anywhere on the site.
+for _path in ("/", "/app") + _POLICY_PATHS:
+    _page = client.get(_path).text
+    check(f"{_path} links to the policies",
+          'href="/privacy"' in _page and 'href="/terms"' in _page)
+
+# Accepting the terms happens at the button that creates the account.
+check("the sign-up form states what it accepts",
+      "By creating an account you agree to the" in client.get("/app").text)
+
+# /privacy tells people which screen to go to. That instruction is markup in a
+# different file, and nothing else would notice if the panel moved.
+_app_html = (Path(__file__).resolve().parent / "frontend" / "index.html").read_text(
+    encoding="utf-8")
+_account_screen = re.search(
+    r'<section id="tab-(\w+)"[^>]*>(?:(?!</section>).)*?id="h-account"',
+    _app_html, re.S)
+check("the account controls live on a known screen", _account_screen is not None)
+if _account_screen:
+    _screen = _account_screen.group(1)
+    check("the data controls sit on that same screen",
+          re.search(
+              r'<section id="tab-' + _screen + r'"[^>]*>(?:(?!</section>).)*?id="h-data"',
+              _app_html, re.S) is not None,
+          f"h-data is not inside tab-{_screen}")
+    # The nav label is what the policy has to name, not the element id.
+    _label = re.search(
+        r'aria-controls="tab-' + _screen + r'".*?<span class="lbl">([^<]+)</span>',
+        _app_html, re.S)
+    check("the policy names the screen the user actually sees",
+          _label is not None and _label.group(1) in client.get("/privacy").text,
+          f"nav says {_label.group(1) if _label else '?'}")
+
+
+section("your data")
+
+# The two rights /privacy promises. If these break, the policy becomes a claim
+# the product does not honour.
+_rights_email = "erasure@example.com"
+_rights_pw = "erase-me-please-1"
+client.post("/api/auth/signup",
+            json={"email": _rights_email, "password": _rights_pw})
+
+_export = client.get("/api/me/export")
+check("the export is served", _export.status_code == 200, _export.status_code)
+check("as a download", "attachment" in _export.headers.get("content-disposition", ""))
+_dump = _export.json()
+check("it contains the account", _dump["account"]["email"] == _rights_email)
+for _key in ("account", "settings", "billing", "youtube", "automation",
+             "render_agent", "niches", "jobs", "uploads"):
+    check(f"the export covers {_key}", _key in _dump)
+# Two things that must never leave the server, even to their owner: a hash
+# helps nobody who has it legitimately, and the refresh token is a live
+# credential for somebody's channel.
+check("it withholds the password hash", "pbkdf2$" not in _json.dumps(_dump))
+check("and the refresh token",
+      _dump["youtube"]["refresh_token"].startswith("Held, but withheld"))
+
+check("deletion refuses a wrong password",
+      client.post("/api/me/delete",
+                  json={"password": "not-the-password",
+                        "confirm": "DELETE"}).status_code == 403)
+check("and refuses without the typed confirmation",
+      client.post("/api/me/delete",
+                  json={"password": _rights_pw, "confirm": ""}).status_code == 400)
+check("the account survives a refused deletion",
+      client.get("/api/me").status_code == 200)
+
+check("deletion works when both are right",
+      client.post("/api/me/delete",
+                  json={"password": _rights_pw,
+                        "confirm": "DELETE"}).status_code == 200)
+with session_scope() as _db:
+    check("the row is gone",
+          _db.query(User).filter(User.email == _rights_email).one_or_none() is None)
+client.cookies.clear()
+check("and the credentials no longer work",
+      client.post("/api/auth/login",
+                  json={"email": _rights_email,
+                        "password": _rights_pw}).status_code >= 400)
 
 
 section("licence gate")

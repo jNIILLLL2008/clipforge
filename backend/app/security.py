@@ -26,31 +26,54 @@ from .logging_setup import get_logger
 
 log = get_logger("security")
 
-#: Everything the frontend actually loads, and nothing else. Google Fonts
-#: serves its stylesheet from one host and the font files from another, so both
-#: are needed. Simple Icons is the YouTube mark under the hero.
-_CSP = "; ".join([
-    "default-src 'self'",
-    # The two inline scripts on the marketing page are the reason for
-    # 'unsafe-inline'. Removing it means moving them into files and paying an
-    # extra request for the class flag that has to run before first paint.
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
-    # blob: is not optional: /api/studio/preview returns a PNG body that
-    # app.js turns into an object URL, on the settings screen and again in the
-    # guided walkthrough. Without it both previews render their alt text, which
-    # is exactly what they did between this header shipping and this line.
-    "img-src 'self' data: blob: https://cdn.simpleicons.org",
-    "connect-src 'self'",
-    "media-src 'self'",
-    # None of these are used, so none of them should be possible.
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
-])
+
+def _build_csp() -> str:
+    """Everything the frontend actually loads, and nothing else.
+
+    Built rather than written out because one entry is conditional. Analytics
+    is optional and consent-gated, and its hosts must not be reachable on a
+    deployment that does not run it -- a policy listing origins the site never
+    contacts is a permission granted for no reason. The corollary matters more:
+    when analytics *is* switched on, these entries have to exist or the browser
+    blocks the script and the consent the visitor gave is quietly ignored.
+    """
+    script = ["'self'", "'unsafe-inline'"]
+    connect = ["'self'"]
+    img = ["'self'", "data:", "blob:", "https://cdn.simpleicons.org"]
+
+    if settings.ga_measurement_id:
+        script.append("https://www.googletagmanager.com")
+        connect += ["https://www.google-analytics.com",
+                    "https://analytics.google.com"]
+        img.append("https://www.google-analytics.com")
+
+    return "; ".join([
+        "default-src 'self'",
+        # The two inline scripts on the marketing page are the reason for
+        # 'unsafe-inline'. Removing it means moving them into files and paying
+        # an extra request for the class flag that has to run before first
+        # paint.
+        "script-src " + " ".join(script),
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        # blob: is not optional: /api/studio/preview returns a PNG body that
+        # app.js turns into an object URL, on the settings screen and again in
+        # the guided walkthrough. Without it both previews render their alt
+        # text, which is exactly what they did between this header shipping and
+        # this line.
+        "img-src " + " ".join(img),
+        "connect-src " + " ".join(connect),
+        "media-src 'self'",
+        # None of these are used, so none of them should be possible.
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "upgrade-insecure-requests",
+    ])
+
+
+_CSP = _build_csp()
 
 
 class SecurityHeaders(BaseHTTPMiddleware):
@@ -156,6 +179,11 @@ _LIMITS: Dict[str, Tuple[int, float]] = {
     # but lookup does report a machine name, so it stays tight.
     "/api/agent/pair/lookup": (30, 300.0),
     "/api/agent/pair/approve": (20, 600.0),
+    # Deleting an account checks the password, which makes this a second
+    # password oracle with a much smaller budget than the login route. Nobody
+    # deletes their account five times in an hour, and a script that is
+    # guessing gets very few attempts before it is refused.
+    "/api/me/delete": (5, 3600.0),
     "/api/uploads": (30, 300.0),
     "/api/studio/run": (20, 300.0),
     "/api": (240, 60.0),

@@ -216,6 +216,32 @@ class Settings:
         self.price_label_pro: str = _str("PRICE_LABEL_PRO", "$39/mo")
         self.billing_enabled: bool = bool(self.stripe_secret_key)
 
+        # --- legal --------------------------------------------------------- #
+        # Who the contract is with, and where to write. The policy pages are
+        # rendered with these substituted in, so a deployment that has not set
+        # them says "ClipForge" and points at a support address rather than
+        # printing a company that does not exist. Set them before taking money
+        # from anyone in the EU or the UK: a privacy notice has to name the
+        # controller, and "the website" is not a legal person you can complain
+        # about to a regulator.
+        self.legal_entity: str = _str("LEGAL_ENTITY", "ClipForge")
+        self.legal_address: str = _str("LEGAL_ADDRESS", "")
+        self.legal_contact_email: str = _str(
+            "LEGAL_CONTACT_EMAIL", "support@clipforge.app")
+        # The law the terms are read under, and the courts that hear a dispute.
+        self.legal_jurisdiction: str = _str(
+            "LEGAL_JURISDICTION", "England and Wales")
+        # Printed on the policies so a reader can tell whether what they are
+        # looking at predates the thing they are worried about.
+        self.legal_updated: str = _str("LEGAL_UPDATED", "30 August 2026")
+
+        # --- analytics ----------------------------------------------------- #
+        # Optional, off unless an id is set, and gated behind consent even
+        # then -- see frontend/consent.js. Setting this is what makes the
+        # cookie notice appear, which is the right order: the banner exists
+        # because a tracker does, not the other way round.
+        self.ga_measurement_id: str = _str("GA_MEASUREMENT_ID")
+
         for directory in (self.upload_dir, self.render_dir, self.cache_dir):
             try:
                 directory.mkdir(parents=True, exist_ok=True)
@@ -230,6 +256,16 @@ class Settings:
                     f"chown {self.storage_dir} before dropping privileges. "
                     f"Otherwise set STORAGE_DIR to a writable path."
                 ) from exc
+
+    @property
+    def optional_trackers(self) -> List[str]:
+        """The non-essential things a visitor is actually asked about.
+
+        Empty in a default install, and an empty list means no cookie banner:
+        there is nothing to consent to, and asking anyway trains people to
+        click through a notice that means nothing.
+        """
+        return ["analytics"] if self.ga_measurement_id else []
 
     def validate(self) -> List[str]:
         """Problems that should stop a production boot."""

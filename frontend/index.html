@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
 <link rel="stylesheet" href="/static/styles.css?v=2">
+<link rel="stylesheet" href="/static/legal.css?v=1">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0b0d'/><path d='M16 7l7 9-7 9-7-9z' fill='%23e2603a'/></svg>">
 </head>
 <body>
@@ -59,6 +60,11 @@
         </span>
       </button>
       <p class="error" id="auth-error" role="alert"></p>
+      <p class="auth-legal">
+        By creating an account you agree to the
+        <a href="/terms">Terms of Service</a> and the
+        <a href="/privacy">Privacy Policy</a>.
+      </p>
     </form>
 
     <ul class="points">
@@ -245,8 +251,34 @@
             <button class="ghost" id="manage-billing">Manage subscription</button>
             <button class="ghost" id="logout">Sign out</button>
           </div>
+
           <h2 class="group-title" id="h-plans">Plans</h2>
           <div id="plans" class="rows" aria-labelledby="h-plans"></div>
+
+          <!-- The two rights the privacy policy promises, where it says they
+               are. A policy that points at a screen with no such button is
+               worse than one that stays quiet. -->
+          <h2 class="group-title" id="h-data">Your data</h2>
+          <div class="rows" aria-labelledby="h-data">
+            <div class="row">
+              <span>Download my data</span>
+              <span class="note">Everything we hold, as JSON.</span>
+            </div>
+            <div class="row">
+              <span>Delete account</span>
+              <span class="note">Immediate, and cannot be undone.</span>
+            </div>
+          </div>
+          <div class="actions-row">
+            <a class="ghost btn-link" id="export-data"
+               href="/api/me/export" download>Download my data</a>
+            <button class="ghost danger" id="delete-account">Delete account</button>
+          </div>
+          <p class="note">
+            Deleting removes your account, uploads, renders and connected
+            channel token. Videos already published stay on your YouTube
+            channel. See the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.
+          </p>
         </div>
       </div>
     </section>
@@ -322,5 +354,6 @@
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script src="/static/app.js?v=2"></script>
+<script src="/static/consent.js?v=1" data-optional="__CONSENT_OPTIONAL__" data-ga="__GA_ID__"></script>
 </body>
 </html>
