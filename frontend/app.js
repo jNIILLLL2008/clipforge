@@ -373,9 +373,12 @@ function rowHtml(field) {
       <input type="color" class="swatch" id="${id}" data-key="${field.key}" value="${esc(value)}"></div>`;
   }
   if (field.kind === 'list') {
+    /* A field may carry its own placeholder where "one per line" is not enough
+       of a hint -- a box wanting a pasted URL should show the shape of one. */
+    const hint = field.placeholder || 'one per line';
     return `<div class="row stacked"><span class="row-label">${esc(field.label)}</span>
       <textarea class="row-input" id="${id}" data-key="${field.key}"
-        placeholder="one per line">${esc((value || []).join('\n'))}</textarea></div>`;
+        placeholder="${esc(hint)}">${esc((value || []).join('\n'))}</textarea></div>`;
   }
   if (field.kind === 'int' || field.kind === 'float') {
     const step = field.kind === 'float' ? '0.05' : '1';

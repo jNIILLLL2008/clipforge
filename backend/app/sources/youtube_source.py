@@ -59,6 +59,26 @@ _VIDEO_ID = re.compile(r"^[\w\-]{11}$")
 #: to one of these produces /@channel/shorts/videos, which is not a real page.
 _TAB_SUFFIXES = ("/shorts", "/videos", "/streams", "/featured", "/search")
 
+#: Playlist ids that exist but can never be read by a server. WL (Watch Later)
+#: and LL (Liked videos) are private to the signed-in account no matter who
+#: holds the link, and an RD/UL mix is generated per-viewer and never ends, so
+#: scanning one returns an arbitrary slice of YouTube rather than a playlist.
+#: Catching these here turns a confusing empty run into a specific message.
+_UNUSABLE_PLAYLISTS = ("WL", "LL")
+_MIX_PREFIXES = ("RD", "UL")
+
+#: A playlist id taken from a link's list= parameter. Loose on purpose: the
+#: parameter name has already proved what it is, and YouTube has added id
+#: prefixes before -- rejecting an unfamiliar one would be worse than passing
+#: it through and letting yt-dlp say no.
+_PLAYLIST_ID = re.compile(r"^[\w\-]{2,}$")
+
+#: A playlist id typed on its own, with no link around it to vouch for it.
+#: Stricter, because "football" is a plausible thing to type into a box asking
+#: for a playlist and it must not be turned into a URL that 404s. Real ids
+#: open with an uppercase prefix (PL, UU, OL, FL, TL) and run on from there.
+_BARE_PLAYLIST_ID = re.compile(r"^[A-Z]{2}[\w\-]{6,}$")
+
 #: YouTube's own "Duration: under 4 minutes" search filter. A plain search
 #: returns mostly long videos that all die on the duration filter later, so
 #: this narrows the field server-side first. Taken from the desktop tool.
@@ -77,6 +97,86 @@ _BLOCK_SIGNS = (
 #: Sentinel for "every client answered, none of them had anything", which is
 #: what a silent block looks like from in here.
 _EMPTY_FROM_ALL = "__empty_from_all_clients__"
+
+
+def playlist_id(value: str) -> str:
+    """The playlist id in whatever somebody pasted, or "".
+
+    The whole feature is "paste a link", so this has to accept every shape the
+    address bar produces, not just the tidy one:
+
+        youtube.com/playlist?list=PLxxx          the share link
+        youtube.com/watch?v=abc&list=PLxxx       a video *inside* a playlist
+        youtu.be/abc?list=PLxxx                  the short share link
+        m.youtube.com/playlist?list=PLxxx        pasted from a phone
+        PLxxx                                    the bare id
+
+    The second one matters most. It is what you get by copying the address
+    while watching, and it is the common paste. Left alone, yt-dlp would take
+    it as one video and the playlist would be silently ignored -- the run would
+    work, return a single clip, and never say why.
+
+    Returns "" for anything with no playlist in it, and for playlists a server
+    can never read; the caller decides what to tell the user.
+    """
+    value = (value or "").strip()
+    if not value:
+        return ""
+
+    if "list=" in value:
+        # Not urlparse: a pasted link can arrive with a stray fragment or a
+        # trailing bracket from a chat client, and the id is the run of legal
+        # characters after the parameter either way.
+        match = re.search(r"[?&]list=([\w\-]+)", value)
+        found = match.group(1) if match else ""
+    elif "/" in value or "." in value:
+        # A URL, but not one carrying a playlist. A plain video link is the
+        # likely paste, and it is not a playlist however much it looks like one.
+        return ""
+    else:
+        # A bare token, held to the stricter shape: nothing vouches for it.
+        return value if _BARE_PLAYLIST_ID.match(value) and not (
+            value in _UNUSABLE_PLAYLISTS or value.startswith(_MIX_PREFIXES)
+        ) else ""
+
+    if not found or not _PLAYLIST_ID.match(found):
+        return ""
+    if found in _UNUSABLE_PLAYLISTS or found.startswith(_MIX_PREFIXES):
+        return ""
+    return found
+
+
+def playlist_problem(value: str) -> str:
+    """Why a pasted playlist link is unusable, or "" if it is fine.
+
+    Kept beside the parser rather than in the advice layer, so what counts as
+    a playlist and how that is explained to somebody stay in one place. The
+    two failures need different words: a link with no playlist in it is a
+    mistake to correct, while Watch Later is a playlist that simply cannot be
+    read from a server, and telling someone to "copy the address again" there
+    would send them round a loop they cannot win.
+    """
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if playlist_id(value):
+        return ""
+
+    match = re.search(r"[?&]list=([\w\-]+)", value)
+    named = match.group(1) if match else value
+    if named in _UNUSABLE_PLAYLISTS or named.startswith(_MIX_PREFIXES):
+        if named.startswith(_MIX_PREFIXES):
+            return ("that is an auto-generated mix, which YouTube builds per "
+                    "viewer and never ends")
+        return ("Watch Later and Liked videos are private to your account and "
+                "cannot be read by a server, even with the link")
+    return "no playlist in it -- the address has no 'list=' in it"
+
+
+def playlist_url(value: str) -> str:
+    """A pasted playlist link, normalised to the canonical playlist page."""
+    found = playlist_id(value)
+    return f"https://www.youtube.com/playlist?list={found}" if found else ""
 
 
 def _slug(term: str) -> str:
@@ -315,6 +415,17 @@ class YouTubeSource:
         cfg = self.config
         urls: List[str] = []
 
+        # Playlists first. A playlist is the most explicit thing a user can
+        # say about what they want -- they picked these videos by hand -- so it
+        # outranks a channel tab, which outranks a keyword search. The pool
+        # fills in this order and stops when it is full.
+        playlists = [
+            url for url in
+            (playlist_url(p) for p in (cfg.get("source_playlists") or []))
+            if url
+        ]
+        urls.extend(playlists)
+
         channels = [c for c in (cfg.get("source_channels") or []) if c.strip()]
         tabs = [t for t in (cfg.get("channel_tabs") or ["videos", "shorts"]) if t]
         searches = [s for s in (cfg.get("channel_search_terms") or []) if s.strip()]
@@ -422,8 +533,9 @@ class YouTubeSource:
         if not urls:
             log.info("No channels or search terms configured for YouTube.")
             self.last_problem = (
-                "The YouTube source has nothing to look at. Add a channel "
-                "under Source channels, or give the niche some search terms."
+                "The YouTube source has nothing to look at. Paste a playlist "
+                "link under Playlists, add a channel under Source channels, "
+                "or give the niche some search terms."
             )
             return []
 

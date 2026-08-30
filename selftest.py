@@ -665,6 +665,91 @@ fine = review_cfg(sanitise({
 check("a workable config raises no blockers", fine.can_run,
       [f.title for f in fine.blockers])
 
+# --- playlists, pasted as links ---------------------------------------- #
+from backend.app.sources.youtube_source import (  # noqa: E402
+    YouTubeSource, playlist_problem, playlist_url,
+)
+
+# The point of the feature is that you paste whatever the address bar gives
+# you. The second case is the one that matters: copying the URL while watching
+# yields a *video* link carrying the playlist, and taken literally it would
+# fetch one video and silently ignore the playlist.
+_PL = "https://www.youtube.com/playlist?list=PLtest123abc"
+for _paste, _want in [
+    ("https://www.youtube.com/playlist?list=PLtest123abc", _PL),
+    ("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLtest123abc&index=4", _PL),
+    ("https://youtu.be/dQw4w9WgXcQ?list=PLtest123abc", _PL),
+    ("https://m.youtube.com/playlist?list=PLtest123abc", _PL),
+    ("  https://www.youtube.com/playlist?list=PLtest123abc  ", _PL),
+    ("PLtest123abc", _PL),
+]:
+    check(f"paste {_paste.strip()[:44]!r} resolves",
+          playlist_url(_paste) == _want, playlist_url(_paste))
+
+# Things that must never become a playlist URL. A bare word is the one that
+# would otherwise sail through and 404 much later.
+for _junk in ("https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              "https://www.youtube.com/@somechannel",
+              "football", "", "   "):
+    check(f"{_junk.strip()[:44]!r} is refused", playlist_url(_junk) == "")
+
+# Playlists that exist but a server can never read, and are worth saying so
+# about rather than returning nothing.
+for _private in ("https://www.youtube.com/playlist?list=WL",
+                 "https://www.youtube.com/playlist?list=LL",
+                 "https://www.youtube.com/watch?v=a&list=RDabcdef"):
+    check(f"{_private[-22:]!r} is refused", playlist_url(_private) == "")
+check("a private playlist is explained as private, not as a bad link",
+      "private" in playlist_problem(
+          "https://www.youtube.com/playlist?list=WL"))
+check("a mix is explained as a mix",
+      "mix" in playlist_problem(
+          "https://www.youtube.com/watch?v=a&list=RDabcdef"))
+check("a plain video link is explained as having no playlist",
+      "list=" in playlist_problem(
+          "https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
+
+# A playlist is the most explicit thing a user can say, so it is scanned
+# before channel tabs and keyword searches.
+_yt = YouTubeSource({
+    "source_playlists": ["https://www.youtube.com/watch?v=x&list=PLtest123abc"],
+    "source_channels": ["@somechannel"],
+    "channel_tabs": ["shorts"],
+})
+_urls = _yt.build_sources(["funny moments"])
+check("a pasted playlist becomes a discovery URL", _PL in _urls, _urls)
+check("and is scanned before channels and searches",
+      _urls.index(_PL) == 0, _urls)
+check("channels and searches still work alongside it",
+      any("/@somechannel" in u for u in _urls)
+      and any("hashtag" in u for u in _urls), _urls)
+check("an unusable link is dropped rather than scanned",
+      YouTubeSource({"source_playlists":
+                     ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}
+                    ).build_sources([]) == [], "a bad paste produced a URL")
+
+# A playlist alone is a complete configuration: no search terms needed.
+_only = YouTubeSource({"source_playlists": [_PL]}).build_sources([])
+check("a playlist on its own is enough to look at", _only == [_PL], _only)
+
+_pl_cfg = {"sources": ["youtube"], "source_playlists": [_PL]}
+check("a good playlist raises no blocker",
+      review_cfg(sanitise(_pl_cfg), available_sources=["youtube"]).can_run)
+check("a link with no playlist in it is a blocker",
+      not review_cfg(sanitise({"sources": ["youtube"], "source_playlists": [
+          "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}),
+          available_sources=["youtube"]).can_run)
+check("one bad link among good ones only warns",
+      review_cfg(sanitise({"sources": ["youtube"], "source_playlists": [
+          _PL, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}),
+          available_sources=["youtube"]).can_run)
+check("playlists set without the YouTube source are flagged",
+      any(f.title.startswith("Playlists are set")
+          for f in review_cfg(sanitise({
+              "sources": ["upload"], "clips": 3, "source_playlists": [_PL]}),
+              upload_count=9,
+              available_sources=["upload", "youtube"]).findings))
+
 slow = review_cfg(sanitise({
     "sources": ["upload"], "clips": 3, "target_seconds": 180,
     "max_clip_seconds": 60, "checklist_enabled": True,
