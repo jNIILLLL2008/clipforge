@@ -77,6 +77,13 @@ FIELDS: List[Dict[str, Any]] = [
           "How search terms become YouTube pages. Hashtag reads a tag's "
           "Shorts tab, search reads results filtered to under four minutes.",
           options=["hashtag", "search", "both"]),
+    field("source_playlists", "subject", "list", [],
+          "Playlists",
+          "Paste a YouTube playlist link, one per line, and clips are taken "
+          "from it. The link from the address bar while you are watching works "
+          "too -- the playlist is picked out of it. Watch Later, Liked videos "
+          "and auto-generated mixes cannot be read by a server.",
+          placeholder="https://www.youtube.com/playlist?list=..."),
     field("source_channels", "subject", "list", [],
           "Source channels",
           "Pull from specific channels rather than a general search. Only used "

@@ -91,6 +91,45 @@ def review(cfg: Dict, *, upload_count: int = 0,
                     f"Upload at least {clips}, or lower the clip count.",
                     "clips"))
 
+    # --- pasted playlist links -------------------------------------------- #
+    # A link that carries no playlist is the easy mistake: the address bar
+    # shows a plain video URL unless you opened the playlist itself. Left
+    # unsaid, the run just quietly has one fewer place to look.
+    pasted = [str(p).strip() for p in (cfg.get("source_playlists") or [])
+              if str(p).strip()]
+    if pasted:
+        from ..sources.youtube_source import playlist_problem
+
+        # The reason comes from the parser, so the wording matches why it
+        # actually refused rather than guessing.
+        bad = [(link, playlist_problem(link)) for link in pasted]
+        bad = [(link, why) for link, why in bad if why]
+
+        if bad and len(bad) == len(pasted):
+            reasons = "; ".join(sorted({why for _, why in bad}))
+            add(Finding(
+                "blocker", "No usable playlist in what you pasted",
+                f"Nothing can be taken from "
+                f"{'that link' if len(bad) == 1 else 'those links'}: {reasons}.",
+                "Open the playlist itself on YouTube and copy the address from "
+                "there -- a usable one contains 'list=' followed by an id.",
+                "source_playlists"))
+        elif bad:
+            add(Finding(
+                "warning",
+                f"{len(bad)} playlist link(s) skipped",
+                "; ".join(f"{link[:44]!r}: {why}" for link, why in bad[:3]),
+                "The rest are fine, so the run still has somewhere to look.",
+                "source_playlists"))
+        elif "youtube" not in sources:
+            # The links are fine, but nothing will ever read them.
+            add(Finding(
+                "warning", "Playlists are set but YouTube is not a source",
+                "Clips come from the sources you tick, and the playlist links "
+                "are only read by the YouTube source.",
+                "Add YouTube under Sources, or the playlists do nothing.",
+                "sources"))
+
     # --- searching for the thing you just told it to refuse --------------- #
     # "funny moments compilation" is the obvious search to write, and with the
     # derivative filter on it returns a pool that is then thrown away whole.
