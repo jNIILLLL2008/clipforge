@@ -175,12 +175,32 @@ def put_settings(body: SettingsIn, user: User = Depends(current_user),
     cfg = sanitise(body.settings, base=user.settings or {})
 
     # Plan ceilings are enforced here, not just in the UI.
-    cfg["clips"] = min(cfg["clips"], user.limits["max_clips"])
-    cfg["target_seconds"] = min(cfg["target_seconds"], user.limits["max_seconds"])
+    #
+    # And they are reported. Clamping in silence is how somebody sets a
+    # two-minute target on the free plan, watches it save, gets a sixty-second
+    # video every single time, and has no way to find out why -- the box reads
+    # 60 afterwards, so it looks like the setting was never applied rather than
+    # capped. Two people spent a while blaming the clip length for this.
+    capped = []
+    if cfg["clips"] > user.limits["max_clips"]:
+        capped.append(
+            f"clip count reduced from {cfg['clips']} to "
+            f"{user.limits['max_clips']}")
+        cfg["clips"] = user.limits["max_clips"]
+    if cfg["target_seconds"] > user.limits["max_seconds"]:
+        capped.append(
+            f"length reduced from {cfg['target_seconds']}s to "
+            f"{user.limits['max_seconds']}s")
+        cfg["target_seconds"] = user.limits["max_seconds"]
 
     user.settings = cfg
     db.commit()
-    return {"settings": cfg}
+    notice = ""
+    if capped:
+        notice = (f"Your {user.plan.value} plan caps these: "
+                  + "; ".join(capped)
+                  + ". Upgrade to lift the limit.")
+    return {"settings": cfg, "capped": capped, "notice": notice}
 
 
 class PreviewIn(BaseModel):
@@ -309,6 +329,40 @@ def run(body: RunIn, user: User = Depends(current_user),
     if busy:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "A run is already in progress.")
+
+    # The same check /studio/review runs, enforced rather than displayed.
+    #
+    # advice.py was written to stop a run -- "so the guided setup can stop them
+    # before they run it" -- but nothing ever called it on this path, so a
+    # blocker was only ever text in a side panel. A configuration that cannot
+    # work still queued, still spent a render, and still produced something
+    # wrong several minutes later: a target of 120s with five clips capped at
+    # 12s each renders exactly 60s, and the panel saying so is not much use to
+    # somebody who pressed the button on the other screen.
+    #
+    # Deliberately above the renders_this_period increment below, so being
+    # refused here costs nothing.
+    from ..render.advice import review as review_cfg
+    from ..sources.upload import VIDEO_SUFFIXES as _SUFFIXES, user_dir as _dir
+
+    _uploads = 0
+    _directory = _dir(user.id)
+    if _directory.exists():
+        _uploads = sum(1 for p in _directory.iterdir()
+                       if p.is_file() and p.suffix.lower() in _SUFFIXES)
+    _available = [s["name"] for s in catalogue(user.id)
+                  if s["enabled"] and s["configured"] and s["permitted"]]
+    _blockers = review_cfg(cfg, upload_count=_uploads,
+                           available_sources=_available).blockers
+    if _blockers:
+        # Every one of them, with the fix. One at a time would mean pressing
+        # the button once per problem to discover the next.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            " ".join(f"{b.title}: {b.detail}"
+                     + (f" {b.fix}" if b.fix else "")
+                     for b in _blockers),
+        )
 
     job = Job(
         owner_id=user.id,
