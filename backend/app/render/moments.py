@@ -56,6 +56,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from ..config import settings
 from ..logging_setup import get_logger
 from ..sources.base import SourceClip
+from . import curator
 from .overlay import _NON_SPEECH, parse_vtt
 
 log = get_logger("render.moments")
@@ -124,6 +125,10 @@ class Cut:
     score: float = 0.0
     label: str = ""
     why: str = ""
+    #: What is said inside the window. The label is one line chosen to read
+    #: well in the list; this is the whole excerpt, and it is what the curator
+    #: judges against the niche.
+    excerpt: str = ""
 
     @property
     def mined(self) -> bool:
@@ -348,6 +353,18 @@ def _trim_words(text: str, limit: int) -> str:
     return " ".join(kept) if len(kept) >= 3 else ""
 
 
+def _excerpt(cues: Sequence[_Cue], start: float, end: float,
+             limit: int = 420) -> str:
+    """Everything spoken inside the window, as one run of text."""
+    said: List[str] = []
+    for cue in cues:
+        if not cue.words or cue.end <= start or cue.start >= end:
+            continue
+        said.append(cue.text.strip())
+    text = " ".join(" ".join(said).split())
+    return text[:limit]
+
+
 def _quote(cues: Sequence[_Cue], start: float, end: float,
            limit: int = 38) -> str:
     """A line said inside the window, to name the moment in the list.
@@ -448,6 +465,18 @@ def _snap(start: float, cues: Sequence[_Cue], reach: float = 4.0) -> float:
 def mine(clip: SourceClip, fmt: Dict, wanted: int,
          already_used: Optional[Dict] = None) -> List[Cut]:
     """The best `wanted` moments inside one long source, best first."""
+    return mine_candidates(clip, fmt, wanted, already_used)
+
+
+def mine_candidates(clip: SourceClip, fmt: Dict, wanted: int,
+                    already_used: Optional[Dict] = None) -> List[Cut]:
+    """Up to `wanted` non-overlapping moments, best-measured first.
+
+    Asked for more than the video needs when a curator is available: the
+    heuristic decides what is worth *considering* and the shortlist is then
+    judged against the niche. Asked for exactly what is needed otherwise, in
+    which case this is the whole decision.
+    """
     duration = float(clip.duration or 0.0)
     slot = slot_seconds(fmt)
     head = float(fmt.get("skip_intro_seconds", 20) or 0)
@@ -515,6 +544,7 @@ def mine(clip: SourceClip, fmt: Dict, wanted: int,
             score=window.score,
             label=_quote(cues, start, start + slot),
             why=window.why(),
+            excerpt=_excerpt(cues, start, start + slot),
         ))
     return cuts
 
@@ -547,35 +577,95 @@ def _interleave(per_video: Sequence[Sequence[Cut]], wanted: int) -> List[Cut]:
     return out
 
 
+def _curate(per_source: List[List[Cut]], fmt: Dict, niche_name: str) -> None:
+    """Re-score the shortlists against what the subscriber said they want.
+
+    In place, and across every source at once, so a moment from episode four
+    can beat one from episode one on relevance rather than only on how loud it
+    was. Does nothing at all when there is no key, no description, or the call
+    fails -- see curator.py.
+    """
+    if not fmt.get("ai_moment_ranking", True) or not curator.available():
+        return
+    description = str(fmt.get("description") or "")
+    flat = [cut for cuts in per_source for cut in cuts if cut.mined]
+    if len(flat) < 2:
+        return
+
+    judged = curator.rank(
+        [{"source": (c.clip.title or "")[:60], "start": c.start or 0.0,
+          "excerpt": c.excerpt} for c in flat],
+        description=description, niche_name=niche_name)
+    if not judged:
+        return
+
+    for index, cut in enumerate(flat):
+        verdict = judged.get(index)
+        if verdict is None:
+            continue
+        cut.score = curator.blend(cut.score, verdict["score"])
+        if verdict["why"]:
+            cut.why = verdict["why"]
+
+    # Each source's own shortlist is re-ordered, so the "best from every
+    # video first" rule below hands over what the niche asked for rather than
+    # what merely measured loudest.
+    for cuts in per_source:
+        cuts.sort(key=lambda c: -c.score)
+
+
 def plan(clips: Sequence[SourceClip], fmt: Dict, wanted: int,
-         already_used: Optional[Dict] = None) -> List[Cut]:
+         already_used: Optional[Dict] = None,
+         niche_name: str = "") -> List[Cut]:
     """Turn downloaded sources into the excerpts the video is made of.
 
     A long source contributes several moments and a short one contributes
     itself, so a mixed pool -- two full episodes and three clips somebody
     uploaded -- works without the caller knowing which is which.
+
+    With a curator available the heuristic shortlists rather than decides: it
+    is good at finding where something is happening and blind to whether that
+    something is what the channel is about.
     """
     long_at = float(fmt.get("long_clip_seconds", 75) or 75)
     per_video = max(1, int(fmt.get("moments_per_video", 2) or 1))
+    shortlisting = (bool(fmt.get("ai_moment_ranking", True))
+                    and curator.available()
+                    and bool(str(fmt.get("description") or "").strip()))
+    #: Three per slot is enough for the ranking to have a real choice without
+    #: the prompt growing past what MAX_CANDIDATES will take anyway.
+    per_source_limit = min(per_video * 3, 8) if shortlisting else per_video
 
     per_source: List[List[Cut]] = []
     for clip in clips:
         duration = float(clip.duration or 0.0)
         if duration > long_at:
-            found = mine(clip, fmt, min(per_video, wanted), already_used)
+            found = mine_candidates(clip, fmt, max(per_video, per_source_limit),
+                                    already_used)
             if found:
-                log.info("%r: %d moment(s) at %s (%s).",
+                log.info("%r: %d candidate moment(s) at %s.",
                          (clip.title or "")[:40], len(found),
-                         ", ".join(f"{c.start:.0f}s" for c in found),
-                         found[0].why)
+                         ", ".join(f"{c.start:.0f}s" for c in found))
                 per_source.append(found)
                 continue
         per_source.append([Cut(clip=clip, start=None, duration=0.0,
                                source_duration=duration, score=0.0)])
+
+    _curate(per_source, fmt, niche_name)
+
+    # Only now cut each source back to its share, so the ranking got to see
+    # everything before anything was thrown away.
+    per_source = [cuts[:per_video] if any(c.mined for c in cuts) else cuts
+                  for cuts in per_source]
 
     cuts = _interleave(per_source, wanted)
     # Best first. The countdown reverses the timeline, so this is what puts
     # the strongest moment at number one, instead of whichever video happened
     # to download last.
     cuts.sort(key=lambda c: -c.score)
+    for cut in cuts:
+        log.info("  chose %r at %ss -- %s",
+                 (cut.clip.title or "")[:32],
+                 f"{cut.start:.0f}" if cut.start is not None else "whole",
+                 cut.why or "no reason recorded")
     return cuts

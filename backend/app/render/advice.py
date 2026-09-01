@@ -97,6 +97,22 @@ def review(cfg: Dict, *, upload_count: int = 0,
     # unsaid, the run just quietly has one fewer place to look.
     pasted = [str(p).strip() for p in (cfg.get("source_playlists") or [])
               if str(p).strip()]
+    if not pasted and "youtube" in sources:
+        # Nothing pasted at all, so none of the checks below have anything to
+        # look at -- and this is the configuration that produces the worst
+        # finished videos, because discovery falls back to keyword search.
+        # A search returns fan edits, scenes from the films and people talking
+        # about the show at a desk, every one of them a fair match for the
+        # words typed. No filter recovers from a pool that is mostly the wrong
+        # thing, so it has to be said here, before a render is spent on it.
+        add(Finding(
+            "warning", "It is searching rather than reading a playlist",
+            "With no playlist, clips are found by searching for your terms, "
+            "and a search returns whatever matches the words: fan edits, "
+            "reaction videos and clips from the films as readily as your "
+            "show. A playlist is proof of what the footage is, and the "
+            "moments get cut out of the videos in it.",
+            "Paste a playlist link under Playlists.", "source_playlists"))
     if pasted:
         from ..sources.youtube_source import playlist_problem
 

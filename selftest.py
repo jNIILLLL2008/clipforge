@@ -946,6 +946,112 @@ check("nor is a caption file that is not there",
       _mo._cues(SourceClip(source="s", external_id="x", title="", url="")) == [])
 
 
+section("the niche description finally reaches the clip picker")
+# The settings screen has said "Written for the AI that picks clips" since it
+# was written, and the description only ever went to the title writer. The
+# choice of which twenty seconds was made entirely by dialogue density and
+# loudness -- which is a good proxy for "a scene is happening" and says
+# nothing about *which* scene. Three niches on one playlist got identical
+# cuts, because nothing in the scoring could tell them apart.
+from backend.app.render import curator as _cur  # noqa: E402
+
+check("no key means no ranking, and no crash",
+      _cur.rank([{"excerpt": "a"}, {"excerpt": "b"}],
+                description="funny moments") == {},
+      "the heuristic ordering stands, exactly as before")
+
+_saved_key = settings.anthropic_api_key
+settings.anthropic_api_key = "test-key-never-used"
+try:
+    check("a niche with no description is not ranked either",
+          _cur.rank([{"excerpt": "a"}, {"excerpt": "b"}], description="  ") == {},
+          "there is nothing to rank against, and guessing beats nothing badly")
+    check("a single candidate is not worth a round trip",
+          _cur.rank([{"excerpt": "a"}], description="funny") == {})
+finally:
+    settings.anthropic_api_key = _saved_key
+
+# The model's reply, in the shapes models actually send.
+check("plain JSON is read",
+      _cur._extract('{"scores": [{"n": 1, "score": 0.5}]}')["scores"][0]["n"] == 1)
+check("a fenced reply is read",
+      _cur._extract('```json\n{"scores": []}\n```') == {"scores": []})
+check("a trailing comma is repaired",
+      _cur._extract('{"scores": [{"n": 1, "score": 0.5},]}') is not None)
+check("prose around the JSON is tolerated",
+      _cur._extract('Here you go:\n{"scores": []}\nhope that helps') == {"scores": []})
+check("an unusable reply is not guessed at", _cur._extract("sorry, no") is None)
+
+# Judgement is weighted over measurement but never replaces it: a transcript
+# cannot show that a stretch plays over a black screen or wall-to-wall music.
+check("with no judgement the measurement stands",
+      _cur.blend(0.4, None) == 0.4)
+check("judgement outweighs measurement",
+      _cur.blend(0.0, 1.0) > _cur.blend(1.0, 0.0),
+      (_cur.blend(0.0, 1.0), _cur.blend(1.0, 0.0)))
+check("but measurement is never ignored",
+      _cur.blend(1.0, 0.5) > _cur.blend(0.0, 0.5))
+
+# What is said inside the window, which is what the curator reads.
+_talky = _episode("excerpt", _chatter(300, 330, tag="scene"), external_id="EP7")
+_one = _mo.mine(_talky, {**_FMT, "moment_audio_scan": False}, 1)[0]
+check("a mined moment carries what was said in it",
+      "scene" in _one.excerpt and len(_one.excerpt) > 20, _one.excerpt[:60])
+check("and the excerpt is capped",
+      len(_mo._excerpt([], 0, 10)) == 0
+      and len(_one.excerpt) <= 420)
+
+# The whole point: with a curator the heuristic shortlists rather than
+# decides, and the shortlist is cut back to size only after ranking -- so a
+# moment the niche wants is not thrown away for measuring quieter.
+_ranked_calls = []
+
+
+def _fake_rank(candidates, *, description, niche_name=""):
+    _ranked_calls.append((list(candidates), description, niche_name))
+    # Reverse the heuristic's preference, so a change is unmistakable.
+    return {i: {"score": (i + 1) / len(candidates), "why": "fits the niche"}
+            for i in range(len(candidates))}
+
+
+_saved_rank, _saved_avail = _cur.rank, _cur.available
+_cur.rank, _cur.available = _fake_rank, (lambda: True)
+try:
+    _fmt_ai = sanitise({**_FMT, "description": "every time the landlord shows up",
+                        "moments_per_video": 2, "ai_moment_ranking": True})
+    _spread_ep = _episode("curated", _chatter(100, 140, tag="a")
+                          + _chatter(250, 290, tag="b")
+                          + _chatter(400, 440, tag="c"), external_id="EP8")
+    _out = _mo.plan([_spread_ep], _fmt_ai, 2, niche_name="Landlord Moments")
+    check("the curator was asked once, not once per moment",
+          len(_ranked_calls) == 1, len(_ranked_calls))
+    check("it was given the subscriber's own words",
+          _ranked_calls[0][1] == "every time the landlord shows up",
+          _ranked_calls[0][1])
+    check("and the niche name", _ranked_calls[0][2] == "Landlord Moments")
+    check("it saw more candidates than the video needs",
+          len(_ranked_calls[0][0]) > 2, len(_ranked_calls[0][0]))
+    check("each candidate came with a timestamp and what was said",
+          all("start" in c and "excerpt" in c for c in _ranked_calls[0][0]))
+    check("the video still gets only its share from one video",
+          len(_out) == 2, len(_out))
+    check("and the ranking decided which, not the loudness",
+          all(c.why == "fits the niche" for c in _out), [c.why for c in _out])
+
+    # Off by setting, and off without a key, must both fall straight back.
+    _ranked_calls.clear()
+    _mo.plan([_spread_ep], {**_fmt_ai, "ai_moment_ranking": False}, 2)
+    check("the setting turns it off", not _ranked_calls)
+finally:
+    _cur.rank, _cur.available = _saved_rank, _saved_avail
+
+_ranked_calls.clear()
+_off = _mo.plan([_episode("noai", _chatter(300, 340, tag="x"), external_id="EP9")],
+                sanitise({**_FMT, "description": "anything"}), 1)
+check("with no key at all the moments are still found",
+      len(_off) == 1 and _off[0].mined,
+      [(round(c.start), c.why) for c in _off])
+
 section("a playlist entry is an episode, not a clip")
 # Discovery already treats a usable playlist as the whole list of pages to
 # scan, so when there is one every candidate is a video somebody chose. The
@@ -1437,6 +1543,92 @@ with session_scope() as _db:
     check("a cancelled subscription drops back to free",
           _db.get(User, _bid).plan == Plan.FREE)
 
+
+
+section("setup asks the question that decides the outcome")
+# Where footage comes from used to be asked only by the "One TV show" preset,
+# because the step was gated on require_show_match and that is the only preset
+# which sets it. Somebody picking "a ranked countdown" -- the first and most
+# obvious option -- was never asked, and fell through to a keyword search.
+# That is the configuration that produced four finished videos which were
+# mostly not the show at all.
+_APP = Path("frontend/app.js").read_text(encoding="utf-8")
+
+check("the sourcing question is its own step",
+      "Where do the clips come from?" in _APP)
+check("and is not gated on the show filter any more",
+      "skipUnless: () => state.settings.require_show_match" not in _APP,
+      "that gate is what hid it from six of the seven presets")
+check("the playlist step follows the sourcing answer, not the preset",
+      "skipUnless: () => guideChoice.source === 'playlist'" in _APP)
+check("and the upload path asks for search terms instead",
+      "skipUnless: () => guideChoice.source !== 'playlist'" in _APP)
+
+# Setup before the tour. The tour explains the product; the guide configures
+# it. Until now the explaining was automatic and the configuring sat behind a
+# link, so a new subscriber met a 79-field form before being asked anything.
+check("a new account is taken through setup, not the tour",
+      "openGuide({ firstRun: true })" in _APP)
+check("and the tour still runs, after setup rather than before",
+      "if (guideFirstRun)" in _APP and "openTour();" in _APP)
+check("the playlist option is hidden when the server cannot use YouTube",
+      "youtubeUsable()" in _APP,
+      "offering it would walk somebody into a source the registry refuses")
+
+# Choosing your own footage must not leave the show filter on with nothing to
+# match against, which rejects every clip and blocks the run.
+check("picking uploads turns off a show filter it cannot satisfy",
+      "state.settings.require_show_match = false" in _APP)
+
+# The gap that opens up once "a YouTube playlist" is the default answer: it is
+# possible to choose it and paste nothing, which falls back to keyword search.
+_no_list = _review({"sources": ["youtube", "upload"], "clips": 5,
+                    "target_seconds": 120, "max_clip_seconds": 32,
+                    "banner_enabled": True})
+check("choosing YouTube and pasting no playlist is called out",
+      any("searching rather than reading a playlist" in f.title
+          for f in _no_list.findings), [f.title for f in _no_list.findings])
+_with_list = _review({"sources": ["youtube", "upload"], "clips": 5,
+                      "target_seconds": 120, "max_clip_seconds": 32,
+                      "banner_enabled": True, "moments_per_video": 2,
+                      "source_playlists":
+                          ["https://www.youtube.com/playlist?list=PLabc123def456"]})
+check("and is silent once a playlist is pasted",
+      not any("searching rather than reading" in f.title
+              for f in _with_list.findings), [f.title for f in _with_list.findings])
+check("uploads-only is not nagged about playlists",
+      not any("playlist" in f.title.lower()
+              for f in _review({"sources": ["upload"], "clips": 5,
+                                "target_seconds": 120, "max_clip_seconds": 32,
+                                "banner_enabled": True},
+                               upload_count=6).findings))
+
+# Choosing "a YouTube playlist" and then pasting nothing lands on exactly the
+# configuration the step exists to prevent. The advice does say so on the last
+# step, but by then it reads as a complaint about a decision already taken.
+check("an empty playlist will not advance the step",
+      "Paste a playlist link, or go back" in _APP)
+check("nor will a plain video link, which is the usual mistake",
+      "That is not a playlist link" in _APP)
+check("finishing is refused on a blocking configuration",
+      "f.level === 'blocker'" in _APP,
+      "the comment above GUIDE has always claimed this and nothing enforced it")
+check("the setup modal scrolls so its buttons stay reachable",
+      "guide-scroll" in Path("frontend/index.html").read_text(encoding="utf-8")
+      and "min-height: 0" in Path("frontend/styles.css").read_text(encoding="utf-8"),
+      "Save and finish sat at y=762 in a 720px window")
+
+# The configuration the guide's playlist path produces has to actually run.
+_guided = sanitise({**next(n for n in _BUILTINS if n["slug"] == "top5")["settings"],
+                    "sources": ["youtube", "upload"],
+                    "source_playlists":
+                        ["https://www.youtube.com/playlist?list=PLabc123def456"]})
+check("what the playlist path produces can run",
+      _review(_guided, upload_count=0,
+              available_sources=["upload", "youtube"]).can_run,
+      [f.title for f in _review(_guided, upload_count=0,
+                                available_sources=["upload", "youtube"]).findings
+       if f.level == "blocker"])
 
 section("first-run tour")
 check("a new account has not seen it",
