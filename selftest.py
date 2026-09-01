@@ -718,11 +718,24 @@ _yt = YouTubeSource({
 })
 _urls = _yt.build_sources(["funny moments"])
 check("a pasted playlist becomes a discovery URL", _PL in _urls, _urls)
-check("and is scanned before channels and searches",
-      _urls.index(_PL) == 0, _urls)
-check("channels and searches still work alongside it",
-      any("/@somechannel" in u for u in _urls)
-      and any("hashtag" in u for u in _urls), _urls)
+# Ordering was the first attempt and it did not work: the scan only stops once
+# the pool is full, so a playlist shorter than candidate_pool_size still fell
+# through into a hashtag search, and the results were then re-ranked by view
+# count together. A playlist is an instruction, so it is now the whole list.
+check("a playlist is the only thing scanned", _urls == [_PL], _urls)
+check("channels are not searched behind it",
+      not any("@somechannel" in u for u in _urls), _urls)
+check("nor is a hashtag search", not any("hashtag" in u for u in _urls), _urls)
+# But only a *usable* one takes over. A bad paste must not silently disable
+# the channels and terms that would otherwise have worked.
+_fallback = YouTubeSource({
+    "source_playlists": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+    "source_channels": ["@somechannel"],
+    "channel_tabs": ["shorts"],
+}).build_sources(["funny moments"])
+check("an unusable paste falls back to channels and searches",
+      any("@somechannel" in u for u in _fallback)
+      and any("hashtag" in u for u in _fallback), _fallback)
 check("an unusable link is dropped rather than scanned",
       YouTubeSource({"source_playlists":
                      ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}
@@ -731,6 +744,44 @@ check("an unusable link is dropped rather than scanned",
 # A playlist alone is a complete configuration: no search terms needed.
 _only = YouTubeSource({"source_playlists": [_PL]}).build_sources([])
 check("a playlist on its own is enough to look at", _only == [_PL], _only)
+
+# Ranking. A search has nothing to go on but view count, but a playlist has an
+# order somebody chose, and sorting that by popularity throws the choice away
+# and opens every run with the same well-known clip.
+from backend.app.sources.base import SourceClip as _SC  # noqa: E402
+
+
+def _fake_clip(_vid, _views):
+    _c = _SC(source="youtube", external_id=_vid, title=f"clip {_vid}",
+             url=f"https://www.youtube.com/watch?v={_vid}", author="a",
+             duration=30.0, licence="x", reusable=False,
+             attribution_required=True)
+    _c.extra = {"view_count": _views, "description": "", "age_days": None}
+    return _c
+
+
+# Deliberately not in view order, so the two rankings disagree.
+_authored = [_fake_clip("aaaaaaaaaaa", 10),
+             _fake_clip("bbbbbbbbbbb", 9_000_000),
+             _fake_clip("ccccccccccc", 500)]
+
+
+def _order_from(_cfg):
+    _src = YouTubeSource(_cfg)
+    _src.available = lambda: True
+    _src._flat_scan = lambda url, limit: _authored
+    _src.enrich = lambda clip: True
+    return [_c.external_id for _c in _src.search(["anything"], 3)]
+
+
+check("a playlist keeps the order its author put it in",
+      _order_from({"source_playlists": [_PL]})
+      == ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"],
+      _order_from({"source_playlists": [_PL]}))
+check("a search still ranks by view count",
+      _order_from({"source_channels": ["@c"]})
+      == ["bbbbbbbbbbb", "ccccccccccc", "aaaaaaaaaaa"],
+      _order_from({"source_channels": ["@c"]}))
 
 _pl_cfg = {"sources": ["youtube"], "source_playlists": [_PL]}
 check("a good playlist raises no blocker",

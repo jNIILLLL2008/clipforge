@@ -129,6 +129,41 @@ def review(cfg: Dict, *, upload_count: int = 0,
                 "are only read by the YouTube source.",
                 "Add YouTube under Sources, or the playlists do nothing.",
                 "sources"))
+        else:
+            # A usable playlist takes over YouTube discovery entirely, which is
+            # the point -- but it silently stops other settings on the same
+            # screen from doing anything, so say so rather than let somebody
+            # wonder why their channel list is being ignored.
+            displaced = []
+            if [c for c in (cfg.get("source_channels") or []) if str(c).strip()]:
+                displaced.append("source channels")
+            if terms:
+                displaced.append("search terms")
+            if displaced:
+                add(Finding(
+                    "tip", "The playlist is the only place it will look",
+                    f"Your {' and '.join(displaced)} will not be searched for "
+                    "more footage while a playlist is set -- the clips come "
+                    "from the playlist and nothing else."
+                    + (" Search terms are still used to rank and filter what "
+                       "the playlist gives back." if terms else ""),
+                    "Clear the playlist to go back to searching.",
+                    "source_playlists"))
+
+            # A playlist is a fixed pool, so it runs out. Nothing here can see
+            # how long it is without a network call, but the arithmetic that
+            # bites is knowable: a run takes `clips` videos and will not reuse
+            # one for `reuse_after_days`, so a short playlist repeats quickly.
+            if int(cfg.get("reuse_after_days", 60) or 0) > 0:
+                add(Finding(
+                    "tip", "A playlist runs out",
+                    f"Each run takes {clips} clip(s) and avoids repeating one "
+                    "for a while, so a playlist needs several times that many "
+                    "videos to keep producing fresh cuts. When it runs dry the "
+                    "run reuses whatever was published longest ago rather than "
+                    "failing.",
+                    "Add more videos to the playlist, or paste a second one.",
+                    "source_playlists"))
 
     # --- searching for the thing you just told it to refuse --------------- #
     # "funny moments compilation" is the obvious search to write, and with the
