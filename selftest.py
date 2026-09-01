@@ -1140,6 +1140,24 @@ check("the app works again", client.get("/api/studio").status_code == 200)
 check("running it twice changes nothing", _add_missing_columns() is None)
 
 section("studio: settings round-trip")
+# A plan ceiling that clamps in silence is indistinguishable from a setting
+# that did not save: the box reads 60 afterwards either way, and every render
+# then comes out the wrong length for a reason nothing on screen explains.
+_capped = client.put("/api/studio/settings", json={
+    "settings": {"target_seconds": 120, "clips": 8}}).json()
+check("the free plan still caps length and clip count",
+      _capped["settings"]["target_seconds"] == 60
+      and _capped["settings"]["clips"] == 5,
+      (_capped["settings"]["target_seconds"], _capped["settings"]["clips"]))
+check("but it says so rather than clamping in silence",
+      bool(_capped.get("notice")), _capped.get("notice"))
+check("and names both the number asked for and the cap",
+      "120" in _capped["notice"] and "60" in _capped["notice"],
+      _capped["notice"])
+check("a value inside the plan is saved untouched and says nothing",
+      client.put("/api/studio/settings", json={
+          "settings": {"target_seconds": 45}}).json().get("notice") == "")
+
 got = client.get("/api/studio/settings").json()
 check("settings and schema returned",
       "settings" in got and "schema" in got)

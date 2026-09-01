@@ -425,15 +425,24 @@ function bindSettings() {
 $('settings-save').onclick = async () => {
   $('settings-save').disabled = true;
   try {
-    const { settings } = await api('/api/studio/settings', {
+    const { settings, notice } = await api('/api/studio/settings', {
       method: 'PUT', body: { settings: state.settings },
     });
     state.settings = settings;
     state.dirty = false;
     renderSettings();
     await loadStudio();
-    $('settings-status').textContent = 'Saved';
-    toast('Settings saved.');
+    /* A value the plan capped has to say so. Re-rendering shows the reduced
+       number in the box, which on its own looks like the edit was thrown
+       away rather than limited -- and the run that follows is then the wrong
+       length for a reason nothing on screen explains. */
+    if (notice) {
+      $('settings-status').textContent = notice;
+      toast(notice, 7000);
+    } else {
+      $('settings-status').textContent = 'Saved';
+      toast('Settings saved.');
+    }
   } catch (err) {
     $('settings-status').textContent = err.message;
   } finally {
