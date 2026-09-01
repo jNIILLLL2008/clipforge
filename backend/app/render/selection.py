@@ -21,6 +21,15 @@ Three independent gates:
 The alias handling matters: "thierry henry" is two words naming one person, and
 counting it as two regulars would let a clip about him alone pass a filter
 meant to catch panel moments. Aliases are grouped per person with "|".
+
+All three are inference from words, and one thing outranks them: a playlist
+the subscriber pasted. Discovery treats a usable playlist as the *whole* list
+of pages to scan, so when there is one, every candidate is a video they chose
+by hand -- and the questions these gates try to answer from a title have
+already been answered. That matters most for the length limit: "longest clip"
+is a rule about clips, and a full episode is the haystack a clip gets cut out
+of. Applying it to a playlist rejects every entry and fails the run with a
+sentence that tells nobody anything.
 """
 
 from __future__ import annotations
@@ -99,6 +108,22 @@ def _split_camel(text: str) -> str:
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text or "")
 
 
+def from_a_chosen_playlist(settings: Dict) -> bool:
+    """Did the subscriber hand-pick the videos this job is drawing from?
+
+    Asked of the settings rather than of each clip, because that is how
+    discovery works: a usable playlist replaces the discovery list outright
+    rather than being added to it, so if there is one, everything in the pool
+    came out of it. Reusing the source's own parser keeps the two from
+    disagreeing about what counts as usable -- Watch Later and mixes are not
+    playlists a server can scan, and neither should buy an exemption here.
+    """
+    from ..sources.youtube_source import playlist_url
+
+    return any(playlist_url(str(entry))
+               for entry in (settings.get("source_playlists") or []))
+
+
 def _haystack(clip: SourceClip) -> str:
     return " ".join(part.lower() for part in (
         clip.title or "",
@@ -114,7 +139,13 @@ def is_derivative(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
         return False, ""
 
     # A channel the subscriber has vouched for posts originals by definition,
-    # which is what the Trusted channels box has always said it meant.
+    # which is what the Trusted channels box has always said it meant. A
+    # playlist they pasted is the same promise made about a list instead of a
+    # channel, and it has to be honoured or the word list starts refusing
+    # their own episodes: "marathon", "every episode" and "part" are all
+    # ordinary things for an episode listing to be called.
+    if from_a_chosen_playlist(settings):
+        return False, ""
     trusted = [t.lower() for t in settings.get("trusted_uploaders", []) if t]
     if trusted and any(t in (clip.author or "").lower() for t in trusted):
         return False, ""
@@ -136,18 +167,25 @@ def is_derivative(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
 
 def passes_filters(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
     """Cheap metadata checks. Returns (ok, reason_if_not)."""
+    chosen = from_a_chosen_playlist(settings)
     duration = clip.duration or 0.0
     if duration:
         low = float(settings.get("min_duration_seconds", 0) or 0)
         high = float(settings.get("max_duration_seconds", 0) or 0)
         if low and duration < low:
             return False, f"{duration:.0f}s is shorter than {low:.0f}s"
-        if high and duration > high:
+        # Not applied to a playlist entry: it is an episode to cut a moment
+        # out of rather than a clip to use whole, and the default ceiling of
+        # ten minutes would reject an entire series.
+        if high and duration > high and not chosen:
             return False, f"{duration:.0f}s is longer than {high:.0f}s"
 
     views = clip.extra.get("view_count")
     floor = int(settings.get("min_view_count", 0) or 0)
-    if floor and isinstance(views, int) and views < floor:
+    if floor and isinstance(views, int) and views < floor and not chosen:
+        # Views stand in for "is this any good", which a playlist has already
+        # answered. Episode one of a show nobody is currently watching is
+        # still episode one.
         return False, f"{views:,} views is under {floor:,}"
 
     age = clip.extra.get("age_days")
@@ -218,6 +256,15 @@ def derived_show_terms(settings: Dict) -> List[str]:
 def matches_show(clip: SourceClip, settings: Dict) -> Tuple[bool, str]:
     """The show filter. Returns (ok, reason_if_not)."""
     if not settings.get("require_show_match"):
+        return True, ""
+
+    # Provenance beats inference. This filter exists to work out from a title
+    # whether footage is from one programme, and it is what let through a
+    # scene from the Andrew Garfield film and a schoolwork video about the
+    # scientific method -- both name Spider-Man, because both are about
+    # Spider-Man. A playlist of the show's episodes settles the question
+    # rather than arguing it.
+    if from_a_chosen_playlist(settings):
         return True, ""
 
     text = _haystack(clip)

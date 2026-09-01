@@ -156,8 +156,11 @@ FIELDS: List[Dict[str, Any]] = [
           "match \"credits\"."),
     field("long_clip_seconds", "filters", "float", 75.0,
           "Treat as a full segment above",
-          "Longer clips get a timed transcript so the moment can be located "
-          "inside them.", min=10, max=3600),
+          "A source longer than this is a haystack rather than a clip: its "
+          "transcript and its audio are searched and the best moments are cut "
+          "out of it, instead of taking whatever happens to be in the middle. "
+          "The \"Longest clip\" limit does not apply to these.",
+          min=10, max=3600),
 
     # -------------------------------------------------------------- cut --- #
     field("clips", "cut", "int", 5, "Number of clips", "", min=2, max=12),
@@ -171,6 +174,32 @@ FIELDS: List[Dict[str, Any]] = [
           "Take the excerpt from",
           "Where in a source clip the excerpt is taken when it is longer than "
           "its slot.", options=["start", "center", "end"]),
+    field("moments_per_video", "cut", "int", 2,
+          "Most moments from one video",
+          "A full episode holds several good beats, but taking five from one "
+          "of them makes a video that plays as a single scene. Lower this to "
+          "spread the cut across more episodes.", min=1, max=6),
+    field("moment_min_gap_seconds", "cut", "float", 90.0,
+          "Keep moments this far apart (seconds)",
+          "Two moments cut from the same episode a few seconds apart are one "
+          "moment shown twice.", min=0, max=1800),
+    field("skip_intro_seconds", "cut", "float", 20.0,
+          "Ignore the opening (seconds)",
+          "A title sequence is the loudest, most quotable stretch of an "
+          "episode and never the moment anybody wants.", min=0, max=600),
+    field("skip_outro_seconds", "cut", "float", 30.0,
+          "Ignore the ending (seconds)",
+          "Credits, for the same reason.", min=0, max=600),
+    field("moment_keywords", "cut", "list", [],
+          "Words that mark a good moment",
+          "Scored higher when they are said inside a candidate window. For a "
+          "comedy niche these are the catchphrases; leave it empty to rank on "
+          "dialogue and audio alone."),
+    field("moment_audio_scan", "cut", "bool", True,
+          "Listen for the moment too",
+          "Reads the loudness of a long source so a beat with no dialogue is "
+          "still found. Costs a few seconds per episode; turn it off if your "
+          "renders are timing out."),
     field("countdown", "cut", "bool", True,
           "Countdown order",
           "Hold the best clip until last. Turn off for formats where the "

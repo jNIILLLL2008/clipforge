@@ -967,7 +967,7 @@ const GUIDE = [
       { id: 'memes', title: 'Fast meme cut',
         note: 'Very short clips, big captions, built for rewatching.' },
       { id: 'show', title: 'One specific TV show or series',
-        note: 'Adds a filter that rejects clips from anywhere else.' },
+        note: 'Reads a playlist of full episodes and cuts the moments out of them.' },
     ]),
     apply: async (value) => {
       const { presets } = await api('/api/presets');
@@ -995,10 +995,23 @@ const GUIDE = [
   {
     title: 'Which show is it?',
     skipUnless: () => state.settings.require_show_match,
-    intro: `<p>The filter keeps clips that either mention a <b>show keyword</b>,
-      or name <b>two different regulars</b> together. That combination is what
-      separates the show from anything else those people appear in.</p>`,
+    /* The playlist comes first because it is the setting that decides whether
+       the finished video is any good. A search for short videos about a show
+       returns fan edits, scenes from the films, and people reviewing it at a
+       desk -- all honest matches for the words typed, none of them the show.
+       A playlist is proof, and the moments are cut out of the episodes in it.
+       The keywords below only matter when there is no playlist. */
+    intro: `<p>Paste a <b>playlist of full episodes</b>. Whatever is in it is
+      what gets used, and the good moments are found inside each episode and
+      cut out &mdash; so every clip really is from your show.</p>
+      <p>No playlist? The keywords below are used to search instead, but a
+      search returns fan edits, reaction videos and clips from the films as
+      readily as it returns your show. The filter keeps clips that mention a
+      <b>show keyword</b>, or name <b>two different regulars</b> together.</p>`,
     render: () => `
+      ${field('source_playlists', 'Playlists of full episodes', 'textarea',
+              (state.settings.source_playlists || []).join('\n'),
+              'One link per line. Open the playlist on YouTube and copy the address.')}
       ${field('show_name', 'Show name', 'input', state.settings.show_name || '',
               'Given to the AI. e.g. "the CBS Sports Golazo studio show"')}
       ${field('show_terms', 'Show keywords', 'textarea',
@@ -1008,6 +1021,7 @@ const GUIDE = [
               (state.settings.show_people || []).join('\n'),
               'One person per line. Separate their aliases with | so nicknames match:\nthierry henry|thierry|henry')}`,
     apply: (value, form) => {
+      state.settings.source_playlists = splitLines(form.source_playlists);
       state.settings.show_name = form.show_name.trim();
       state.settings.show_terms = splitLines(form.show_terms);
       state.settings.show_people = splitLines(form.show_people);

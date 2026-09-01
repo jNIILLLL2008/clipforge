@@ -21,6 +21,8 @@ backend/app/
   sources/         where footage comes from (see below)
   render/
     pipeline.py    one job end to end
+    moments.py     which twenty seconds of a twenty-minute source
+    selection.py   which candidates qualify at all
     retention.py   the quality gate
     overlay.py     banner, checklist and captions as one ASS layer
     engine.py      ffmpeg concat + burn-in, single pass
@@ -78,10 +80,25 @@ user supplies material they have the rights to.
 ### The YouTube source
 
 There is a working YouTube adapter (`sources/youtube_source.py`). It finds
-clips from channels, channel *archive searches* (which reach material a
-channel's recent tab does not, and matter for a seasonal show), and hashtag
-Shorts tabs; downloads with yt-dlp; and pulls auto-captions, which feed both
-the burned-in subtitles and the music scan.
+videos from a pasted **playlist**, from channels, from channel *archive
+searches* (which reach material a channel's recent tab does not, and matter
+for a seasonal show), and from hashtag Shorts tabs; downloads with yt-dlp; and
+pulls auto-captions, which feed the burned-in subtitles, the music scan and
+the moment finder.
+
+A playlist is not a hint. When there is a usable one it is the *entire*
+discovery list — nothing else is scanned, and the playlist's own order is
+kept rather than being re-sorted by view count. That is what makes a niche
+about one specific programme work: everything else is a search, and a search
+returns whatever matches the words. Fan edits, scenes from the films and
+people reviewing the show at a desk are all honest matches for "spectacular
+spider-man funny".
+
+Because a playlist entry is a video somebody chose, it is treated as evidence
+rather than as a title to be second-guessed: entries skip the show filter, the
+edit filter, the "longest clip" limit and the minimum view count. The length
+one matters most — a full episode is the haystack a clip gets cut out of, and
+the ten-minute default ceiling would otherwise reject an entire series.
 
 It declares `reusable = False`, so switching it on takes two deliberate steps:
 add `youtube` to `ENABLED_SOURCES` **and** set `ALLOW_UNLICENSED_SOURCES=true`.
@@ -230,6 +247,25 @@ the API validation and the editor UI — so a new option is added in one place
 and cannot drift between them. `sanitise()` drops unknown keys and forces every
 value into range, so a niche can never hold something the renderer would choke
 on.
+
+**Moments** (`render/moments.py`) are why a source video no longer has to be
+short. Anything longer than the niche's `long_clip_seconds` is a haystack: its
+subtitle track and its audio are searched and the best few windows are cut out
+of it, instead of taking whatever sits in the middle. Dialogue density,
+reaction markers (`[laughter]`, `[applause]`), the niche's keywords and
+loudness score each candidate window; a stretch that is nothing but the score
+is penalised, and the title sequence and credits are skipped. Only the signals
+actually present divide the score, so a video with no captions is not ranked
+as though every window in it were silent — and with neither captions nor audio
+the moments are simply spaced out, which still beats taking the middle five
+times.
+
+That is also what stops a playlist running dry. A twenty-minute episode holds
+a dozen moments, the reuse history records the *moment* (`videoid@seconds`)
+rather than the video, and the least-mined episode is fetched first, so
+successive runs walk further into the playlist instead of returning to the
+same two files. Each run's sourcing report distinguishes clips *reused* whole
+from episodes *re-mined* for a new scene.
 
 **The show filter** is what makes a niche like "one specific TV panel show"
 possible. A clip qualifies on an explicit show keyword, or on naming two or

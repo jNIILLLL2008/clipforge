@@ -9,6 +9,7 @@ actually happened.
 
 from __future__ import annotations
 
+import copy
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,10 +17,11 @@ from typing import Callable, Dict, List, Optional
 
 from ..config import settings
 from ..logging_setup import get_logger
-from .labels import clean as _clean_label, for_clips as build_labels
+from .labels import clean as _clean_label, for_cuts as build_cut_labels
 from .. import sources as source_registry
 from ..sources.base import SourceClip
-from . import selection
+from . import moments, selection
+from .moments import Cut
 from .engine import RenderError, Segment, media_summary, render
 from .overlay import Caption, OverlayItem, OverlayPlan, chunk, parse_vtt
 from .retention import PlannedClip, RetentionReport, score_plan
@@ -50,6 +52,19 @@ class PipelineResult:
 
 def _noop(stage: str, detail: str) -> None:
     log.info("[%s] %s", stage, detail)
+
+
+def _times_mined(clip: SourceClip, already_used) -> int:
+    """How many moments this account has already published from one source."""
+    total = 0
+    for source, external_id in already_used or ():
+        if source != clip.source:
+            continue
+        head, _, tail = str(external_id).rpartition("@")
+        if external_id == clip.external_id or (
+                head == clip.external_id and tail.isdigit()):
+            total += 1
+    return total
 
 
 def gather(niche_settings: Dict, wanted: int,
@@ -100,9 +115,34 @@ def gather(niche_settings: Dict, wanted: int,
     # same five clips win every run. Drop what this account has already
     # published and the next run is pushed further down its own ranking.
     if already_used:
-        fresh = [c for c in pool
-                 if (c.source, c.external_id) not in already_used]
-        stale = [c for c in pool
+        # A long source is a haystack, not a clip. Taking one scene out of an
+        # episode is no reason to skip the other nineteen minutes of it, and
+        # treating it as spent is what emptied a niche's pool after a handful
+        # of runs. Which scenes are off limits is decided per moment, once the
+        # episode is downloaded and can actually be searched.
+        long_at = float(niche_settings.get("long_clip_seconds", 75) or 75)
+        haystacks = [c for c in pool if (c.duration or 0.0) > long_at]
+        clips_only = [c for c in pool if (c.duration or 0.0) <= long_at]
+
+        # Least-mined episode first, so successive runs walk the playlist
+        # rather than returning to the same two files for the next scene
+        # along. Ties keep discovery order, which for a playlist is the order
+        # the subscriber put it in.
+        order = {id(c): index for index, c in enumerate(haystacks)}
+        haystacks.sort(key=lambda c: (_times_mined(c, already_used),
+                                      order[id(c)]))
+
+        # Returning to an episode for a different scene is not a repeat, but
+        # it is not nothing either, and the run has to say which happened.
+        # Without this the counters read "reused: 0" for a video built
+        # entirely out of episodes it had already been through -- which is
+        # exactly the silence the sourcing report exists to break.
+        stats["remined"] = sum(1 for c in haystacks
+                               if _times_mined(c, already_used))
+
+        fresh = haystacks + [c for c in clips_only
+                             if (c.source, c.external_id) not in already_used]
+        stale = [c for c in clips_only
                  if (c.source, c.external_id) in already_used]
 
         if len(fresh) >= wanted:
@@ -130,6 +170,7 @@ def gather(niche_settings: Dict, wanted: int,
             pool = fresh + topped
 
     stats.setdefault("reused", 0)
+    stats.setdefault("remined", 0)
     stats["usable"] = len(pool)
     log.info("Gathered %d candidate clip(s) from %d source(s).",
              len(pool), len(adapters))
@@ -155,10 +196,21 @@ def gather(niche_settings: Dict, wanted: int,
 def _download_all(pool: List[SourceClip], workspace: Path, wanted: int,
                   user_id: Optional[int],
                   job_settings: Optional[Dict] = None) -> List[SourceClip]:
-    """Fetch clips until enough usable ones exist locally."""
+    """Fetch sources until they can supply `wanted` excerpts between them.
+
+    Counted in excerpts rather than in files, because a full episode is worth
+    several and a twelve-second clip is worth one. Downloading five episodes
+    for a five-clip video wastes four of them, and stopping at two files when
+    only short clips turned up leaves the video three short.
+    """
+    fmt = job_settings or {}
+    long_at = float(fmt.get("long_clip_seconds", 75) or 75)
+    per_video = max(1, int(fmt.get("moments_per_video", 2) or 1))
+
     ready: List[SourceClip] = []
+    yield_so_far = 0
     for index, clip in enumerate(pool):
-        if len(ready) >= wanted:
+        if yield_so_far >= wanted:
             break
         adapter = source_registry.build(clip.source, user_id, job_settings)
         if adapter is None:
@@ -181,7 +233,27 @@ def _download_all(pool: List[SourceClip], workspace: Path, wanted: int,
         clip.duration = duration
         clip.width, clip.height = width, height
         ready.append(clip)
+        # What a source is worth is known only now: discovery reports a
+        # duration, but a listing that lies or a download that stopped early
+        # would otherwise be counted as a whole episode.
+        yield_so_far += per_video if duration > long_at else 1
     return ready
+
+
+def _as_excerpt(cut: Cut) -> SourceClip:
+    """One excerpt as its own clip, so two moments are two rows in history.
+
+    Several cuts can share a source video. Handing the same SourceClip back
+    twice would write two identical job_clips rows, and the reuse history
+    would then read them as "this episode is spent" rather than "these two
+    scenes are". The copy is shallow on purpose: the subtitle path and the
+    licence facts belong to the source and are the same for every moment
+    taken out of it.
+    """
+    excerpt = copy.copy(cut.clip)
+    excerpt.external_id = cut.moment_id()
+    excerpt.tags = list(cut.clip.tags or [])
+    return excerpt
 
 
 def label_for(clip, fmt) -> str:
@@ -189,8 +261,14 @@ def label_for(clip, fmt) -> str:
     return _clean_label(getattr(clip, "title", "") or "", fmt, limit=60) or "Clip"
 
 
-def _plan_segments(clips: List[SourceClip], fmt: Dict) -> List[Segment]:
-    """Give every clip an even share of the target, inside the niche's bounds."""
+def _plan_segments(clips: List[SourceClip], fmt: Dict,
+                   cuts: Optional[List[Cut]] = None) -> List[Segment]:
+    """Give every clip an even share of the target, inside the niche's bounds.
+
+    ``cuts`` carries the moment finder's answer for where inside each source
+    the excerpt begins. Without it -- an upload, or a source already short
+    enough to be the clip -- the trim strategy decides, as it always has.
+    """
     target = float(fmt.get("target_seconds", 105))
     min_len = float(fmt.get("min_clip_seconds", 8))
     max_len = float(fmt.get("max_clip_seconds", 26))
@@ -201,7 +279,14 @@ def _plan_segments(clips: List[SourceClip], fmt: Dict) -> List[Segment]:
     for index, clip in enumerate(clips):
         if remaining <= 0.5:
             break
-        available = clip.duration or 0.0
+        cut = cuts[index] if cuts and index < len(cuts) else None
+        # A mined moment can only run to the end of its source, not to the
+        # end of the file: measuring from zero would let a segment starting at
+        # 19:40 of a twenty-minute episode ask for twenty-four seconds.
+        if cut is not None and cut.start is not None:
+            available = max(0.0, cut.source_duration - cut.start)
+        else:
+            available = clip.duration or 0.0
 
         # Recomputed each time, not fixed at target/len(clips) up front. With
         # a fixed share a single short source just made the whole video
@@ -221,7 +306,9 @@ def _plan_segments(clips: List[SourceClip], fmt: Dict) -> List[Segment]:
         # Where inside the source the excerpt comes from. Centre is the default
         # because the opening second of a stock clip is often a fade-in.
         slack = available - length
-        if slack <= 1.0:
+        if cut is not None and cut.start is not None:
+            start = cut.start
+        elif slack <= 1.0:
             start = 0.0
         elif strategy == "start":
             start = 0.0
@@ -311,30 +398,54 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
             "your own footage."
         )
 
-    progress("sourcing", f"Downloading {min(wanted, len(pool))} clip(s)")
-    clips = _download_all(pool, workspace, wanted, user_id, fmt)
-    if len(clips) < 2:
+    progress("sourcing", "Downloading footage")
+    sources = _download_all(pool, workspace, wanted, user_id, fmt)
+    if not sources:
         raise RenderError(
-            f"Only {len(clips)} clip(s) could be downloaded; at least 2 are "
-            "needed to build a video."
+            "Nothing could be downloaded. The sources may be unavailable, or "
+            "YouTube may be refusing this server."
         )
 
+    # A source video is a haystack, not a clip: a full episode holds several
+    # moments and this is where they are found. See moments.py for why that
+    # is the difference between a compilation of the show and a compilation
+    # of videos that mention it.
+    progress("curating", "Finding the moments")
+    cuts = moments.plan(sources, fmt, wanted, already_used)
+    if len(cuts) < 2:
+        raise RenderError(
+            f"Only {len(cuts)} usable moment(s) were found; at least 2 are "
+            "needed to build a video."
+        )
+    sourcing["moments"] = len(cuts)
+    sourcing["mined_from"] = len({c.clip.external_id for c in cuts})
+
     progress("curating", "Planning the cut")
-    segments = _plan_segments(clips, fmt)
+    clips = [_as_excerpt(cut) for cut in cuts]
+    segments = _plan_segments(clips, fmt, cuts)
     if len(segments) < 2:
         raise RenderError("The clips were too short to build a video from.")
+    cuts = cuts[:len(segments)]
     clips = clips[:len(segments)]
+    for clip, segment in zip(clips, segments):
+        # The excerpt's own length, so the library and the reuse history
+        # record the moment rather than the episode it came out of.
+        clip.duration = segment.duration
 
     # Not clip.title[:34]. A YouTube title carries the channel name after a
     # separator, the series in brackets and emoji as bait, and cutting it at
     # 34 characters leaves the viewer reading "The Spectacular Spider-Man
     # (2008-2". See labels.py.
-    labels = build_labels(clips, fmt)
+    labels = build_cut_labels(cuts, fmt)
     if fmt.get("countdown"):
         # Countdown shows the payoff last, so reverse into the timeline.
+        # moments.plan returns best first, so this is what actually puts the
+        # strongest moment at number one rather than whichever video happened
+        # to download last.
+        cuts = list(reversed(cuts))
         clips = list(reversed(clips))
         segments = list(reversed(segments))
-        labels = build_labels(clips, fmt)
+        labels = build_cut_labels(cuts, fmt)
 
     plan = _build_overlay_plan(clips, segments, fmt, labels)
 
@@ -363,7 +474,9 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
     progress("rendering", f"Encoding {len(segments)} clip(s)")
     result = render(segments, plan, fmt, output, watermark)
 
-    credits = [c.credit() for c in clips if c.credit()]
+    # De-duplicated: two moments cut from one episode are one source to
+    # credit, and listing it twice reads as a mistake in the description.
+    credits = list(dict.fromkeys(c.credit() for c in clips if c.credit()))
     title = options.get("title") or _default_title(niche, len(segments), terms)
 
     return PipelineResult(
