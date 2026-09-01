@@ -70,6 +70,23 @@ _DERIVATIVE_PHRASES = (
     "tier list", "top 5", "top 10", "top ten", "top five",
     "worst to best", "best to worst", "ranking every", "every episode",
     "video essay", "first time watching", "i watched",
+    # Video-essay openers. The single word list above catches anything that
+    # calls itself a review or a breakdown, but the essay format usually does
+    # not: "What If...? The Spectacular Spider-Man" and "THIS Is Why
+    # Spectacular Spider-man Was Cancelled" are both a person at a desk
+    # talking over stills, and both reached a finished render because neither
+    # title contains one of those words. These are the openers that format
+    # actually uses.
+    #
+    # Phrases rather than words on purpose: "why" and "truth" and "story" are
+    # ordinary English that appear in real episode titles, and banning them
+    # would throw away the footage this is meant to find.
+    "what if", "this is why", "here's why", "heres why",
+    "the reason why", "the truth about", "what happened to",
+    "the problem with", "everything wrong with", "we need to talk about",
+    "the rise and fall", "the story behind", "how they made",
+    "was cancelled", "was canceled", "got cancelled", "got canceled",
+    "deep dive", "revisited", "iceberg",
 )
 
 

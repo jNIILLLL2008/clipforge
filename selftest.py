@@ -276,6 +276,27 @@ check("an unreachable length is called out",
 check("and it is said exactly once",
       sum("reach" in f.title.lower() for f in _short.findings) == 1,
       [f.title for f in _short.findings])
+# A warning was not enough. clips x max_clip is a hard ceiling on the whole
+# video, so 5 clips capped at 12s render exactly 60s however large the target
+# is -- which reads as the length setting being ignored, after the render has
+# been spent.
+# But a near miss must not block: the shipped defaults are 4 clips at 26s
+# against a 105s target, which is 104s, and stopping a run over one second
+# would be its own bug.
+check("a near miss only warns",
+      _rev({"sources": ["upload"], "clips": 4}, upload_count=20).can_run,
+      [f.title for f in _rev({"sources": ["upload"], "clips": 4},
+                             upload_count=20).blockers])
+check("an unreachable length blocks the run",
+      not _rev({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+                "max_clip_seconds": 12}).can_run)
+_reach = [f for f in _rev({"sources": ["youtube"], "clips": 5,
+                           "target_seconds": 120, "max_clip_seconds": 12}
+                          ).findings if "reach" in f.title.lower()][0]
+check("and says what the video would actually come out as",
+      "60s" in _reach.detail, _reach.detail)
+check("and how to fix it in numbers, not adjectives",
+      "24s" in _reach.fix, _reach.fix)
 _tight = _rev({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
                "max_clip_seconds": 24, "banner_enabled": True})
 check("and a target with no slack gets a tip",
@@ -525,6 +546,35 @@ for _clean in [
 ]:
     _got, _hit = _is_deriv(_cand(_clean), _ON)
     check(f"kept: {_clean[:40]}", not _got, _hit)
+
+# The video-essay openers. Both of these reached a finished render: they are a
+# person at a desk talking over stills, and neither title contains any of the
+# single words above.
+for _essay in [
+    "What If...? The Spectacular Spider-Man",
+    "THIS Is Why Spectacular Spider-man Was Cancelled",
+    "The Truth About Spectacular Spider-Man",
+    "What Happened To Spectacular Spider-Man?",
+    "The Problem With Spider-Man 3",
+    "Everything Wrong With Spider-Man",
+    "The Rise and Fall of Spectacular Spider-Man",
+    "We Need To Talk About Spider-Man",
+    "Spectacular Spider-Man Revisited",
+]:
+    _got, _hit = _is_deriv(_cand(_essay), _ON)
+    check(f"dropped: {_essay[:44]}", _got, "an essay reached the render")
+
+# And the words those phrases are built from are ordinary English, so footage
+# that merely contains one must survive. Banning "why" or "truth" or "story"
+# outright would throw away the clips this is meant to find.
+for _real in [
+    "Why I Love You - Peter and MJ scene",
+    "The Story of My Life - episode clip",
+    "Doc Ock Truth Serum Scene",
+    "Spidey saves Gwen | Spectacular Spider-Man",
+]:
+    _got, _hit = _is_deriv(_cand(_real), _ON)
+    check(f"kept: {_real[:44]}", not _got, _hit)
 
 # Channel names run words together where a word boundary cannot see them.
 check("camelCase channel names are split", _camel("SpideyEdits") == "Spidey Edits")
