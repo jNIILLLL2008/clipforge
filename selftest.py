@@ -1525,6 +1525,130 @@ check("startup adds it back", "onboarded" in back)
 check("the app works again", client.get("/api/studio").status_code == 200)
 check("running it twice changes nothing", _add_missing_columns() is None)
 
+# The backfill has to be a literal the column's own type accepts, and that
+# cannot be checked on SQLite -- which is the whole reason this shipped.
+# SQLite takes 0 into a JSON column and FALSE into anything, so the suite was
+# green while production said
+#
+#     column "sourcing_report" is of type json
+#     but default expression is of type integer
+#
+# The ALTER failed, the failure was logged at warning, startup carried on, and
+# the first query against jobs took the app down with a traceback pointing at
+# the render worker. So this checks every column against the PostgreSQL
+# dialect, without needing a PostgreSQL to talk to.
+import json as _json  # noqa: E402
+
+from sqlalchemy import Boolean as _Bool, Integer as _Int  # noqa: E402
+from sqlalchemy import Numeric as _Num, String as _Str  # noqa: E402
+from sqlalchemy import types as _sa_types  # noqa: E402
+from sqlalchemy.dialects import postgresql as _pg  # noqa: E402
+
+from backend.app.db import _backfill_default  # noqa: E402
+from backend.app.models import Base as _Base  # noqa: E402
+
+_bad_json, _bad_bool, _checked = [], [], 0
+for _table in _Base.metadata.sorted_tables:
+    for _col in _table.columns:
+        _lit = _backfill_default(_col)
+        if not _lit:
+            continue
+        _checked += 1
+        _where = f"{_table.name}.{_col.name}"
+        if isinstance(_col.type, _sa_types.JSON):
+            try:
+                _json.loads(_lit.strip("'"))
+            except ValueError:
+                _bad_json.append(f"{_where}={_lit}")
+        elif isinstance(_col.type, _Bool) and _lit not in ("TRUE", "FALSE"):
+            _bad_bool.append(f"{_where}={_lit}")
+
+check("every column that gets a default was checked", _checked > 20, _checked)
+check("no JSON column is back-filled with something that is not JSON",
+      not _bad_json, _bad_json)
+check("no boolean column is back-filled with 1 or 0",
+      not _bad_bool, _bad_bool)
+
+# The two shapes, pinned by name. A dict-defaulted column and a
+# list-defaulted one must not both come out as {}.
+_jobs = _Base.metadata.tables["jobs"]
+check("a dict-defaulted JSON column back-fills as an empty object",
+      _backfill_default(_jobs.columns["sourcing_report"]) == "'{}'",
+      _backfill_default(_jobs.columns["sourcing_report"]))
+check("a list-defaulted JSON column back-fills as an empty array",
+      _backfill_default(_jobs.columns["tags"]) == "'[]'",
+      _backfill_default(_jobs.columns["tags"]))
+check("a boolean back-fills as a boolean",
+      _backfill_default(_jobs.columns["automated"]) == "FALSE",
+      _backfill_default(_jobs.columns["automated"]))
+check("a text column back-fills as an empty string",
+      _backfill_default(_jobs.columns["error"]) == "''",
+      _backfill_default(_jobs.columns["error"]))
+check("a column with no sensible backfill is left without one",
+      _backfill_default(_jobs.columns["created_at"]) == "",
+      "a NOT NULL timestamp is not something to guess at")
+
+# SQLAlchemy wraps a zero-argument default so it takes an execution context,
+# so `dict` arrives as `lambda ctx: dict()`. Calling it bare raises TypeError,
+# and swallowing that silently is what made tags come out as {} instead of [].
+from backend.app.db import _python_default, _NO_DEFAULT  # noqa: E402
+
+check("a callable default is actually called",
+      _python_default(_jobs.columns["tags"]) == []
+      and _python_default(_jobs.columns["options"]) == {},
+      (_python_default(_jobs.columns["tags"]),
+       _python_default(_jobs.columns["options"])))
+from backend.app.db import _sql_literal  # noqa: E402
+
+check("a timestamp default is not turned into a literal for old rows",
+      _sql_literal(_python_default(_jobs.columns["created_at"]),
+                   _jobs.columns["created_at"]) == "",
+      "utcnow describes the row being written, not the rows already there")
+
+# And the generated SQL, on the dialect that rejected it.
+_pgd = _pg.dialect()
+_clauses = []
+for _name in ("sourcing_report", "tags", "automated"):
+    _c = _jobs.columns[_name]
+    _clauses.append(f'ADD COLUMN "{_name}" {_c.type.compile(_pgd)} '
+                    f'DEFAULT {_backfill_default(_c)}')
+check("the postgres clause no longer defaults JSON to an integer",
+      not any("JSON DEFAULT 0" in c for c in _clauses), _clauses)
+check("nor a boolean to one",
+      not any("BOOLEAN DEFAULT 1" in c for c in _clauses), _clauses)
+
+# The failure is now said out loud. A warning nobody reads, followed by a
+# crash somewhere else, is what turned a one-line schema gap into an outage.
+import logging as _logging  # noqa: E402
+
+
+class _Catcher(_logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+_catch = _Catcher()
+_dblog = _logging.getLogger("clipforge.db")
+_dblog.addHandler(_catch)
+try:
+    with engine.begin() as conn:
+        conn.execute(_text("ALTER TABLE users DROP COLUMN onboarded"))
+    # A column of a type the helper will not guess at, so the ALTER is fine,
+    # then one that cannot work -- a duplicate -- to force the error path.
+    from backend.app.db import _add_missing_columns as _fix
+    _fix()
+finally:
+    _dblog.removeHandler(_catch)
+check("re-adding a dropped column is reported at info, not error",
+      not [r for r in _catch.records if r.levelno >= _logging.ERROR],
+      [r.getMessage() for r in _catch.records])
+check("and the column is back", "onboarded" in
+      {c["name"] for c in _inspect(engine).get_columns("users")})
+
 section("studio: settings round-trip")
 # A plan ceiling that clamps in silence is indistinguishable from a setting
 # that did not save: the box reads 60 afterwards either way, and every render
