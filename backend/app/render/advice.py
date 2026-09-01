@@ -235,11 +235,39 @@ def review(cfg: Dict, *, upload_count: int = 0,
 
     if share > max_clip + 0.01:
         reachable = max_clip * clips
-        add(Finding(
-            "warning", "It cannot reach your target length",
-            f"{clips} clips at most {max_clip:.0f}s each is {reachable:.0f}s, "
-            f"short of the {target:.0f}s you asked for.",
-            f"Raise the longest segment, or use more clips.", "max_clip_seconds"))
+        # clips x max_clip is a hard ceiling on the whole video, because the
+        # planner caps every segment at max_clip_seconds. How much that matters
+        # depends entirely on the size of the gap, so this is two findings and
+        # not one.
+        #
+        # Missing 105s by a second is arithmetic nobody needs stopping for --
+        # and the shipped defaults do exactly that, 4 clips at 26s being 104s.
+        # Asking for 120s and getting 60s is a different thing: that is half a
+        # video, it happens every single run, and warned about in a side panel
+        # it reads as the length setting being ignored, discovered only after
+        # the render has been spent.
+        #
+        # Nothing is auto-corrected either way. All three numbers were set
+        # deliberately, and the clip count drives the numbered list, so quietly
+        # raising it to reach the target would rewrite the format.
+        needed = target / max(clips, 1)
+        if reachable < target * 0.85:
+            add(Finding(
+                "blocker", "It cannot reach your target length",
+                f"{clips} clips at most {max_clip:g}s each is {reachable:.0f}s, "
+                f"and that is the whole video -- {target:.0f}s is not "
+                f"reachable, so the result would come out {reachable:.0f}s.",
+                f"Raise the longest segment to at least {needed:.0f}s, or use "
+                f"{-(-target // max_clip):.0f} clips, or lower the target to "
+                f"{reachable:.0f}s.",
+                "max_clip_seconds"))
+        else:
+            add(Finding(
+                "warning", "It will come up a little short",
+                f"{clips} clips at most {max_clip:g}s each is {reachable:.0f}s, "
+                f"just under the {target:.0f}s you asked for.",
+                f"Raise the longest segment to {needed:.0f}s to hit it exactly.",
+                "max_clip_seconds"))
     if share < min_clip - 0.01:
         # One decimal, or 7.5 rounds to 8 and the sentence reads as a
         # contradiction: "8s each, below your 8s minimum".
