@@ -334,13 +334,20 @@
       <button class="ghost" id="guide-close">Close</button>
     </header>
 
-    <div class="guide-body" id="guide-body"></div>
+    <!-- One scroll region for everything above the footer. The body, the
+         preview and the advice were three separate flex children, none of
+         which could shrink below its content, so on the last step they pushed
+         "Save and finish" past the bottom of a 720px window and setup could
+         not be completed at all. -->
+    <div class="guide-scroll">
+      <div class="guide-body" id="guide-body"></div>
 
-    <div class="guide-preview hidden" id="guide-preview">
-      <img id="guide-img" alt="Preview of the video layout.">
+      <div class="guide-preview hidden" id="guide-preview">
+        <img id="guide-img" alt="Preview of the video layout.">
+      </div>
+
+      <div id="guide-review" class="review-list"></div>
     </div>
-
-    <div id="guide-review" class="review-list"></div>
 
     <footer class="guide-foot">
       <div class="tour-dots" id="guide-dots" aria-hidden="true"></div>

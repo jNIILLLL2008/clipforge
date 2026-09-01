@@ -200,6 +200,12 @@ FIELDS: List[Dict[str, Any]] = [
           "Reads the loudness of a long source so a beat with no dialogue is "
           "still found. Costs a few seconds per episode; turn it off if your "
           "renders are timing out."),
+    field("ai_moment_ranking", "cut", "bool", True,
+          "Let the AI pick which moments fit",
+          "Reads \"What this niche is\" above and judges the candidate "
+          "moments against it, so a niche about one thing does not get the "
+          "same cuts as a niche about another. Needs an AI key on the server; "
+          "without one the moments are chosen from dialogue and audio alone."),
     field("countdown", "cut", "bool", True,
           "Countdown order",
           "Hold the best clip until last. Turn off for formats where the "

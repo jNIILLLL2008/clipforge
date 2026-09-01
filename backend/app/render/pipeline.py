@@ -240,6 +240,14 @@ def _download_all(pool: List[SourceClip], workspace: Path, wanted: int,
     return ready
 
 
+def _timecode(seconds: float) -> str:
+    """12:41, so somebody can open the episode and check."""
+    minutes, secs = divmod(int(max(0.0, seconds)), 60)
+    hours, minutes = divmod(minutes, 60)
+    return (f"{hours}:{minutes:02d}:{secs:02d}" if hours
+            else f"{minutes}:{secs:02d}")
+
+
 def _as_excerpt(cut: Cut) -> SourceClip:
     """One excerpt as its own clip, so two moments are two rows in history.
 
@@ -411,7 +419,8 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
     # is the difference between a compilation of the show and a compilation
     # of videos that mention it.
     progress("curating", "Finding the moments")
-    cuts = moments.plan(sources, fmt, wanted, already_used)
+    cuts = moments.plan(sources, fmt, wanted, already_used,
+                        niche_name=str(niche.get("name") or ""))
     if len(cuts) < 2:
         raise RenderError(
             f"Only {len(cuts)} usable moment(s) were found; at least 2 are "
@@ -446,6 +455,23 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
         clips = list(reversed(clips))
         segments = list(reversed(segments))
         labels = build_cut_labels(cuts, fmt)
+
+    # What it decided, in the order it will play. Until this existed the first
+    # sight anybody got of a misread niche was a finished video, with no way
+    # to tell a bad choice of moment from a bad playlist -- so "it does not
+    # understand what I want" had no evidence behind it either way.
+    sourcing["moments_chosen"] = [
+        {
+            "position": position,
+            "source": (cut.clip.title or "")[:80],
+            "at": _timecode(cut.start) if cut.start is not None else "whole clip",
+            "seconds": round(cut.start, 1) if cut.start is not None else None,
+            "label": label,
+            "why": cut.why,
+            "score": round(cut.score, 3),
+        }
+        for position, (cut, label) in enumerate(zip(cuts, labels), start=1)
+    ]
 
     plan = _build_overlay_plan(clips, segments, fmt, labels)
 

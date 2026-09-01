@@ -269,6 +269,7 @@ code {
   background: var(--good-dim); color: var(--good); white-space: nowrap;
 }
 .pill.warn { background: rgba(217, 169, 46, .16); color: var(--warn); }
+.hint.warn { color: var(--warn); }
 .pill.bad { background: rgba(255, 92, 114, .16); color: var(--bad); }
 .pill.off { background: var(--surface-2); color: var(--muted); }
 
@@ -505,12 +506,18 @@ code {
   gap: 1rem; padding: 1.2rem 1.2rem .8rem;
 }
 .guide-head h2 { font-size: 1.35rem; letter-spacing: -.02em; }
-.guide-body { padding: 0 1.2rem; overflow-y: auto; flex: 1; }
+/* The scroll region. min-height:0 is what actually makes it work: a flex
+   item defaults to min-height:auto and will not shrink below its content, so
+   without it the preview image simply pushed the footer off the screen. */
+.guide-scroll { overflow-y: auto; flex: 1; min-height: 0; }
+.guide-body { padding: 0 1.2rem; }
 .guide-body > p { color: var(--muted); font-size: .95rem; line-height: 1.55; }
 .guide-body b { color: var(--text); }
 .guide-foot {
   display: flex; align-items: center; justify-content: space-between;
   gap: 1rem; padding: 1rem 1.2rem; border-top: 1px solid var(--border);
+  flex-shrink: 0;   /* never squeezed out by a tall preview */
+  background: var(--surface);
 }
 .guide-foot .tour-dots { margin: 0; }
 
@@ -710,3 +717,16 @@ code {
   align-items: center;
   text-decoration: none;
 }
+
+/* Where each clip came from, under a finished video. Collapsed, because it is
+   for the run that went wrong rather than the nine that went right. */
+.moments { margin: .5rem 0 0; }
+.moments summary {
+  cursor: pointer; font-size: .82rem; color: var(--muted);
+  padding: .2rem 0; list-style-position: inside;
+}
+.moments summary:hover { color: var(--text); }
+.moments ol { margin: .4rem 0 0; padding-left: 1.2rem; display: grid; gap: .4rem; }
+.moments li { font-size: .85rem; }
+.moments li b { display: block; font-weight: 600; }
+.moments li .meta { font-size: .78rem; }

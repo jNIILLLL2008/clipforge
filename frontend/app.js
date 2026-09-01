@@ -114,10 +114,18 @@ async function enterApp() {
     await startCheckout(plan);
     return;
   }
+  // Setup, not the tour. The tour explains the product and the guide is what
+  // actually configures it, and until now the explaining was automatic while
+  // the configuring sat behind a link on the settings screen. So a new
+  // subscriber met a 79-field form and a red blocker before anyone had asked
+  // them a single question. The tour still runs, straight after.
+  //
   // Not while a pairing is waiting. Someone who arrived from an agent has a
-  // program open on another screen polling for their answer, and eight steps
-  // of welcome is not the thing to put in front of them first.
-  if (state.studio && !state.studio.onboarded && !state.pairCode) openTour();
+  // program open on another screen polling for their answer, and a setup
+  // wizard is not the thing to put in front of them first.
+  if (state.studio && !state.studio.onboarded && !state.pairCode) {
+    openGuide({ firstRun: true });
+  }
 }
 
 async function startCheckout(plan) {
@@ -529,6 +537,27 @@ function sourcingNote(job) {
   return `<p class="meta">${esc(bits.join(' \u00b7 '))}.${esc(fix)}</p>`;
 }
 
+/* Which moment it cut, from where, and why.
+
+   "It does not understand my niche" is the hardest complaint to act on,
+   because a finished video shows the answer and never the reasoning. Four
+   clips that feel wrong could be a bad playlist, a bad reading of the niche,
+   or the right moments cut two seconds early, and nothing on screen told
+   those apart. The timecode is the useful part: it can be opened in the
+   source and checked. */
+function momentList(job) {
+  const chosen = (job.sourcing || {}).moments_chosen || [];
+  if (!chosen.length) return '';
+  return `<details class="moments">
+    <summary>Where these ${chosen.length} clip(s) came from</summary>
+    <ol>${chosen.map((m) => `<li>
+      <b>${esc(m.label || 'Clip')}</b>
+      <span class="meta">${esc(m.source || 'source')} \u00b7 ${esc(m.at || '')}${
+        m.why ? ` \u00b7 ${esc(m.why)}` : ''}</span>
+    </li>`).join('')}</ol>
+  </details>`;
+}
+
     const reasons = (job.retention?.reasons || []).slice(0, 2);
     return `<div class="job">
       <div class="job-head">
@@ -542,6 +571,7 @@ function sourcingNote(job) {
       ${working ? `<div class="meta">${esc(job.stage || '')}</div>` : ''}
       ${reasons.length ? `<ul class="reasons">${reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
       ${sourcingNote(job)}
+      ${momentList(job)}
       ${job.error ? `<p class="error">${esc(job.error)}</p>` : ''}
       ${job.upload_error ? `<p class="error">Upload: ${esc(job.upload_error)}</p>` : ''}
       <div class="job-actions">
@@ -777,8 +807,8 @@ function pairCodeFromUrl() {
 function closePair() {
   $('pair').classList.add('hidden');
   state.pairCode = '';
-  // The tour it displaced, now that the screen is free.
-  if (state.studio && !state.studio.onboarded) openTour();
+  // The setup it displaced, now that the screen is free.
+  if (state.studio && !state.studio.onboarded) openGuide({ firstRun: true });
   // Leave the URL clean so a refresh, or a bookmark, does not reopen a code
   // that has already been used.
   history.replaceState({}, '', '/app');
@@ -979,7 +1009,75 @@ const GUIDE = [
     },
   },
   {
+    title: 'Where do the clips come from?',
+    choiceKey: 'source',
+    /* Asked of everybody, not only the "one show" preset. This question used
+       to live inside a step gated on require_show_match, which only that
+       preset sets -- so somebody picking "a ranked countdown", the first and
+       most obvious option, was never asked where footage comes from and fell
+       through to a keyword search. A search returns fan edits, scenes from
+       the films and people reviewing the show at a desk, all of them honest
+       matches for the words typed. That is how four finished videos came out
+       mostly not being the show at all.
+
+       Sourcing is orthogonal to shape, so it gets its own question. */
+    intro: `<p>This decides whether the finished videos are any good, more
+      than the pacing or the fonts or the length do.</p>`,
+    render: () => choices('source', [
+      { id: 'playlist', title: 'A YouTube playlist',
+        note: 'Paste a playlist of full episodes. The good moments are found inside them and cut out.' },
+      { id: 'uploads', title: 'Footage I upload myself',
+        note: 'Your own clips. Nothing is searched for and nothing is downloaded.' },
+    ]) + (youtubeUsable() ? '' : `<p class="hint warn">The YouTube source is
+      switched off on this server, so only your own uploads can be used.</p>`),
+    apply: (value) => {
+      const wants = youtubeUsable() ? (value || 'uploads') : 'uploads';
+      guideChoice.source = wants;
+      state.settings.sources = wants === 'playlist'
+        ? ['youtube', 'upload'] : ['upload'];
+      if (wants === 'uploads') {
+        // The show filter refuses clips that cannot be shown to come from one
+        // programme. That question does not arise for your own footage, and
+        // leaving it on with nothing to match against rejects every clip.
+        state.settings.require_show_match = false;
+      }
+    },
+  },
+  {
+    title: 'Which playlist?',
+    skipUnless: () => guideChoice.source === 'playlist',
+    intro: `<p>Open the playlist on YouTube and copy the address. Whatever is
+      in it is what gets used &mdash; a playlist you chose is proof of what the
+      footage is, which a search can never be.</p>
+      <p>Full episodes are ideal. Anything longer than about a minute is
+      searched rather than used whole, and several moments are cut from each,
+      so a handful of episodes goes a long way.</p>`,
+    render: () => field('source_playlists', 'Playlist links', 'textarea',
+      (state.settings.source_playlists || []).join('\n'),
+      'One link per line, e.g. https://www.youtube.com/playlist?list=PL...'),
+    apply: (value, form) => {
+      const links = splitLines(form.source_playlists);
+      // Choosing "a YouTube playlist" and then pasting nothing lands on
+      // exactly the configuration this step exists to prevent: discovery
+      // falls back to a keyword search. The advice on the last step does say
+      // so, but by then it reads as a complaint about a decision already
+      // taken, and it is skippable. Refuse here instead.
+      if (!links.length) {
+        throw new Error('Paste a playlist link, or go back and choose your '
+                        + 'own uploads instead.');
+      }
+      const unusable = links.filter((l) => !/[?&]list=|^[A-Z]{2}[\w-]{6,}$/.test(l));
+      if (unusable.length === links.length) {
+        throw new Error('That is not a playlist link — a usable one contains '
+                        + '"list=" followed by an id. Open the playlist itself '
+                        + 'on YouTube and copy the address from there.');
+      }
+      state.settings.source_playlists = links;
+    },
+  },
+  {
     title: 'What should it look for?',
+    skipUnless: () => guideChoice.source !== 'playlist',
     intro: `<p>These words are matched against your upload filenames, so
       leaving this empty uses everything you have uploaded.</p>`,
     render: () => field('search_terms', 'Search terms', 'textarea',
@@ -990,41 +1088,6 @@ const GUIDE = [
     // checklist entry reading "Undefined".
     apply: (value, form) => {
       state.settings.search_terms = splitLines(form.search_terms);
-    },
-  },
-  {
-    title: 'Which show is it?',
-    skipUnless: () => state.settings.require_show_match,
-    /* The playlist comes first because it is the setting that decides whether
-       the finished video is any good. A search for short videos about a show
-       returns fan edits, scenes from the films, and people reviewing it at a
-       desk -- all honest matches for the words typed, none of them the show.
-       A playlist is proof, and the moments are cut out of the episodes in it.
-       The keywords below only matter when there is no playlist. */
-    intro: `<p>Paste a <b>playlist of full episodes</b>. Whatever is in it is
-      what gets used, and the good moments are found inside each episode and
-      cut out &mdash; so every clip really is from your show.</p>
-      <p>No playlist? The keywords below are used to search instead, but a
-      search returns fan edits, reaction videos and clips from the films as
-      readily as it returns your show. The filter keeps clips that mention a
-      <b>show keyword</b>, or name <b>two different regulars</b> together.</p>`,
-    render: () => `
-      ${field('source_playlists', 'Playlists of full episodes', 'textarea',
-              (state.settings.source_playlists || []).join('\n'),
-              'One link per line. Open the playlist on YouTube and copy the address.')}
-      ${field('show_name', 'Show name', 'input', state.settings.show_name || '',
-              'Given to the AI. e.g. "the CBS Sports Golazo studio show"')}
-      ${field('show_terms', 'Show keywords', 'textarea',
-              (state.settings.show_terms || []).join('\n'),
-              'One per line. Words that appear on clips FROM this show.')}
-      ${field('show_people', 'The regulars', 'textarea',
-              (state.settings.show_people || []).join('\n'),
-              'One person per line. Separate their aliases with | so nicknames match:\nthierry henry|thierry|henry')}`,
-    apply: (value, form) => {
-      state.settings.source_playlists = splitLines(form.source_playlists);
-      state.settings.show_name = form.show_name.trim();
-      state.settings.show_terms = splitLines(form.show_terms);
-      state.settings.show_people = splitLines(form.show_people);
     },
   },
   {
@@ -1060,6 +1123,27 @@ const GUIDE = [
 
 let guideAt = 0;
 let guideChoice = {};
+
+/* What the server will actually let a job use. Offering "a YouTube playlist"
+   on an install where the operator has not enabled unlicensed sources would
+   walk somebody into a configuration the registry then refuses, and the only
+   sign would be a run that finds nothing. */
+let guideSources = [];
+
+/* Whether this is somebody's first time. Setup comes first and the tour
+   follows it, so the walkthrough explains a screen that is already configured
+   rather than an empty one. */
+let guideFirstRun = false;
+
+/* The last review of what the answers add up to, so finishing can refuse a
+   configuration that cannot produce a video -- which the comment at the top
+   of GUIDE has always claimed happened, and which nothing enforced. */
+let guideReview = null;
+
+function youtubeUsable() {
+  return guideSources.some((s) => s.name === 'youtube' && s.enabled
+                                  && s.configured && s.permitted);
+}
 
 function choices(key, options) {
   return options.map((o) => `
@@ -1160,13 +1244,29 @@ async function guidePreview() {
     const data = await api('/api/studio/review', {
       method: 'POST', body: { settings: state.settings },
     });
+    guideReview = data;
     $('guide-review').innerHTML = renderFindings(data);
   } catch { /* advice is a bonus, not a blocker */ }
 }
 
-async function openGuide() {
+async function openGuide({ firstRun = false } = {}) {
   guideAt = 0;
   guideChoice = {};
+  guideFirstRun = firstRun;
+  guideReview = null;
+  try {
+    ({ sources: guideSources } = await api('/api/sources'));
+  } catch { guideSources = []; }
+
+  // Seed the sourcing answer so pressing Next without touching anything still
+  // produces a configuration that can run. A returning user keeps what they
+  // already chose; a new one starts on the playlist, because the alternative
+  // default is uploads-with-no-uploads, which is a blocker on first login.
+  const hasPlaylist = (state.settings.source_playlists || []).length > 0;
+  const usesYouTube = (state.settings.sources || []).includes('youtube');
+  guideChoice.source = !youtubeUsable() ? 'uploads'
+    : (firstRun || hasPlaylist || usesYouTube) ? 'playlist' : 'uploads';
+
   $('guide').classList.remove('hidden');
   await renderGuide();
 }
@@ -1191,6 +1291,11 @@ $('guide-next').onclick = async () => {
       guideAt += 1;
       await renderGuide();
     } else {
+      const blockers = (guideReview?.findings || [])
+        .filter((f) => f.level === 'blocker');
+      if (blockers.length) {
+        throw new Error(`${blockers[0].title}. ${blockers[0].fix || ''}`.trim());
+      }
       const { settings } = await api('/api/studio/settings', {
         method: 'PUT', body: { settings: state.settings },
       });
@@ -1201,6 +1306,13 @@ $('guide-next').onclick = async () => {
       await loadStudio();
       $('guide').classList.add('hidden');
       toast('Your niche is set up. Press Publish when ready.');
+      // Now the tour, and only now: it points at the real controls, and it
+      // makes far more sense over a screen that is already configured than
+      // over an empty one somebody has not been asked anything about yet.
+      if (guideFirstRun) {
+        guideFirstRun = false;
+        openTour();
+      }
     }
   } catch (err) {
     toast(err.message);
