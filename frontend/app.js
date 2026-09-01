@@ -495,6 +495,40 @@ async function loadJobs() {
     else if (working) { pill = 'warn'; label = job.status; }
     else if (['failed', 'rejected'].includes(job.status) || job.upload_state === 'failed') pill = 'bad';
 
+/* Why this video contains clips you have seen before.
+
+   A run that has run out of fresh footage still produces a video -- it reuses
+   the clips published longest ago rather than failing, which is the right
+   call. But said nowhere, the result is indistinguishable from a source that
+   is being ignored, and the obvious conclusion is that the app is broken. The
+   numbers are the whole answer: four candidates for a four-clip video means
+   the pool is too small, not that the playlist went unread. */
+function sourcingNote(job) {
+  const s = job.sourcing || {};
+  if (!s.candidates && !s.reused) return '';
+
+  const bits = [];
+  if (s.reused) {
+    const left = s.unused_available || 0;
+    bits.push(`${s.reused} of ${s.reused + left} clip(s) here have been `
+      + 'used before');
+    bits.push(left
+      ? `only ${left} unused clip(s) were left to choose from`
+      : 'nothing unused was left to choose from');
+  }
+  if (s.candidates !== undefined) {
+    const dropped = s.rejected_by_filters || 0;
+    bits.push(`${s.candidates} candidate(s) found`
+      + (dropped ? `, ${dropped} dropped by your filters` : ''));
+  }
+  if (!bits.length) return '';
+
+  const fix = s.reused
+    ? ' Add more videos to the playlist, widen the search, or lower the clip count.'
+    : '';
+  return `<p class="meta">${esc(bits.join(' \u00b7 '))}.${esc(fix)}</p>`;
+}
+
     const reasons = (job.retention?.reasons || []).slice(0, 2);
     return `<div class="job">
       <div class="job-head">
@@ -507,6 +541,7 @@ async function loadJobs() {
       </div>
       ${working ? `<div class="meta">${esc(job.stage || '')}</div>` : ''}
       ${reasons.length ? `<ul class="reasons">${reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
+      ${sourcingNote(job)}
       ${job.error ? `<p class="error">${esc(job.error)}</p>` : ''}
       ${job.upload_error ? `<p class="error">Upload: ${esc(job.upload_error)}</p>` : ''}
       <div class="job-actions">

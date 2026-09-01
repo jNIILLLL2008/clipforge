@@ -216,6 +216,13 @@ class Job(Base):
     retention_score = Column(Float, default=0.0, nullable=False)
     retention_report = Column(JSON, default=dict, nullable=False)
 
+    # Where the clips came from and what was thrown away getting them. Kept
+    # because "the same clips keep coming back" and "my playlist is being
+    # ignored" look identical from the finished video, and the difference --
+    # a pool of six candidates against a run that needs four -- was only ever
+    # written to a log.
+    sourcing_report = Column(JSON, default=dict, nullable=False)
+
     # Publishing
     upload_state = Column(String(20), default="none", nullable=False)
     # none | skipped | uploading | uploaded | failed
@@ -248,6 +255,7 @@ class Job(Base):
             "size_bytes": self.size_bytes,
             "retention_score": round(self.retention_score, 1),
             "retention": self.retention_report or {},
+            "sourcing": self.sourcing_report or {},
             "niche": self.niche.name if self.niche else "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "download_url": f"/api/jobs/{self.public_id}/download"

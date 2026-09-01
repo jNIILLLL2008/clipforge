@@ -253,6 +253,7 @@ def _process(job_id: int) -> None:
             return
         job.retention_score = result.retention.score
         job.retention_report = result.retention.to_dict()
+        job.sourcing_report = result.sourcing or {}
         job.title = result.title[:255]
         job.output_path = str(result.output)
         job.thumbnail_path = str(result.thumbnail or "")
