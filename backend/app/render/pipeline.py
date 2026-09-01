@@ -10,7 +10,7 @@ actually happened.
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -40,6 +40,12 @@ class PipelineResult:
     retention: RetentionReport
     title: str
     credits: List[str]
+    #: What sourcing actually did -- how many candidates were found, how many
+    #: the filters threw away, and how many clips are repeats. Without this a
+    #: video full of clips you have seen before is indistinguishable from a
+    #: broken playlist, and the only place the difference was recorded was a
+    #: log line nobody reads.
+    sourcing: Dict = field(default_factory=dict)
 
 
 def _noop(stage: str, detail: str) -> None:
@@ -48,8 +54,15 @@ def _noop(stage: str, detail: str) -> None:
 
 def gather(niche_settings: Dict, wanted: int,
            user_id: Optional[int],
-           already_used: Optional[set] = None) -> List[SourceClip]:
-    """Collect candidates across every permitted source, then filter them."""
+           already_used: Optional[set] = None,
+           report: Optional[Dict] = None) -> List[SourceClip]:
+    """Collect candidates across every permitted source, then filter them.
+
+    ``report``, when given, is filled in with what happened: the counts a
+    person needs to tell "my playlist is being ignored" apart from "my
+    playlist only has six videos in it".
+    """
+    stats = report if report is not None else {}
     adapters = source_registry.for_job(niche_settings.get("sources") or [],
                                        user_id, niche_settings)
     if not adapters:
@@ -79,6 +92,9 @@ def gather(niche_settings: Dict, wanted: int,
             raw.append(clip)
 
     pool = selection.apply(raw, niche_settings)
+    stats["candidates"] = len(raw)
+    stats["rejected_by_filters"] = len(raw) - len(pool)
+    stats["sources"] = sorted({a.name for a in adapters})
 
     # Everything above ranks the same way every time, so without this the
     # same five clips win every run. Drop what this account has already
@@ -108,8 +124,13 @@ def gather(niche_settings: Dict, wanted: int,
                 log.info(
                     "Only %d unused clip(s) for a %d-clip video; reusing %d "
                     "of the oldest.", len(fresh), wanted, len(topped))
+                stats["reused"] = len(topped)
+                stats["reused_titles"] = [c.title for c in topped][:6]
+                stats["unused_available"] = len(fresh)
             pool = fresh + topped
 
+    stats.setdefault("reused", 0)
+    stats["usable"] = len(pool)
     log.info("Gathered %d candidate clip(s) from %d source(s).",
              len(pool), len(adapters))
 
@@ -282,7 +303,8 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
 
     progress("sourcing", "Looking for clips")
     already_used = options.get("already_used") or set()
-    pool = gather(fmt, wanted, user_id, already_used)
+    sourcing: Dict = {}
+    pool = gather(fmt, wanted, user_id, already_used, report=sourcing)
     if not pool:
         raise RenderError(
             "No clips matched this niche. Try broader search terms, or upload "
@@ -335,6 +357,7 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
         return PipelineResult(
             output=Path(), thumbnail=None, duration=0.0, size_bytes=0,
             clips=clips, plan=plan, retention=report, title="", credits=[],
+            sourcing=sourcing,
         )
 
     progress("rendering", f"Encoding {len(segments)} clip(s)")
@@ -353,6 +376,7 @@ def run_job(*, niche: Dict, options: Dict, user_id: Optional[int],
         retention=report,
         title=title,
         credits=credits,
+        sourcing=sourcing,
     )
 
 

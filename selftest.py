@@ -264,6 +264,54 @@ check("the cap is still respected",
 check("and it never overshoots the target",
       _length([300] * 5, 120) <= 120.0, _length([300] * 5, 120))
 
+# What sourcing actually did, recorded on the job. A run that has run out of
+# fresh footage still produces a video -- it reuses the clips published longest
+# ago rather than failing -- and said nowhere that is indistinguishable from a
+# source being ignored entirely.
+from backend.app.render.pipeline import gather as _gather  # noqa: E402
+import backend.app.sources as _reg  # noqa: E402
+from backend.app.sources.base import SourceClip as _PSC  # noqa: E402
+
+
+class _StubSource:
+    name, reusable, needs_key, last_problem = "upload", True, False, ""
+
+    def available(self):
+        return True
+
+    def search(self, terms, limit):
+        out = []
+        for i in range(6):
+            c = _PSC(source="upload", external_id=f"s{i:09d}", title=f"clip {i}",
+                     url=f"http://x/{i}", author="a", duration=90.0,
+                     licence="ok", reusable=True, attribution_required=False)
+            c.extra = {"view_count": 100 - i, "description": "", "age_days": 1}
+            c.tags = []
+            out.append(c)
+        return out[:limit]
+
+
+_saved_for_job = _reg.for_job
+_reg.for_job = lambda names, uid=None, cfg=None: [_StubSource()]
+try:
+    _cfg = sanitise({"sources": ["upload"], "clips": 4})
+    _rep = {}
+    _gather(_cfg, 4, None, None, report=_rep)
+    check("a run records how many candidates it saw", _rep["candidates"] == 6, _rep)
+    check("and reports no reuse when there was none", _rep["reused"] == 0, _rep)
+
+    # Five of six already published: only one is fresh for a four-clip video.
+    _hist = {("upload", f"s{i:09d}"): "2026-01-0%d" % (i + 1) for i in range(5)}
+    _rep2 = {}
+    _gather(_cfg, 4, None, _hist, report=_rep2)
+    check("a thin pool is reported as reuse, not silence",
+          _rep2["reused"] == 3, _rep2)
+    check("and says how little was left to choose from",
+          _rep2["unused_available"] == 1, _rep2)
+    check("and names the repeats", len(_rep2["reused_titles"]) == 3, _rep2)
+finally:
+    _reg.for_job = _saved_for_job
+
 # The advice that explains it before a run is spent.
 from backend.app.render.advice import review as _rev  # noqa: E402
 
