@@ -73,12 +73,18 @@ _NON_SPEECH = re.compile(
 )
 
 
-def parse_vtt(path: Path, limit: int = 4000) -> List[Caption]:
+def parse_vtt(path: Path, limit: int = 4000,
+              include_non_speech: bool = False) -> List[Caption]:
     """Read a WebVTT file into timed captions.
 
     Auto-captions roll: each cue repeats the previous line plus a new word.
     Cues that merely extend the one before are collapsed, or the burned-in
     text stutters.
+
+    ``include_non_speech`` keeps the [Music] and [Laughter] cues that burning
+    in must drop. The moment finder wants exactly those: laughter marks the
+    beat it is looking for, and a stretch of nothing but music marks the one
+    it should avoid. Captions never ask for them.
     """
     try:
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
@@ -97,7 +103,7 @@ def parse_vtt(path: Path, limit: int = 4000) -> List[Caption]:
         # auto-captions emit [Music] over every scored moment, and an animated
         # series is scored end to end -- burning those in puts "[Music]"
         # across the screen for most of the video.
-        if text and not _NON_SPEECH.fullmatch(text):
+        if text and (include_non_speech or not _NON_SPEECH.fullmatch(text)):
             cues.append(Caption(pending[0], pending[1], text))
 
     for line in raw.splitlines():

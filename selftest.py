@@ -276,6 +276,12 @@ from backend.app.sources.base import SourceClip as _PSC  # noqa: E402
 class _StubSource:
     name, reusable, needs_key, last_problem = "upload", True, False, ""
 
+    #: Thirty seconds, which is under the 75s that makes a source a haystack.
+    #: These are clips: each is used whole, so having published one is a
+    #: reason to skip it. A source long enough to cut several moments out of
+    #: is a different case with different counters, checked just below.
+    duration = 30.0
+
     def available(self):
         return True
 
@@ -283,12 +289,24 @@ class _StubSource:
         out = []
         for i in range(6):
             c = _PSC(source="upload", external_id=f"s{i:09d}", title=f"clip {i}",
-                     url=f"http://x/{i}", author="a", duration=90.0,
+                     url=f"http://x/{i}", author="a", duration=self.duration,
                      licence="ok", reusable=True, attribution_required=False)
             c.extra = {"view_count": 100 - i, "description": "", "age_days": 1}
             c.tags = []
             out.append(c)
         return out[:limit]
+
+
+class _StubEpisodes(_StubSource):
+    """The same six sources, long enough to be searched rather than used.
+
+    Five minutes: over the 75s that makes a source a haystack, and under the
+    600s default ceiling, so this tests the haystack rule rather than the
+    length filter. A real episode clears that ceiling too and is let through
+    by the playlist exemption instead -- checked in its own section.
+    """
+
+    duration = 300.0
 
 
 _saved_for_job = _reg.for_job
@@ -309,6 +327,19 @@ try:
     check("and says how little was left to choose from",
           _rep2["unused_available"] == 1, _rep2)
     check("and names the repeats", len(_rep2["reused_titles"]) == 3, _rep2)
+
+    # A long source is not spent by having been mined once: the rest of the
+    # episode was never published. It is not silently fine either, so the run
+    # says how many it went back to rather than reporting no reuse at all.
+    _reg.for_job = lambda names, uid=None, cfg=None: [_StubEpisodes()]
+    _rep3 = {}
+    _pool3 = _gather(_cfg, 4, None, _hist, report=_rep3)
+    check("an episode already mined is still offered", len(_pool3) == 6, _rep3)
+    check("and is reported as returned to, not as a repeat",
+          _rep3["reused"] == 0 and _rep3["remined"] == 5, _rep3)
+    check("the least-mined episode comes first",
+          _pool3[0].external_id == "s000000005",
+          [c.external_id for c in _pool3])
 finally:
     _reg.for_job = _saved_for_job
 
@@ -701,6 +732,313 @@ check("too short dropped", not passes_filters(clip(duration=4), filters)[0])
 check("too few views dropped", not passes_filters(clip(views=10), filters)[0])
 check("blocked channel dropped", not passes_filters(clip(author="Spam Co"), filters)[0])
 check("unknown views not penalised", passes_filters(clip(views=None), filters)[0])
+
+# --------------------------------------------------------------------------- #
+section("moments are cut out of long videos")
+# Pasting a playlist fixed *where* clips come from. It did not fix the other
+# half: a source video still became exactly one clip, taken from whatever was
+# in the middle of it. A twenty-minute episode gave one excerpt and the reuse
+# history then burned the whole episode, so a playlist of ten episodes was
+# spent after ten runs and the same scenes came back.
+#
+# long_clip_seconds has promised the fix in its own help text since the
+# settings screen was written -- "longer clips get a timed transcript so the
+# moment can be located inside them" -- and nothing read it.
+from backend.app.render import moments as _mo  # noqa: E402
+
+
+def _vtt(path: Path, cues) -> Path:
+    """A WebVTT file from (start, end, text) triples."""
+    def stamp(value):
+        return (f"{int(value // 3600):02d}:{int(value % 3600 // 60):02d}:"
+                f"{value % 60:06.3f}")
+
+    body = ["WEBVTT", ""]
+    for start, end, text in cues:
+        body += [f"{stamp(start)} --> {stamp(end)}", text, ""]
+    path.write_text("\n".join(body), encoding="utf-8")
+    return path
+
+
+def _episode(name, cues, duration=600.0, external_id="EP1"):
+    clip = SourceClip(source="youtube", external_id=external_id,
+                      title="The Show - Episode 1", url="", duration=duration)
+    clip.extra = {"subtitle_path": str(_vtt(TMP / f"{name}.vtt", cues))}
+    return clip
+
+
+def _chatter(start, end, words=6, tag="line"):
+    """Dialogue cues at two-second intervals across a stretch."""
+    out, when, index = [], start, 0
+    while when + 1.6 <= end:
+        index += 1
+        out.append((when, when + 1.6,
+                    " ".join(f"{tag}{index}word{n}" for n in range(words))))
+        when += 2.0
+    return out
+
+
+_FMT = sanitise({"clips": 5, "target_seconds": 120, "min_clip_seconds": 8,
+                 "max_clip_seconds": 32, "long_clip_seconds": 75,
+                 "moments_per_video": 2, "moment_min_gap_seconds": 90,
+                 "skip_intro_seconds": 45, "skip_outro_seconds": 45,
+                 "moment_audio_scan": False})
+check("a two-minute five-clip video gives each moment 24 seconds",
+      _mo.slot_seconds(_FMT) == 24.0, _mo.slot_seconds(_FMT))
+
+# Dialogue at 300s and at 450s, near-silence elsewhere, and a burst inside the
+# title sequence that must be ignored precisely because it is the titles.
+_cues = (_chatter(0, 40, tag="intro")
+         + _chatter(300, 330, tag="scene")
+         + _chatter(450, 480, tag="other")
+         + [(120, 122, "one line"), (200, 202, "another line"),
+            (560, 562, "closing line")])
+_ep = _episode("dense", _cues)
+_found = _mo.mine(_ep, _FMT, 2)
+check("a long source yields more than one moment", len(_found) == 2, len(_found))
+_starts = sorted(round(c.start) for c in _found)
+check("both dense scenes are found",
+      any(abs(s - 300) <= 30 for s in _starts)
+      and any(abs(s - 450) <= 30 for s in _starts), _starts)
+check("the title sequence is skipped", all(s >= 40 for s in _starts), _starts)
+check("the moments do not overlap each other",
+      abs(_starts[0] - _starts[1]) >= 24.0, _starts)
+check("nothing runs past the end of the episode",
+      all(c.start + c.duration <= _ep.duration + 0.01 for c in _found))
+check("each moment says what won it", all(c.why for c in _found),
+      [c.why for c in _found])
+
+# The excerpt is the history key, not the episode.
+check("a moment identifies itself by where it starts",
+      _found[0].moment_id() == f"EP1@{int(round(_found[0].start))}",
+      _found[0].moment_id())
+_used_moment = {("youtube", f"EP1@{int(round(_starts[0]))}"): "2026-08-01"}
+_again = _mo.mine(_ep, _FMT, 1, _used_moment)
+check("a moment already published is not cut again",
+      _again and abs(_again[0].start - _starts[0]) > 24.0,
+      [c.start for c in _again])
+check("but the rest of the episode is still available", len(_again) == 1)
+
+# Rows written before moments existed name the video and nothing else. They
+# always used the middle, so the middle is all that is spent.
+_legacy = _mo.mine(_ep, _FMT, 1, {("youtube", "EP1"): "2026-07-01"})
+check("an old whole-video row burns the middle it used, not the episode",
+      _legacy and abs(_legacy[0].start - 450) <= 30, [c.start for c in _legacy])
+
+# No captions and no audio scan: still several different moments, because
+# five identical windows from the top of the episode is not an answer.
+_blind = SourceClip(source="youtube", external_id="EP2", title="Episode 2",
+                    url="", duration=600.0)
+_spread = _mo.mine(_blind, _FMT, 3)
+check("with nothing to go on the moments are still spread out",
+      len({round(c.start) for c in _spread}) == 3, [c.start for c in _spread])
+
+# Reaction markers move the score; a stretch of nothing but score does not.
+_react = _episode("react", _chatter(300, 330, tag="a")
+                  + _chatter(450, 480, tag="b")
+                  + [(452, 454, "[Laughter]"), (458, 460, "[Applause]")],
+                  external_id="EP3")
+check("laughter beats the same amount of dialogue without it",
+      abs(_mo.mine(_react, _FMT, 2)[0].start - 450) <= 30,
+      [round(c.start) for c in _mo.mine(_react, _FMT, 2)])
+_musical = _episode("music", [(300 + n * 2, 302 + n * 2, "[Music]")
+                              for n in range(15)]
+                    + _chatter(450, 480, tag="talk"), external_id="EP4")
+check("a stretch that is only the score is not the moment",
+      abs(_mo.mine(_musical, _FMT, 1)[0].start - 450) <= 30,
+      _mo.mine(_musical, _FMT, 1)[0].start)
+
+# Spread across the playlist. Five moments from one episode is a video that
+# plays as a single scene, which reads as "it reuses the same clips" whether
+# or not the clips are literally repeats.
+_a = [_mo.Cut(clip=_ep, start=10, score=0.9),
+      _mo.Cut(clip=_ep, start=200, score=0.8),
+      _mo.Cut(clip=_ep, start=400, score=0.7)]
+_b = [_mo.Cut(clip=_react, start=10, score=0.6),
+      _mo.Cut(clip=_react, start=300, score=0.5)]
+check("everyone's best comes before anyone's second best",
+      [c.score for c in _mo._interleave([_a, _b], 4)] == [0.9, 0.6, 0.8, 0.5],
+      [c.score for c in _mo._interleave([_a, _b], 4)])
+check("and one video can still fill the gap when it is the only one",
+      len(_mo._interleave([_a], 3)) == 3)
+
+# Which episodes to return to first, so successive runs walk the playlist.
+from backend.app.render.pipeline import (  # noqa: E402
+    _plan_segments as _plan2, _times_mined as _mined,
+)
+
+check("an episode counts once for every moment taken from it",
+      _mined(_PC("EP1"), {("youtube", "EP1@300"): "", ("youtube", "EP1@450"): "",
+                          ("youtube", "OTHER@10"): ""}) == 2)
+check("a whole-video row counts once",
+      _mined(_PC("EP1"), {("youtube", "EP1"): ""}) == 1)
+check("and a different video not at all",
+      _mined(_PC("EP9"), {("youtube", "EP1@1"): ""}) == 0)
+
+
+# The planner has to honour the moment, and must not run off the end of the
+# source when the moment sits near it.
+class _Src:
+    def __init__(self, duration):
+        self.duration = float(duration)
+        self.local_path = Path("x.mp4")
+        self.title = "Episode"
+
+
+_cuts = [_mo.Cut(clip=None, start=300.0, source_duration=600.0),
+         _mo.Cut(clip=None, start=588.0, source_duration=600.0)]
+_segs = _plan2([_Src(600), _Src(600)], dict(_FMT), _cuts)
+check("the segment starts where the moment does", _segs[0].start == 300.0,
+      _segs[0].start)
+check("a moment near the end is truncated, not overrun",
+      _segs[1].start + _segs[1].duration <= 600.01,
+      (_segs[1].start, _segs[1].duration))
+check("without cuts the trim strategy still decides",
+      _plan2([_Src(600)], {**_FMT, "clip_trim_strategy": "start"})[0].start == 0.0)
+
+# The numbered list is the retention device, and three moments cut from one
+# episode all carry that episode's title.
+from backend.app.render.labels import for_cuts as _for_cuts  # noqa: E402
+
+_same = [_mo.Cut(clip=_ep, start=10, label="You have got to be kidding"),
+         _mo.Cut(clip=_ep, start=200, label="I never asked for this"),
+         _mo.Cut(clip=_ep, start=400, label="")]
+_list = _for_cuts(_same, {})
+check("what was said names the moment",
+      _list[0] == "You have got to be kidding", _list[0])
+check("every entry in the list is different", len(set(_list)) == 3, _list)
+check("and a moment with no quote still gets an entry", bool(_list[2]), _list)
+_quiet = [_mo.Cut(clip=_ep, start=n * 100, label="") for n in range(3)]
+check("three cuts from one episode never read as the same entry three times",
+      len(set(_for_cuts(_quiet, {}))) == 3, _for_cuts(_quiet, {}))
+
+# Auto-captions arrive lowercase and unpunctuated.
+check("an auto-caption line is capitalised for the list",
+      _mo._titleish("how did i ever live without you")
+      == "How Did I Ever Live Without You",
+      _mo._titleish("how did i ever live without you"))
+check("a line that already has capitals is left alone",
+      _mo._titleish("Peter Parker vs Flash") == "Peter Parker vs Flash")
+
+# The loudness pass, against the real ffmpeg rather than a fixture: it is one
+# regex against one tool's output, which makes it the fragile part.
+_loud_file = TMP / "loudness.mp4"
+subprocess.run(
+    [settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+     "-f", "lavfi", "-i", "color=c=black:s=320x180:d=60:r=15",
+     "-f", "lavfi", "-i", "sine=frequency=440:duration=60",
+     "-af", "volume=eval=frame:volume='if(between(t,30,45),1,0.02)'",
+     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+     "-c:a", "aac", "-shortest", str(_loud_file)],
+    check=True, capture_output=True, timeout=180)
+_curve = _mo._loudness(_loud_file)
+check("ffmpeg's loudness output is understood", len(_curve) > 20, len(_curve))
+_in_burst = [v for t, v in _curve if 33 <= t <= 43]
+_outside = [v for t, v in _curve if t < 25 or t > 50]
+check("the loud passage reads louder than the quiet one",
+      bool(_in_burst) and bool(_outside)
+      and sum(_in_burst) / len(_in_burst) > sum(_outside) / len(_outside) + 10,
+      (round(sum(_in_burst) / max(1, len(_in_burst)), 1),
+       round(sum(_outside) / max(1, len(_outside)), 1)))
+check("a file that is not there is not a crash",
+      _mo._loudness(TMP / "missing.mp4") == [])
+check("nor is a caption file that is not there",
+      _mo._cues(SourceClip(source="s", external_id="x", title="", url="")) == [])
+
+
+section("a playlist entry is an episode, not a clip")
+# Discovery already treats a usable playlist as the whole list of pages to
+# scan, so when there is one every candidate is a video somebody chose. The
+# filters are all inference from titles, and inference is what let a scene
+# from the Andrew Garfield film into a Spectacular Spider-Man video. Being
+# chosen outranks all of it -- and the length limit especially, because a
+# full episode is the haystack a clip gets cut out of.
+from backend.app.render.selection import (  # noqa: E402
+    from_a_chosen_playlist as _chosen,
+)
+
+_PLAYLIST = ["https://www.youtube.com/playlist?list=PLabc123def456"]
+check("a usable playlist is recognised", _chosen({"source_playlists": _PLAYLIST}))
+check("no playlist means the filters do their usual work",
+      not _chosen({"source_playlists": []}))
+check("and neither Watch Later nor a link with no list= counts",
+      not _chosen({"source_playlists": ["https://www.youtube.com/playlist?list=WL",
+                                        "https://www.youtube.com/watch?v=abcdefghijk"]}),
+      "the source refuses to scan those, so they buy no exemption here")
+
+
+def _candidate(title, duration=1320.0, views=12):
+    clip = SourceClip(source="youtube", external_id="E1", title=title, url="",
+                      duration=duration)
+    clip.extra = {"description": "", "view_count": views}
+    return clip
+
+
+_base = {"require_show_match": True, "show_terms": ["some other show"],
+         "max_duration_seconds": 600, "min_view_count": 20000,
+         "reject_derivative": True}
+_from_list = sanitise({**_base, "source_playlists": _PLAYLIST})
+_from_search = sanitise(_base)
+_ep_clip = _candidate("Season 1 Marathon - every episode part 2")
+
+check("a 22-minute episode is not thrown out for being long",
+      passes_filters(_ep_clip, _from_list)[0],
+      passes_filters(_ep_clip, _from_list)[1])
+check("nor for having few views",
+      passes_filters(_candidate("Episode 4", views=12), _from_list)[0])
+check("the word list does not reject the subscriber's own episode listing",
+      not _is_deriv(_ep_clip, _from_list)[0], _is_deriv(_ep_clip, _from_list)[1])
+check("and the show filter does not have to guess",
+      _matches(_ep_clip, _from_list)[0])
+
+# None of which is relaxed for anything that merely turned up in a search.
+check("a long search result is still too long",
+      not passes_filters(_ep_clip, _from_search)[0],
+      passes_filters(_ep_clip, _from_search)[1])
+check("an edit from a search is still an edit",
+      _is_deriv(_ep_clip, _from_search)[0], _is_deriv(_ep_clip, _from_search)[1])
+check("a video essay from a search is still refused",
+      _is_deriv(_candidate("THIS Is Why Spectacular Spider-man Was Cancelled"),
+                _from_search)[0])
+check("and a search result still has to prove the show",
+      not _matches(_candidate("Origin 2 | Marvel's Spider-Man"), _from_search)[0])
+
+# The advice that explains the arithmetic before a run is spent.
+_greedy = _review({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+                   "max_clip_seconds": 32, "banner_enabled": True,
+                   "moments_per_video": 5, "source_playlists": _PLAYLIST})
+check("taking every clip from one episode is called out",
+      any("one episode" in f.title for f in _greedy.findings),
+      [f.title for f in _greedy.findings])
+_sane = _review({"sources": ["youtube"], "clips": 5, "target_seconds": 120,
+                 "max_clip_seconds": 32, "banner_enabled": True,
+                 "moments_per_video": 2, "source_playlists": _PLAYLIST})
+check("and is not, at a sensible limit",
+      not any("one episode" in f.title for f in _sane.findings),
+      [f.title for f in _sane.findings])
+check("a playlist is said to go further than it used to",
+      any("moment(s) cut from each" in f.detail for f in _sane.findings),
+      [f.detail for f in _sane.findings if "runs out" in f.title])
+
+# The preset a subscriber reaches for when they want one programme.
+from backend.app.niches import BUILTIN_NICHES as _BUILTINS  # noqa: E402
+
+_show_preset = next(n for n in _BUILTINS if n["slug"] == "show")["settings"]
+check("the One TV Show preset mines long sources",
+      _show_preset["long_clip_seconds"] <= 120
+      and _show_preset["moments_per_video"] >= 2,
+      (_show_preset["long_clip_seconds"], _show_preset["moments_per_video"]))
+check("it allows a full episode through the length filter",
+      _show_preset["max_duration_seconds"] >= 1320,
+      _show_preset["max_duration_seconds"])
+check("it skips the title sequence and the credits",
+      _show_preset["skip_intro_seconds"] > 0
+      and _show_preset["skip_outro_seconds"] > 0)
+check("and does not take the whole video from one episode",
+      _show_preset["moments_per_video"] < _show_preset["clips"])
+check("the guided setup asks for the playlist on the show step",
+      "source_playlists" in Path("frontend/app.js").read_text(encoding="utf-8"))
+
 
 # --------------------------------------------------------------------------- #
 section("accounts")

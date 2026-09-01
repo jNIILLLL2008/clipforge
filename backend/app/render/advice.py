@@ -150,20 +150,40 @@ def review(cfg: Dict, *, upload_count: int = 0,
                     "Clear the playlist to go back to searching.",
                     "source_playlists"))
 
-            # A playlist is a fixed pool, so it runs out. Nothing here can see
-            # how long it is without a network call, but the arithmetic that
-            # bites is knowable: a run takes `clips` videos and will not reuse
-            # one for `reuse_after_days`, so a short playlist repeats quickly.
+            # A playlist is a fixed pool, so it runs out -- but far more
+            # slowly than it used to, because a long video is no longer worth
+            # one clip. A twenty-minute episode is searched and several
+            # moments are cut out of it, and the reuse history records the
+            # moment rather than the video, so the same episode can be
+            # returned to for a different scene. The arithmetic below counts
+            # videos per run on that basis.
+            per_video = max(1, int(cfg.get("moments_per_video", 2) or 1))
             if int(cfg.get("reuse_after_days", 60) or 0) > 0:
+                needed = -(-clips // per_video)      # ceiling division
                 add(Finding(
                     "tip", "A playlist runs out",
-                    f"Each run takes {clips} clip(s) and avoids repeating one "
-                    "for a while, so a playlist needs several times that many "
-                    "videos to keep producing fresh cuts. When it runs dry the "
-                    "run reuses whatever was published longest ago rather than "
-                    "failing.",
+                    f"Each run uses about {needed} video(s) -- {clips} clip(s) "
+                    f"at up to {per_video} moment(s) cut from each -- and "
+                    "avoids repeating a moment for a while, so a playlist "
+                    "needs several times that many videos to keep producing "
+                    "fresh cuts. When it runs dry the run reuses whatever was "
+                    "published longest ago rather than failing.",
                     "Add more videos to the playlist, or paste a second one.",
                     "source_playlists"))
+
+            # Five moments from one episode is a video that plays as a single
+            # scene, which is the thing the round-robin across sources exists
+            # to prevent -- and setting this at or above the clip count opts
+            # straight back into it.
+            if per_video >= clips:
+                add(Finding(
+                    "warning", "Every clip could come from one episode",
+                    f"{per_video} moment(s) are allowed from each video and "
+                    f"the video has {clips} clip(s), so one episode can fill "
+                    "the whole thing. It will play as one long scene rather "
+                    "than a countdown.",
+                    f"Set the per-video limit to about "
+                    f"{max(1, clips // 2)}.", "moments_per_video"))
 
     # --- searching for the thing you just told it to refuse --------------- #
     # "funny moments compilation" is the obvious search to write, and with the

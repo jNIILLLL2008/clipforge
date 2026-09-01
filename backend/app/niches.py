@@ -10,6 +10,12 @@ somebody who is not the person who wrote the code.
 The built-ins differ mainly by *shape* -- pacing, clip count, whether a
 numbered list is shown -- because shape is what decides retention. Topic is
 just search terms.
+
+The exception is "One TV Show", which differs in *where it looks*. Searching
+for short videos about a programme returns other people's edits, other
+series and people talking to camera about it, and no amount of filtering
+fixes a pool that is mostly the wrong thing. Pointing it at a playlist of
+full episodes and cutting the moments out of those does.
 """
 
 from __future__ import annotations
@@ -107,23 +113,29 @@ BUILTIN_NICHES: List[Dict] = [
     {
         "slug": "show",
         "name": "One TV Show",
-        "description": "Built for a single programme rather than a topic: the "
-                       "show filter refuses clips that merely feature the same "
-                       "people. Fill in the show name, its keywords and its "
-                       "regulars, and point it at your own footage.",
+        "description": "Built for a single programme rather than a topic. "
+                       "Paste a playlist of full episodes and it cuts the "
+                       "moments out of them, which is the only way to be sure "
+                       "every clip is really from your show.",
         "settings": _settings(
             banner_line1="TOP {count} FROM", banner_line2="YOUR SHOW",
             checklist_enabled=True, countdown=True, clips=5,
             target_seconds=120, max_clip_seconds=32, require_show_match=True,
             background="pad", checklist_y=1303, caption_margin_v=700,
-            max_duration_seconds=1200, long_clip_seconds=75,
+            # Anything past a minute or so is an episode to be searched
+            # rather than a clip to be used whole. See render/moments.py.
+            long_clip_seconds=75, moments_per_video=2,
+            moment_min_gap_seconds=120, skip_intro_seconds=45,
+            skip_outro_seconds=45,
+            # A curated playlist is exempt from both of these, but they still
+            # apply to anything a channel scan turns up alongside it.
+            max_duration_seconds=1800, min_view_count=0,
             # This preset only makes sense with broadcast footage, so it names
             # the YouTube source. The registry still refuses it unless the
             # operator has enabled unlicensed sources, in which case only
             # uploads are used.
             sources=["youtube", "upload"],
-            channel_tabs=["videos", "shorts"],
-            min_view_count=20000,
+            channel_tabs=["videos"],
         ),
     },
 ]

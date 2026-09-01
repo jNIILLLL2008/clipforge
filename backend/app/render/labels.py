@@ -173,3 +173,34 @@ def for_clips(clips, settings: Optional[Dict] = None,
         label = clean(title, settings, limit, shared)
         out.append(label or f"Moment {index}")
     return out
+
+
+def for_cuts(cuts, settings: Optional[Dict] = None,
+             limit: int = 38) -> List[str]:
+    """One label per excerpt, preferring what was said in it.
+
+    Several moments cut from one episode all carry that episode's title, so
+    titles alone produce a numbered list that reads as the same entry five
+    times -- which is worse than useless, because the list is the thing
+    keeping the viewer to the end. A line spoken inside the excerpt names it
+    instead, and the title is the fallback.
+
+    Boilerplate is counted over *distinct* titles for the same reason: three
+    cuts from one episode are not three videos agreeing on a channel name.
+    """
+    titles = [getattr(cut.clip, "title", "") or "" for cut in cuts]
+    shared = _boilerplate(list(dict.fromkeys(titles)))
+
+    out: List[str] = []
+    taken: Set[str] = set()
+    for index, cut in enumerate(cuts, start=1):
+        spoken = _truncate(" ".join((getattr(cut, "label", "") or "").split()),
+                           limit)
+        label = spoken or clean(titles[index - 1], settings, limit, shared)
+        # A duplicate entry is the failure this function exists to prevent,
+        # so a label that has already been used is not used again.
+        if not label or label.lower() in taken:
+            label = f"Moment {index}"
+        taken.add(label.lower())
+        out.append(label)
+    return out
