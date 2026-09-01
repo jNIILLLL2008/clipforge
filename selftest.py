@@ -1585,17 +1585,15 @@ check("picking uploads turns off a show filter it cannot satisfy",
 _no_list = _review({"sources": ["youtube", "upload"], "clips": 5,
                     "target_seconds": 120, "max_clip_seconds": 32,
                     "banner_enabled": True})
-check("choosing YouTube and pasting no playlist is called out",
-      any("searching rather than reading a playlist" in f.title
-          for f in _no_list.findings), [f.title for f in _no_list.findings])
+check("choosing YouTube and pasting no playlist refuses the run",
+      not _no_list.can_run, [f.title for f in _no_list.findings])
 _with_list = _review({"sources": ["youtube", "upload"], "clips": 5,
                       "target_seconds": 120, "max_clip_seconds": 32,
                       "banner_enabled": True, "moments_per_video": 2,
                       "source_playlists":
                           ["https://www.youtube.com/playlist?list=PLabc123def456"]})
 check("and is silent once a playlist is pasted",
-      not any("searching rather than reading" in f.title
-              for f in _with_list.findings), [f.title for f in _with_list.findings])
+      _with_list.can_run, [f.title for f in _with_list.findings])
 check("uploads-only is not nagged about playlists",
       not any("playlist" in f.title.lower()
               for f in _review({"sources": ["upload"], "clips": 5,
@@ -1629,6 +1627,81 @@ check("what the playlist path produces can run",
       [f.title for f in _review(_guided, upload_count=0,
                                 available_sources=["upload", "youtube"]).findings
        if f.level == "blocker"])
+
+section("a blind YouTube search is refused, not filtered")
+# Three rounds of filtering were tried on this pool. The derivative list grew
+# to sixty terms, the show filter learned to count regulars, video-essay
+# openers were added by name -- and the same three clips kept coming back: a
+# schoolwork video about the scientific method, a scene from the Andrew
+# Garfield film, and somebody's edit with WAVYPAUSED burned into it. Every one
+# is an honest match for "spectacular spider-man funny". The pool is the
+# problem, and no filter recovers from a pool that is mostly the wrong thing.
+_BASE = {"clips": 5, "target_seconds": 120, "max_clip_seconds": 32,
+         "banner_enabled": True}
+
+
+def _can_run(**extra):
+    return _review({**_BASE, **extra}, upload_count=6,
+                   available_sources=["upload", "youtube"]).can_run
+
+
+check("YouTube with nothing naming what to use is refused",
+      not _can_run(sources=["youtube", "upload"]))
+check("a playlist is a decision, and is honoured",
+      _can_run(sources=["youtube", "upload"], moments_per_video=2,
+               source_playlists=["https://www.youtube.com/playlist?list=PLabc123def456"]))
+check("so is a named channel",
+      _can_run(sources=["youtube", "upload"], source_channels=["@somechannel"]))
+check("uploads-only is untouched by any of this",
+      _can_run(sources=["upload"]))
+check("and the refusal says what to do about it",
+      any("Paste a playlist" in f.fix for f in
+          _review({**_BASE, "sources": ["youtube", "upload"]},
+                  upload_count=6).findings if f.level == "blocker"))
+
+# The advice is consulted by exactly one route. The API creates jobs without
+# it and the daily scheduler never sees it, so somebody who set automation up
+# once would go on producing these every morning. The refusal has to live
+# where every path passes through.
+from backend.app.render.pipeline import (  # noqa: E402
+    _refuse_blind_search as _refuse,
+)
+from backend.app.render.engine import RenderError as _RE  # noqa: E402
+
+
+class _YT:
+    name = "youtube"
+
+
+class _Up:
+    name = "upload"
+
+
+def _refused(settings_dict, adapters):
+    try:
+        _refuse(settings_dict, adapters)
+        return False
+    except _RE:
+        return True
+
+
+check("the pipeline refuses it too, not just the button",
+      _refused({}, [_YT()]))
+check("a playlist gets through the pipeline gate",
+      not _refused({"source_playlists": ["PLabc123def456ghi"]}, [_YT()]))
+check("a channel gets through the pipeline gate",
+      not _refused({"source_channels": ["@somechannel"]}, [_YT()]))
+check("and a job with no YouTube source is never affected",
+      not _refused({}, [_Up()]))
+check("blank entries do not count as naming anything",
+      _refused({"source_playlists": ["", "  "], "source_channels": [""]}, [_YT()]))
+
+# "Is the fix live yet?" was answerable only by watching behaviour change --
+# and when behaviour did not change, a deploy that had not happened looked
+# exactly like a fix that had not worked.
+_health = client.get("/api/health").json()
+check("health reports which commit is running", "build" in _health, _health)
+check("and says so even outside a deployment", bool(_health["build"]), _health)
 
 section("first-run tour")
 check("a new account has not seen it",

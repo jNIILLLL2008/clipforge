@@ -54,6 +54,40 @@ def _noop(stage: str, detail: str) -> None:
     log.info("[%s] %s", stage, detail)
 
 
+def _refuse_blind_search(niche_settings: Dict, adapters) -> None:
+    """Refuse a run that would search YouTube for whatever matches the words.
+
+    Enforced here rather than only in the advice, because the advice is
+    checked by one route. The API creates jobs without consulting it and the
+    daily scheduler never sees it at all, so a subscriber who set automation
+    up once would go on producing these videos every morning with nothing
+    anywhere telling them why.
+
+    What it refuses is narrow: YouTube switched on with no playlist and no
+    channel, which is the only configuration where discovery falls back to a
+    keyword search. Naming either one is a decision about what to use, and
+    both are honoured. This is the only capability the product removes
+    outright, and it is removed because three rounds of filtering could not
+    make its output publishable -- see advice.py for the full reasoning.
+    """
+    if not any(getattr(a, "name", "") == "youtube" for a in adapters):
+        return
+    playlists = [p for p in (niche_settings.get("source_playlists") or [])
+                 if str(p).strip()]
+    channels = [c for c in (niche_settings.get("source_channels") or [])
+                if str(c).strip()]
+    if playlists or channels:
+        return
+    raise RenderError(
+        "Nothing says which videos to use. Clips would be found by searching "
+        "YouTube for your terms, and a search returns fan edits, reaction "
+        "videos and clips from other series as readily as the show you want "
+        "-- so the run is refused rather than spent on it. Paste a playlist "
+        "of full episodes under Playlists, or name a channel under Source "
+        "channels."
+    )
+
+
 def _times_mined(clip: SourceClip, already_used) -> int:
     """How many moments this account has already published from one source."""
     total = 0
@@ -85,6 +119,8 @@ def gather(niche_settings: Dict, wanted: int,
             "No usable content sources. Add your own clips, or ask the operator "
             "to configure a stock library."
         )
+
+    _refuse_blind_search(niche_settings, adapters)
 
     terms = list(niche_settings.get("search_terms") or [])
     pool_size = int(niche_settings.get("candidate_pool_size", 40))

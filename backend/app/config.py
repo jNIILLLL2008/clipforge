@@ -182,6 +182,14 @@ class Settings:
         # Desktop only: chrome, firefox, edge, brave...
         self.ytdlp_cookies_from_browser: str = _str("YTDLP_COOKIES_FROM_BROWSER")
 
+        # Which commit is actually running. Railway sets the first of these
+        # on every deploy. Reported by /api/health, because "is the fix live
+        # yet?" was answerable only by watching behaviour change -- and when
+        # the behaviour did not change there was no way to tell a deploy that
+        # had not happened from a fix that had not worked.
+        self.build_ref: str = (_str("RAILWAY_GIT_COMMIT_SHA")
+                               or _str("GIT_COMMIT") or "dev")[:12]
+
         # --- AI ---------------------------------------------------------- #
         self.anthropic_api_key: str = _str("ANTHROPIC_API_KEY")
         self.ai_model: str = _str("AI_MODEL", "claude-sonnet-5")

@@ -79,6 +79,7 @@ def health() -> JSONResponse:
     return JSONResponse({
         "ok": True,
         "env": settings.env,
+        "build": settings.build_ref,
         "billing": settings.billing_enabled,
         "sources": settings.enabled_sources,
     })
