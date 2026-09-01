@@ -410,21 +410,44 @@ class YouTubeSource:
                         f"?search_query={quote_plus(term)}&sp={_SP_UNDER_4_MIN}")
         return urls
 
+    def _playlist_mode(self) -> bool:
+        """Whether this job is driven by a pasted playlist.
+
+        One predicate, read by both the discovery list and the ranking, so the
+        two cannot disagree about it -- the failure that would produce is a
+        playlist scanned exclusively and then re-sorted by popularity, which
+        looks exactly like the bug this replaced.
+        """
+        return any(playlist_url(p)
+                   for p in (self.config.get("source_playlists") or []))
+
     def build_sources(self, terms: List[str]) -> List[str]:
         """Every discovery URL for this job, most specific first."""
         cfg = self.config
         urls: List[str] = []
 
-        # Playlists first. A playlist is the most explicit thing a user can
-        # say about what they want -- they picked these videos by hand -- so it
-        # outranks a channel tab, which outranks a keyword search. The pool
-        # fills in this order and stops when it is full.
+        # A playlist is not a hint, it is an instruction. Somebody who pastes
+        # one has named the exact videos they want, so when there is a usable
+        # one this is the whole discovery list and nothing else is scanned.
+        #
+        # Ordering alone did not achieve that, which is what shipped first and
+        # was wrong: the keyword and channel URLs were still appended, the scan
+        # only stops once the pool is *full*, and a playlist shorter than
+        # candidate_pool_size therefore always fell through into a hashtag
+        # search. Everything then got re-ranked by view count together, so the
+        # handful of clips somebody chose lost to whatever YouTube considers
+        # popular. The playlist looked ignored because in effect it was.
+        #
+        # Search terms are untouched by this: they are still used to rank and
+        # filter what the playlist gives back, they just no longer go looking
+        # for more footage elsewhere.
         playlists = [
             url for url in
             (playlist_url(p) for p in (cfg.get("source_playlists") or []))
             if url
         ]
-        urls.extend(playlists)
+        if playlists:
+            return list(dict.fromkeys(playlists))
 
         channels = [c for c in (cfg.get("source_channels") or []) if c.strip()]
         tabs = [t for t in (cfg.get("channel_tabs") or ["videos", "shorts"]) if t]
@@ -549,9 +572,19 @@ class YouTubeSource:
 
         # Best first, then resolve only as many as the job can use. Enrichment
         # is one network round-trip per clip, so this is the expensive part.
-        ordered = sorted(seen.values(),
-                         key=lambda c: c.extra.get("view_count") or 0,
-                         reverse=True)
+        #
+        # "Best" means most-viewed for a search, because view count is the only
+        # quality signal a flat scan carries. It means something else entirely
+        # for a playlist: somebody put those videos in that order, and sorting
+        # their choice by popularity throws the choice away and makes every run
+        # open with the same well-known clip. A dict preserves insertion order,
+        # so the scan order *is* the playlist order.
+        if self._playlist_mode():
+            ordered = list(seen.values())
+        else:
+            ordered = sorted(seen.values(),
+                             key=lambda c: c.extra.get("view_count") or 0,
+                             reverse=True)
         enriched: List[SourceClip] = []
         for clip in ordered:
             if len(enriched) >= limit:
