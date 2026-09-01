@@ -97,22 +97,35 @@ def review(cfg: Dict, *, upload_count: int = 0,
     # unsaid, the run just quietly has one fewer place to look.
     pasted = [str(p).strip() for p in (cfg.get("source_playlists") or [])
               if str(p).strip()]
-    if not pasted and "youtube" in sources:
-        # Nothing pasted at all, so none of the checks below have anything to
-        # look at -- and this is the configuration that produces the worst
-        # finished videos, because discovery falls back to keyword search.
-        # A search returns fan edits, scenes from the films and people talking
-        # about the show at a desk, every one of them a fair match for the
-        # words typed. No filter recovers from a pool that is mostly the wrong
-        # thing, so it has to be said here, before a render is spent on it.
+    channels = [str(c).strip() for c in (cfg.get("source_channels") or [])
+                if str(c).strip()]
+    if not pasted and "youtube" in sources and not channels:
+        # A blocker, not a warning, and this is the one place in the product
+        # where a capability is removed rather than guarded.
+        #
+        # YouTube keyword search cannot deliver clips from one specific show.
+        # Not with better filters -- three rounds of them were tried. The
+        # derivative list grew to sixty terms, the show filter learned to
+        # count regulars, video-essay openers were added by name, and the
+        # same three clips kept coming back: a schoolwork video about the
+        # scientific method, a scene from the Andrew Garfield film, and
+        # somebody's edit with their watermark burned into it. Every one is
+        # an honest match for the words typed. The pool is the problem, and
+        # no filter recovers from a pool that is mostly the wrong thing.
+        #
+        # Warning it was not enough either: a warning is read once and
+        # skipped, and the scheduler never sees one at all. So the run is
+        # refused. Failing with an instruction is a better product than
+        # succeeding with a video nobody can publish.
         add(Finding(
-            "warning", "It is searching rather than reading a playlist",
-            "With no playlist, clips are found by searching for your terms, "
-            "and a search returns whatever matches the words: fan edits, "
-            "reaction videos and clips from the films as readily as your "
-            "show. A playlist is proof of what the footage is, and the "
-            "moments get cut out of the videos in it.",
-            "Paste a playlist link under Playlists.", "source_playlists"))
+            "blocker", "Nothing says which videos to use",
+            "Clips would be found by searching YouTube for your terms, and a "
+            "search returns whatever matches the words: fan edits, reaction "
+            "videos, clips from the films and other series, as readily as "
+            "your show. That pool cannot be filtered into a good video, so "
+            "the run is refused rather than spent on it.",
+            "Paste a playlist of full episodes under Playlists, or name a "
+            "channel under Source channels.", "source_playlists"))
     if pasted:
         from ..sources.youtube_source import playlist_problem
 
