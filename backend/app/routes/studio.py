@@ -79,9 +79,14 @@ def _readiness(user: User, cfg: Dict) -> List[Dict]:
                      "detail": user.youtube_channel_title or "Signed in",
                      "state": "ready"})
     else:
+        # "Not connected" is true but misleading for somebody who connected
+        # last week and whose token has since expired: it reads as though
+        # they never finished, and the fix looks like setup rather than one
+        # click. Say which of the two it is.
         rows.append({"id": "youtube", "label": "YouTube account",
-                     "detail": "Not connected", "state": "action",
-                     "action": "connect"})
+                     "detail": user.youtube_disconnected_reason
+                     or "Not connected",
+                     "state": "action", "action": "connect"})
 
     rows.append({
         "id": "ai",
@@ -469,6 +474,8 @@ def youtube_callback(request: Request, db: Session = Depends(get_db)):
     user.youtube_channel_title = (title or "")[:160]
     user.youtube_channel_id = (channel_id or "")[:64]
     user.youtube_connected_at = utcnow()
+    # Whatever went wrong before has just been fixed by this.
+    user.youtube_disconnected_reason = ""
     db.commit()
     log.info("User %s connected channel %r.", user_id, title)
     return _closing_page(f"Connected to {title or 'your channel'}.", ok=True)
@@ -532,6 +539,9 @@ def save_google_app(body: GoogleAppIn, user: User = Depends(current_user),
         user.youtube_channel_title = ""
         user.youtube_channel_id = ""
         user.youtube_connected_at = None
+        user.youtube_disconnected_reason = (
+            "New credentials were saved, so the channel needs connecting "
+            "again — a sign-in belongs to the client that issued it.")
 
     db.commit()
     return {"configured": youtube.configured(user),
@@ -547,6 +557,9 @@ def youtube_disconnect(user: User = Depends(current_user),
     user.youtube_channel_title = ""
     user.youtube_channel_id = ""
     user.youtube_connected_at = None
+    # Chosen, not lost. Leaving an expiry notice up after somebody
+    # deliberately disconnected would explain a thing that did not happen.
+    user.youtube_disconnected_reason = ""
     db.commit()
     return {"connected": False}
 

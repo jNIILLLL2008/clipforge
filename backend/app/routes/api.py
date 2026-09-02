@@ -314,6 +314,7 @@ def export_my_data(user: User = Depends(current_user),
         },
         "youtube": {
             "connected": bool(user.youtube_refresh_token),
+            "disconnected_reason": user.youtube_disconnected_reason or "",
             "channel_title": user.youtube_channel_title,
             "channel_id": user.youtube_channel_id,
             "connected_at": (user.youtube_connected_at.isoformat()
