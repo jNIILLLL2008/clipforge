@@ -38,7 +38,7 @@ DEFAULT_FILE = HERE / "agent.env"
 #: double-clicks it has nothing to configure at all; anyone running their own
 #: instance overrides it with CLIPFORGE_SERVER, in agent.env or the
 #: environment, exactly as before.
-DEFAULT_SERVER = "https://clipforge-production-8f29.up.railway.app"
+DEFAULT_SERVER = "https://clipforgee.app"
 
 
 def _read_file(path: Path) -> Dict[str, str]:

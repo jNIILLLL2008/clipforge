@@ -2052,6 +2052,38 @@ check("a working connection says the channel name and nothing else",
 client.post("/api/youtube/disconnect")
 client.put("/api/youtube/app", json={"client_id": "", "client_secret": ""})
 
+section("the watermark names a domain we actually own")
+# It was the same literal in three files -- the worker, the studio route and
+# the agent's claim payload -- and it named clipforge.app, which is a parked
+# reseller page belonging to somebody else. Every free-plan video published
+# was advertising a stranger's ad inventory.
+from backend.app.config import settings as _cfg  # noqa: E402
+
+_SRC = {name: Path(f"backend/app/{name}").read_text(encoding="utf-8")
+        for name in ("worker.py", "routes/studio.py", "routes/agent.py")}
+for _name, _text in _SRC.items():
+    check(f"{_name} no longer hardcodes a domain",
+          '"clipforge.app"' not in _text and '"clipforgee.app"' not in _text)
+    check(f"{_name} reads the one setting",
+          "settings.watermark" in _text)
+check("which has a default", bool(_cfg.watermark), _cfg.watermark)
+check("and the default is a domain we bought",
+      _cfg.watermark == "clipforgee.app", _cfg.watermark)
+check("it can be changed without a deploy",
+      "WATERMARK_TEXT" in Path("backend/app/config.py").read_text(encoding="utf-8"),
+      "a domain can change faster than a release")
+
+# The agent's fallback server. Moving it is safe because pairing writes the
+# server it paired against into agent.env, so an installed agent keeps using
+# that; only a fresh download reads the default.
+_AGENT = Path("agent/config.py").read_text(encoding="utf-8")
+check("a fresh agent install points at the real domain",
+      "https://clipforgee.app" in _AGENT)
+check("and pairing still persists whatever it paired against",
+      'values["CLIPFORGE_SERVER"] = server' in _AGENT,
+      "which is why changing the default cannot strand an existing install")
+
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)

@@ -218,7 +218,7 @@ def _process(job_id: int) -> None:
                       "settings": job_settings}
         options = dict(job.options or {})
         user_id = user.id
-        watermark = "clipforge.app" if user.limits["watermark"] else ""
+        watermark = settings.watermark if user.limits["watermark"] else ""
         refresh_token = user.youtube_refresh_token or ""
         google_app = (user.google_client_id or "", user.google_client_secret or "")
         wants_upload, skip_reason = _upload_decision(
