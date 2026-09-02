@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect your channel: ClipForge</title>
+<meta name="description" content="Six steps, about five minutes, once: create your own Google project so ClipForge can publish finished videos straight to your YouTube channel.">
+<link rel="canonical" href="__ORIGIN__/connect">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0b0d'/><path d='M16 7l7 9-7 9-7-9z' fill='%23e2603a'/></svg>">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/backdrop.css?v=2">
+<link rel="stylesheet" href="/static/landing.css?v=2">
+<link rel="stylesheet" href="/static/legal.css?v=1">
+<link rel="stylesheet" href="/static/connect.css?v=1">
+<script>document.documentElement.className += " js";</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true">
+  <span class="b1"></span><span class="b2"></span><span class="b3"></span>
+</div>
+<div class="backdrop-scrim" aria-hidden="true"></div>
+<div class="backdrop-grain" aria-hidden="true"></div>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="nav-shell">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
+    <div class="nav-actions" style="margin-left:auto">
+      <a class="btn btn-quiet btn-sm" href="/app">Sign in</a>
+      <a class="btn btn-primary btn-sm" href="/app">Start free</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="legal">
+  <div class="legal-wrap">
+
+    <div class="legal-head">
+      <p class="eyebrow">Setup</p>
+      <h1 class="display-lg">Connect your channel.</h1>
+      <p class="lede">
+        Six steps, about five minutes, once. At the end, ClipForge can upload
+        finished videos straight to your YouTube channel.
+      </p>
+    </div>
+
+    <div class="legal-summary">
+      <h2>Why you need your own Google project</h2>
+      <ul>
+        <li>Google allows each project a fixed number of uploads per day.</li>
+        <li>If every ClipForge customer shared one, we would all be competing
+            for roughly six uploads a day between us.</li>
+        <li>On a project you own, the allowance is yours alone &mdash; and so
+            is the connection to your channel.</li>
+      </ul>
+    </div>
+
+    <!-- 1 ----------------------------------------------------------- -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">1</div>
+      <div class="cx-body">
+        <h2>Create a Google Cloud project</h2>
+        <p>
+          Open <a href="https://console.cloud.google.com/projectcreate"
+          target="_blank" rel="noopener">console.cloud.google.com</a> and sign
+          in with the Google account that owns your YouTube channel. Open the
+          project dropdown at the top, then choose <b>New project</b>.
+        </p>
+        <div class="cx-screen">
+          <svg viewBox="0 0 620 150" role="img"
+               aria-label="The Google Cloud header with the project dropdown highlighted, and a New Project button.">
+            <text x="24" y="42" class="s-head">Google Cloud</text>
+            <rect x="150" y="26" width="180" height="26" rx="5" class="s-fill"/>
+            <text x="163" y="44" class="s-dim">Select a project  &#9662;</text>
+            <rect x="147" y="23" width="186" height="32" rx="7" class="s-ring"/>
+            <text x="24" y="92" class="s-dim">A panel opens. Top right of it:</text>
+            <rect x="424" y="76" width="130" height="30" rx="6" class="s-accent"/>
+            <text x="452" y="96" class="s-on-accent">NEW PROJECT</text>
+            <rect x="421" y="73" width="136" height="36" rx="8" class="s-ring"/>
+            <text x="24" y="128" class="s-dim">Name it anything &mdash; &ldquo;ClipForge&rdquo; is fine.</text>
+          </svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- 2 ----------------------------------------------------------- -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">2</div>
+      <div class="cx-body">
+        <h2>Turn on the YouTube Data API</h2>
+        <p>
+          With your new project selected, go to
+          <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
+          target="_blank" rel="noopener">APIs &amp; Services &rsaquo; Library</a>,
+          search for <b>YouTube Data API v3</b>, and press Enable. This is the
+          permission that lets anything upload on your behalf.
+        </p>
+        <div class="cx-screen">
+          <svg viewBox="0 0 620 158" role="img"
+               aria-label="The API Library search box with YouTube Data API v3 found, and an Enable button.">
+            <text x="24" y="38" class="s-head">APIs &amp; Services &rsaquo; Library</text>
+            <rect x="24" y="52" width="330" height="28" rx="5" class="s-fill"/>
+            <text x="37" y="71" class="s-mono">youtube data api</text>
+            <rect x="21" y="49" width="336" height="34" rx="7" class="s-ring"/>
+            <rect x="24" y="98" width="572" height="46" rx="8" class="s-fill"/>
+            <text x="40" y="120" class="s-body">YouTube Data API v3</text>
+            <text x="40" y="136" class="s-dim">Google LLC</text>
+            <rect x="484" y="110" width="96" height="26" rx="5" class="s-accent"/>
+            <text x="512" y="128" class="s-on-accent">ENABLE</text>
+            <rect x="481" y="107" width="102" height="32" rx="7" class="s-ring"/>
+          </svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- 3 ----------------------------------------------------------- -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">3</div>
+      <div class="cx-body">
+        <h2>Set up the consent screen</h2>
+        <p>
+          This is the screen you will see when you grant access. Under
+          <a href="https://console.cloud.google.com/apis/credentials/consent"
+          target="_blank" rel="noopener">OAuth consent screen</a>, choose
+          <b>External</b>, fill in an app name and your email, and save.
+        </p>
+        <div class="cx-screen">
+          <svg viewBox="0 0 620 130" role="img"
+               aria-label="The OAuth consent screen with Internal and External options; External is selected.">
+            <text x="24" y="38" class="s-head">OAuth consent screen</text>
+            <circle cx="34" cy="62" r="6" class="s-radio"/>
+            <text x="52" y="67" class="s-dim">Internal &mdash; not available to you</text>
+            <circle cx="34" cy="92" r="6" class="s-radio-on"/>
+            <text x="52" y="97" class="s-body">External</text>
+            <rect x="20" y="78" width="240" height="28" rx="6" class="s-ring"/>
+          </svg>
+        </div>
+        <div class="cx-trap">
+          <b>Do not skip this</b>
+          <p>
+            Still on the consent screen, find <b>Audience &rsaquo; Test
+            users</b> and add the Google account that owns your channel.
+          </p>
+          <p>
+            Until Google verifies your project, only accounts listed there may
+            sign in. Everyone else &mdash; including you, if you skip it
+            &mdash; gets <b>Access blocked</b> at the final step, and nothing
+            explains why.
+          </p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 4 ----------------------------------------------------------- -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">4</div>
+      <div class="cx-body">
+        <h2>Copy your redirect address</h2>
+        <p>
+          You will need this in the next step. It tells Google where to send
+          you after you approve access.
+        </p>
+        <div class="cx-copy">
+          <code id="cx-uri">__ORIGIN__/api/youtube/callback</code>
+          <button class="btn btn-primary btn-sm" type="button" id="cx-copy">Copy</button>
+        </div>
+        <div class="cx-trap">
+          <b>It must match exactly</b>
+          <p>
+            One missing character and the sign-in fails with
+            <code>redirect_uri_mismatch</code>. Copy it &mdash; do not retype
+            it.
+          </p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 5 ----------------------------------------------------------- -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">5</div>
+      <div class="cx-body">
+        <h2>Create the credentials</h2>
+        <p>
+          Go to <a href="https://console.cloud.google.com/apis/credentials"
+          target="_blank" rel="noopener">Credentials &rsaquo; Create
+          credentials &rsaquo; OAuth client ID</a>. Choose <b>Web
+          application</b> as the type, then paste the address from step 4 under
+          <b>Authorised redirect URIs</b>.
+        </p>
+        <div class="cx-screen">
+          <svg viewBox="0 0 620 150" role="img"
+               aria-label="Creating an OAuth client ID of type Web application, with the redirect URI field highlighted.">
+            <text x="24" y="36" class="s-head">Credentials &rsaquo; Create credentials</text>
+            <rect x="24" y="48" width="200" height="28" rx="5" class="s-fill"/>
+            <text x="37" y="67" class="s-body">OAuth client ID</text>
+            <rect x="21" y="45" width="206" height="34" rx="7" class="s-ring"/>
+            <text x="24" y="103" class="s-dim">Application type</text>
+            <rect x="24" y="110" width="200" height="28" rx="5" class="s-fill"/>
+            <text x="37" y="129" class="s-body">Web application</text>
+            <rect x="21" y="107" width="206" height="34" rx="7" class="s-ring"/>
+            <text x="264" y="103" class="s-dim">Authorised redirect URIs</text>
+            <rect x="264" y="110" width="332" height="28" rx="5" class="s-fill s-ring"/>
+            <text x="277" y="129" class="s-mono">paste the address from step 4</text>
+          </svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- 6 ----------------------------------------------------------- -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">6</div>
+      <div class="cx-body">
+        <h2>Paste the two values into ClipForge</h2>
+        <p>
+          Google now shows you a <b>client ID</b> and a <b>client secret</b>.
+          Copy both into the last step of the ClipForge setup, then press
+          <b>Save and connect</b>.
+        </p>
+        <div class="cx-screen">
+          <svg viewBox="0 0 620 172" role="img"
+               aria-label="The ClipForge form with a Client ID field and a masked Client secret field.">
+            <text x="24" y="34" class="s-head">Paste them here</text>
+            <text x="24" y="62" class="s-label">Client ID</text>
+            <rect x="24" y="70" width="572" height="30" rx="6" class="s-fill"/>
+            <text x="37" y="90" class="s-mono">497465595165-abc&hellip;.apps.googleusercontent.com</text>
+            <text x="24" y="126" class="s-label">Client secret</text>
+            <rect x="24" y="134" width="572" height="30" rx="6" class="s-fill"/>
+            <text x="37" y="154" class="s-mono">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</text>
+          </svg>
+        </div>
+        <p class="cx-note">
+          The client ID ends in <code>.apps.googleusercontent.com</code>; the
+          secret starts with <code>GOCSPX-</code>. If you paste the wrong one,
+          ClipForge tells you before it saves.
+        </p>
+      </div>
+    </article>
+
+    <!-- after ------------------------------------------------------- -->
+    <div class="legal-summary cx-after">
+      <h2>What happens next</h2>
+      <ul>
+        <li>A Google sign-in window opens straight away. Approve access with
+            the account that owns your channel, and you are done.</li>
+        <li>While your project is unverified by Google, the connection expires
+            after about a week. ClipForge says so on the Home screen and you
+            reconnect with one click &mdash; nothing to set up again. To stop
+            it happening, publish your consent screen in Google Cloud and
+            complete their verification.</li>
+        <li>Changed your mind about automatic uploads? Turn off <b>Publish
+            after rendering</b> in Settings. Videos still get made; you
+            download and post them yourself.</li>
+      </ul>
+    </div>
+
+    <p class="cx-back"><a class="btn btn-primary" href="/app">Back to setup</a></p>
+
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">&#9670;</span> ClipForge</a>
+      <p class="fine">
+        Short-form video that finds its own clips, scores itself for
+        retention, and publishes on a schedule.
+      </p>
+    </div>
+    <div class="foot-cols">
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="/#how">How it works</a></li>
+          <li><a href="/#retention">Retention gate</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+          <li><a href="/cookies">Cookies</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  var btn = document.getElementById('cx-copy');
+  btn.addEventListener('click', function () {
+    var text = document.getElementById('cx-uri').textContent.trim();
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1600);
+    }).catch(function () {
+      // Clipboard access is refused over plain http and in some browsers.
+      // Selecting it for them still gets the address across.
+      var range = document.createRange();
+      range.selectNodeContents(document.getElementById('cx-uri'));
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      btn.textContent = 'Press Ctrl+C';
+    });
+  });
+</script>
+
+</body>
+</html>

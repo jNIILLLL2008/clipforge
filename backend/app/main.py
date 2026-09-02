@@ -92,7 +92,8 @@ def health() -> JSONResponse:
 
 
 #: Paths whose content changes during development and must never be cached.
-_PAGE_PATHS = {"/", "/app", "/pair", "/privacy", "/terms", "/cookies"}
+_PAGE_PATHS = {"/", "/app", "/pair", "/privacy", "/terms", "/cookies",
+               "/connect"}
 
 
 #: Assets that change on every deploy and whose filenames are not fingerprinted.
@@ -280,6 +281,18 @@ if FRONTEND.exists():
         """What we collect and what you can make us do about it."""
         return HTMLResponse(_page_html("privacy.html"))
 
+    @app.get("/connect")
+    def connect() -> HTMLResponse:
+        """How to create the Google project that publishing runs on.
+
+        A page rather than only the in-app walkthrough, because this is the
+        one part of setup that happens on somebody else's website: it has to
+        be readable on a second screen, sendable to whoever actually
+        administers the Google account, and reachable by a subscriber who has
+        closed the dialog and cannot find it again.
+        """
+        return HTMLResponse(_page_html("connect.html"))
+
     @app.get("/terms")
     def terms() -> HTMLResponse:
         """The agreement somebody accepts by creating an account."""
@@ -316,6 +329,7 @@ if FRONTEND.exists():
     #: is not much better than one that does not exist.
     _SITEMAP = (
         ("/", "weekly", "1.0"),
+        ("/connect", "monthly", "0.6"),
         ("/privacy", "yearly", "0.4"),
         ("/terms", "yearly", "0.4"),
         ("/cookies", "yearly", "0.3"),
