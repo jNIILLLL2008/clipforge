@@ -114,6 +114,15 @@ class User(Base):
 
     # YouTube connection. Only the refresh token is kept; access tokens are
     # short-lived and fetched as needed.
+    # The subscriber's own Google Cloud OAuth client. Publishing runs on
+    # their project rather than the operator's, which is the only way this
+    # scales: the YouTube Data API gives each project 10,000 units a day and
+    # an upload costs 1,600, so one shared project is about six uploads a day
+    # across every customer there will ever be. Their own project is their
+    # own ceiling, and no audit or quota extension is needed to reach it.
+    google_client_id = Column(String(255), default="", nullable=False)
+    google_client_secret = Column(Text, default="", nullable=False)
+
     youtube_refresh_token = Column(Text, nullable=True)
     youtube_channel_title = Column(String(160), default="", nullable=False)
     youtube_channel_id = Column(String(64), default="", nullable=False)
@@ -131,6 +140,11 @@ class User(Base):
     @property
     def youtube_connected(self) -> bool:
         return bool(self.youtube_refresh_token)
+
+    @property
+    def has_google_app(self) -> bool:
+        """Whether this account has supplied its own OAuth client."""
+        return bool(self.google_client_id and self.google_client_secret)
 
     @property
     def limits(self) -> dict:

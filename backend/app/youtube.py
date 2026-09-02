@@ -42,8 +42,26 @@ class UploadOutcome:
     privacy: str
 
 
-def configured() -> bool:
-    return bool(settings.google_client_id and settings.google_client_secret)
+def credentials_for(user=None) -> Tuple[str, str]:
+    """The OAuth client to act as: the subscriber's own, or the server's.
+
+    Their own comes first. A shared project would put every customer under
+    one 10,000-unit daily quota -- about six uploads a day between all of
+    them -- and raising it needs an audit nobody passes for this. A project
+    the subscriber owns has its own quota and its own consent screen, so the
+    ceiling is theirs and so is the relationship with Google.
+
+    The server's credentials stay as a fallback so a single-tenant install,
+    and the operator's own account, keep working exactly as before.
+    """
+    if user is not None and getattr(user, "has_google_app", False):
+        return user.google_client_id, user.google_client_secret
+    return settings.google_client_id, settings.google_client_secret
+
+
+def configured(user=None) -> bool:
+    client_id, client_secret = credentials_for(user)
+    return bool(client_id and client_secret)
 
 
 def _require_libs():
@@ -61,11 +79,12 @@ def _require_libs():
     return Credentials, Flow, build, HttpError, MediaFileUpload
 
 
-def _client_config() -> Dict:
+def _client_config(user=None) -> Dict:
+    client_id, client_secret = credentials_for(user)
     return {
         "web": {
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
+            "client_id": client_id,
+            "client_secret": client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "redirect_uris": [settings.google_redirect_uri],
@@ -73,13 +92,16 @@ def _client_config() -> Dict:
     }
 
 
-def consent_url(state: str) -> str:
+def consent_url(state: str, user=None) -> str:
     """Where to send the user to authorise their channel."""
-    if not configured():
-        raise YouTubeError("YouTube publishing is not configured on this server.")
+    if not configured(user):
+        raise YouTubeError(
+            "No Google project is set up for publishing yet. Add your own "
+            "client ID and secret under Publishing."
+        )
     _, Flow, _, _, _ = _require_libs()
 
-    flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
+    flow = Flow.from_client_config(_client_config(user), scopes=SCOPES)
     flow.redirect_uri = settings.google_redirect_uri
     url, _ = flow.authorization_url(
         access_type="offline",
@@ -91,11 +113,11 @@ def consent_url(state: str) -> str:
     return url
 
 
-def exchange_code(code: str) -> Tuple[str, str, str]:
+def exchange_code(code: str, user=None) -> Tuple[str, str, str]:
     """Swap the callback code for (refresh_token, channel_title, channel_id)."""
     Credentials, Flow, build, _, _ = _require_libs()
 
-    flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
+    flow = Flow.from_client_config(_client_config(user), scopes=SCOPES)
     flow.redirect_uri = settings.google_redirect_uri
     flow.fetch_token(code=code)
     creds = flow.credentials
@@ -120,14 +142,18 @@ def exchange_code(code: str) -> Tuple[str, str, str]:
     return creds.refresh_token, title, channel_id
 
 
-def _credentials(refresh_token: str):
+def _credentials(refresh_token: str, client_id: str = "",
+                 client_secret: str = ""):
     Credentials, _, _, _, _ = _require_libs()
+    # A refresh token belongs to the client that issued it. Refreshing it
+    # against a different client_id fails with invalid_client, so the pair
+    # that produced the token has to be the pair that renews it.
     return Credentials(
         token=None,
         refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=settings.google_client_id,
-        client_secret=settings.google_client_secret,
+        client_id=client_id or settings.google_client_id,
+        client_secret=client_secret or settings.google_client_secret,
         scopes=SCOPES,
     )
 
@@ -144,9 +170,17 @@ def upload(
     made_for_kids: bool = False,
     publish_at: Optional[str] = None,
     on_progress=None,
+    client_id: str = "",
+    client_secret: str = "",
 ) -> UploadOutcome:
-    """Publish one video, resuming through transient failures."""
-    if not configured():
+    """Publish one video, resuming through transient failures.
+
+    ``client_id``/``client_secret`` are the subscriber's own Google project
+    when they have one, so the upload is billed against their daily quota
+    rather than a single shared one. Omitted, the server's own credentials
+    are used, which is how a single-tenant install still works.
+    """
+    if not (client_id and client_secret) and not configured():
         raise YouTubeError("YouTube publishing is not configured on this server.")
     if not refresh_token:
         raise YouTubeError("This account has no YouTube channel connected.")
@@ -155,8 +189,10 @@ def upload(
         raise YouTubeError("The rendered file is missing.")
 
     _, _, build, HttpError, MediaFileUpload = _require_libs()
-    service = build("youtube", "v3", credentials=_credentials(refresh_token),
-                    cache_discovery=False)
+    service = build(
+        "youtube", "v3",
+        credentials=_credentials(refresh_token, client_id, client_secret),
+        cache_discovery=False)
 
     status: Dict = {
         "privacyStatus": privacy,
