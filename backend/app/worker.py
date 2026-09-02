@@ -145,6 +145,31 @@ def _refund(db, job: Job) -> None:
         user.renders_this_period -= 1
 
 
+def _upload_decision(job_settings: dict, *, dry_run: bool,
+                     refresh_token: str) -> tuple:
+    """Whether to publish, and in plain words why not. (wants, reason)
+
+    Ordered from the subscriber's own choices outwards, so the reason names
+    the thing they can actually change: their setting first, their channel
+    next, and the server's configuration last.
+    """
+    from . import youtube
+
+    if dry_run:
+        return False, "Dry run: the video was rendered but not uploaded."
+    if not job_settings.get("auto_upload"):
+        return False, ("Not uploaded: \"Publish after rendering\" is turned "
+                       "off in your settings.")
+    if not youtube.configured():
+        return False, ("Not uploaded: YouTube publishing is not set up on "
+                       "this server. It needs GOOGLE_CLIENT_ID and "
+                       "GOOGLE_CLIENT_SECRET.")
+    if not refresh_token:
+        return False, ("Not uploaded: no YouTube account is connected. "
+                       "Connect one from the Home screen.")
+    return True, ""
+
+
 def _process(job_id: int) -> None:
     """Run one job, recording progress as it goes."""
     with session_scope() as db:
@@ -195,8 +220,8 @@ def _process(job_id: int) -> None:
         user_id = user.id
         watermark = "clipforge.app" if user.limits["watermark"] else ""
         refresh_token = user.youtube_refresh_token or ""
-        wants_upload = (bool(job_settings.get("auto_upload"))
-                        and not job.dry_run and bool(refresh_token))
+        wants_upload, skip_reason = _upload_decision(
+            job_settings, dry_run=bool(job.dry_run), refresh_token=refresh_token)
         job.status = JobStatus.SOURCING
         job.stage_detail = "Starting"
 
@@ -280,6 +305,13 @@ def _process(job_id: int) -> None:
             job = db.get(Job, job_id)
             if job:
                 job.upload_state = "skipped"
+                # Never a bare "skipped". Three separate conditions have to
+                # hold for a video to reach a channel, and when one did not
+                # the only record was this word -- so pressing Publish and
+                # getting a file that went nowhere was indistinguishable from
+                # a dry run, from publishing being switched off, and from the
+                # server having no Google credentials at all.
+                job.upload_error = skip_reason
 
     with session_scope() as db:
         job = db.get(Job, job_id)

@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import security
+from . import youtube as _youtube
 from .config import ROOT, settings
 from .db import init_db
 from .logging_setup import get_logger, setup_logging
@@ -81,6 +82,11 @@ def health() -> JSONResponse:
         "env": settings.env,
         "build": settings.build_ref,
         "billing": settings.billing_enabled,
+        # Whether this server *could* publish at all, which is a fact about
+        # its configuration rather than about anybody's account. Without it,
+        # "Publish did nothing" cannot be told apart from "this deploy has no
+        # Google credentials" without logging in as somebody.
+        "publishing": _youtube.configured(),
         "sources": settings.enabled_sources,
     })
 
