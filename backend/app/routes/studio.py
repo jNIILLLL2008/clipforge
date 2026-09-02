@@ -60,10 +60,17 @@ def _readiness(user: User, cfg: Dict) -> List[Dict]:
         "state": "ready",
     }]
 
+    wants_upload = bool(cfg.get("auto_upload"))
     if not youtube.configured():
+        # "off" reads as a feature nobody asked for, and that is right until
+        # the account has asked for it. With "Publish after rendering" on, a
+        # run that cannot possibly upload is a promise the screen is making
+        # and the pipeline cannot keep, so it becomes something to act on.
         rows.append({"id": "youtube", "label": "YouTube account",
-                     "detail": "Publishing not set up on this server",
-                     "state": "off"})
+                     "detail": "Publishing is not set up on this server"
+                     + (" — videos will render but go nowhere"
+                        if wants_upload else ""),
+                     "state": "action" if wants_upload else "off"})
     elif user.youtube_connected:
         rows.append({"id": "youtube", "label": "YouTube account",
                      "detail": user.youtube_channel_title or "Signed in",

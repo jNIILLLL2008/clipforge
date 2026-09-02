@@ -1168,8 +1168,17 @@ check("anonymous rejected", TestClient(app).get("/api/studio").status_code == 40
 section("studio: the home screen")
 studio = client.get("/api/studio").json()
 check("has status rows", len(studio["status"]) >= 3, len(studio["status"]))
-check("youtube reported as unconfigured",
-      any(r["id"] == "youtube" and r["state"] == "off" for r in studio["status"]))
+# A new account has "Publish after rendering" on, and this server has no
+# Google credentials, so the promise cannot be kept. It used to read "off",
+# which is how somebody presses Publish and gets a file that went nowhere
+# with the screen still saying Ready.
+_yt_row = next(r for r in studio["status"] if r["id"] == "youtube")
+check("youtube publishing is reported as needing action, not as merely off",
+      _yt_row["state"] == "action", _yt_row)
+check("and the row says what will happen instead",
+      "go nowhere" in _yt_row["detail"], _yt_row["detail"])
+check("which stops the home screen claiming it is ready",
+      "YouTube account" in studio["blocked_by"], studio["blocked_by"])
 check("new account is configured to run", studio["overview"]["clips_per_run"] > 0)
 check("visibility defaults to private",
       studio["overview"]["visibility"] == "private",
@@ -1702,6 +1711,88 @@ check("blank entries do not count as naming anything",
 _health = client.get("/api/health").json()
 check("health reports which commit is running", "build" in _health, _health)
 check("and says so even outside a deployment", bool(_health["build"]), _health)
+
+section("a video that goes nowhere says why")
+# "Publish now" rendering a file that never reached the channel, with the run
+# marked done and nothing anywhere explaining it. Three separate conditions
+# have to hold before a video is uploaded, and when one did not the only
+# record was the word "skipped" -- which reads identically whether it was a
+# dry run, whether publishing is switched off in settings, whether no channel
+# is connected, or whether the server has no Google credentials at all.
+from backend.app.worker import _upload_decision as _decide  # noqa: E402
+import backend.app.youtube as _yt  # noqa: E402
+
+_ON = {"auto_upload": True}
+_saved_configured = _yt.configured
+
+check("a dry run says it was a dry run",
+      _decide(_ON, dry_run=True, refresh_token="t")[1].startswith("Dry run"),
+      _decide(_ON, dry_run=True, refresh_token="t")[1])
+check("the setting being off says so, and names the setting",
+      "Publish after rendering" in
+      _decide({"auto_upload": False}, dry_run=False, refresh_token="t")[1])
+
+_yt.configured = lambda: False
+try:
+    _wants, _why = _decide(_ON, dry_run=False, refresh_token="t")
+    check("a server with no Google credentials says that", not _wants
+          and "GOOGLE_CLIENT_ID" in _why, _why)
+finally:
+    _yt.configured = _saved_configured
+
+_yt.configured = lambda: True
+try:
+    _wants, _why = _decide(_ON, dry_run=False, refresh_token="")
+    check("no connected channel says that instead", not _wants
+          and "no YouTube account is connected" in _why, _why)
+    check("and with everything in place it uploads, saying nothing",
+          _decide(_ON, dry_run=False, refresh_token="t") == (True, ""))
+finally:
+    _yt.configured = _saved_configured
+
+# The reason has to name the thing the reader can change, so the subscriber's
+# own settings are checked before the server's configuration.
+_yt.configured = lambda: False
+try:
+    check("their own setting is named before the server's",
+          "Publish after rendering" in
+          _decide({"auto_upload": False}, dry_run=False, refresh_token="")[1])
+finally:
+    _yt.configured = _saved_configured
+
+# The Home screen said "Ready" while promising a publish it could not make.
+from backend.app.routes.studio import _readiness  # noqa: E402
+
+
+class _U:
+    id = 1
+    youtube_connected = False
+    youtube_channel_title = ""
+
+
+_yt2 = None
+import backend.app.routes.studio as _studio_mod  # noqa: E402
+
+_saved_studio_yt = _studio_mod.youtube.configured
+_studio_mod.youtube.configured = lambda: False
+try:
+    _rows = {r["id"]: r for r in _readiness(_U(), {"auto_upload": True,
+                                                   "sources": ["upload"]})}
+    check("with publishing off the server and auto-upload on, it needs action",
+          _rows["youtube"]["state"] == "action", _rows["youtube"])
+    check("and says the videos will go nowhere",
+          "go nowhere" in _rows["youtube"]["detail"], _rows["youtube"]["detail"])
+    _quiet = {r["id"]: r for r in _readiness(_U(), {"auto_upload": False,
+                                                    "sources": ["upload"]})}
+    check("but it stays quiet for somebody not asking to publish",
+          _quiet["youtube"]["state"] == "off", _quiet["youtube"])
+finally:
+    _studio_mod.youtube.configured = _saved_studio_yt
+
+# Diagnosable from outside, without logging in as anybody.
+_h = client.get("/api/health").json()
+check("health says whether this server can publish at all",
+      "publishing" in _h and isinstance(_h["publishing"], bool), _h)
 
 section("first-run tour")
 check("a new account has not seen it",

@@ -573,7 +573,12 @@ function momentList(job) {
       ${sourcingNote(job)}
       ${momentList(job)}
       ${job.error ? `<p class="error">${esc(job.error)}</p>` : ''}
-      ${job.upload_error ? `<p class="error">Upload: ${esc(job.upload_error)}</p>` : ''}
+      ${job.upload_error ? (job.upload_state === 'failed'
+        ? `<p class="error">Upload: ${esc(job.upload_error)}</p>`
+        /* A skip is not a failure, and colouring it red taught people to
+           ignore it. It is still said, because "Publish now" producing a file
+           that went nowhere is the thing nobody could explain. */
+        : `<p class="meta">${esc(job.upload_error)}</p>`) : ''}
       <div class="job-actions">
         ${job.youtube_url ? `<a href="${esc(job.youtube_url)}" target="_blank" rel="noopener">Watch on YouTube</a>` : ''}
         ${job.download_url ? `<a href="${job.download_url}" download>Download</a>` : ''}
