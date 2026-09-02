@@ -730,3 +730,29 @@ code {
 .moments li { font-size: .85rem; }
 .moments li b { display: block; font-weight: 600; }
 .moments li .meta { font-size: .78rem; }
+
+/* --------------------------------------------- publishing setup ------- */
+/* The drawings of the Google console. Schematic rather than screenshots:
+   real ones go stale within months and belong to somebody else. */
+.pub-svg {
+  display: block; width: 100%; height: auto; margin: .9rem 0;
+  border-radius: var(--radius-ctrl);
+}
+.pub-open {
+  display: inline-block; font-size: .85rem; font-weight: 600;
+  color: var(--accent); text-decoration: none;
+}
+.pub-open:hover { text-decoration: underline; }
+
+/* The redirect URI. It has to match Google's field exactly, so it gets its
+   own box and a copy button rather than sitting inside a sentence. */
+.pub-copy {
+  display: flex; align-items: center; gap: .6rem; margin: .6rem 0 .2rem;
+  background: var(--surface-2); border: 1px solid var(--border-firm);
+  border-radius: var(--radius-ctrl); padding: .5rem .6rem;
+}
+.pub-copy code {
+  flex: 1; font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: .78rem; color: var(--text); word-break: break-all;
+}
+.pub-copy button { flex-shrink: 0; }

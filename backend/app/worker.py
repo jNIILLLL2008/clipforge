@@ -146,7 +146,7 @@ def _refund(db, job: Job) -> None:
 
 
 def _upload_decision(job_settings: dict, *, dry_run: bool,
-                     refresh_token: str) -> tuple:
+                     refresh_token: str, google_app: tuple = ("", "")) -> tuple:
     """Whether to publish, and in plain words why not. (wants, reason)
 
     Ordered from the subscriber's own choices outwards, so the reason names
@@ -160,10 +160,10 @@ def _upload_decision(job_settings: dict, *, dry_run: bool,
     if not job_settings.get("auto_upload"):
         return False, ("Not uploaded: \"Publish after rendering\" is turned "
                        "off in your settings.")
-    if not youtube.configured():
-        return False, ("Not uploaded: YouTube publishing is not set up on "
-                       "this server. It needs GOOGLE_CLIENT_ID and "
-                       "GOOGLE_CLIENT_SECRET.")
+    if not (all(google_app) or youtube.configured()):
+        return False, ("Not uploaded: publishing is not set up yet. Follow "
+                       "the publishing setup to create your Google project "
+                       "— it only has to be done once.")
     if not refresh_token:
         return False, ("Not uploaded: no YouTube account is connected. "
                        "Connect one from the Home screen.")
@@ -220,8 +220,10 @@ def _process(job_id: int) -> None:
         user_id = user.id
         watermark = "clipforge.app" if user.limits["watermark"] else ""
         refresh_token = user.youtube_refresh_token or ""
+        google_app = (user.google_client_id or "", user.google_client_secret or "")
         wants_upload, skip_reason = _upload_decision(
-            job_settings, dry_run=bool(job.dry_run), refresh_token=refresh_token)
+            job_settings, dry_run=bool(job.dry_run), refresh_token=refresh_token,
+            google_app=google_app)
         job.status = JobStatus.SOURCING
         job.stage_detail = "Starting"
 
@@ -299,7 +301,7 @@ def _process(job_id: int) -> None:
     _write_metadata(job_id, result, job_settings)
 
     if wants_upload:
-        _publish(job_id, refresh_token, job_settings)
+        _publish(job_id, refresh_token, job_settings, google_app)
     else:
         with session_scope() as db:
             job = db.get(Job, job_id)
@@ -343,7 +345,8 @@ def _write_metadata(job_id: int, result, job_settings: dict) -> None:
             job.tags = meta.tags
 
 
-def _publish(job_id: int, refresh_token: str, job_settings: dict) -> None:
+def _publish(job_id: int, refresh_token: str, job_settings: dict,
+             google_app: tuple = ("", "")) -> None:
     """Upload the finished render to the user's channel."""
     from datetime import timedelta
 
@@ -379,6 +382,8 @@ def _publish(job_id: int, refresh_token: str, job_settings: dict) -> None:
             made_for_kids=bool(job_settings.get("made_for_kids")),
             publish_at=publish_at,
             on_progress=progress,
+            client_id=google_app[0],
+            client_secret=google_app[1],
         )
     except Exception as exc:  # noqa: BLE001 - the render still succeeded
         log.warning("Upload failed for job %s: %s", job_id, exc)

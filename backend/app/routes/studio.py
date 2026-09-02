@@ -61,23 +61,27 @@ def _readiness(user: User, cfg: Dict) -> List[Dict]:
     }]
 
     wants_upload = bool(cfg.get("auto_upload"))
-    if not youtube.configured():
+    if not youtube.configured(user):
         # "off" reads as a feature nobody asked for, and that is right until
         # the account has asked for it. With "Publish after rendering" on, a
         # run that cannot possibly upload is a promise the screen is making
         # and the pipeline cannot keep, so it becomes something to act on.
         rows.append({"id": "youtube", "label": "YouTube account",
-                     "detail": "Publishing is not set up on this server"
+                     "detail": "Publishing is not set up yet"
                      + (" — videos will render but go nowhere"
                         if wants_upload else ""),
-                     "state": "action" if wants_upload else "off"})
+                     "state": "action" if wants_upload else "off",
+                     # Which walkthrough to open: the Google project has to
+                     # exist before there is anything to sign in to.
+                     "action": "setup-publishing"})
     elif user.youtube_connected:
         rows.append({"id": "youtube", "label": "YouTube account",
                      "detail": user.youtube_channel_title or "Signed in",
                      "state": "ready"})
     else:
         rows.append({"id": "youtube", "label": "YouTube account",
-                     "detail": "Not connected", "state": "action"})
+                     "detail": "Not connected", "state": "action",
+                     "action": "connect"})
 
     rows.append({
         "id": "ai",
@@ -419,14 +423,17 @@ def set_automation(body: AutomationIn, user: User = Depends(current_user),
 # --------------------------------------------------------------------------- #
 @router.get("/youtube/connect")
 def youtube_connect(user: User = Depends(current_user)):
-    if not youtube.configured():
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
-                            "YouTube publishing is not configured here.")
+    if not youtube.configured(user):
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "No Google project is set up for publishing yet. Follow the "
+            "publishing setup to create one — it takes a few minutes and only "
+            "has to be done once.")
     # The state carries the account so the callback knows who came back, and a
     # nonce so a stray callback cannot be replayed.
     state = f"{user.id}:{secrets.token_urlsafe(16)}"
     _PENDING[state] = user.id
-    return {"url": youtube.consent_url(state)}
+    return {"url": youtube.consent_url(state, user)}
 
 
 # Short-lived map of outstanding consent requests.
@@ -451,7 +458,9 @@ def youtube_callback(request: Request, db: Session = Depends(get_db)):
         return _closing_page("Account not found.")
 
     try:
-        refresh_token, title, channel_id = youtube.exchange_code(code)
+        # The user, not the server: the code was issued by their own OAuth
+        # client and only that client can exchange it.
+        refresh_token, title, channel_id = youtube.exchange_code(code, user)
     except Exception as exc:  # noqa: BLE001
         log.warning("YouTube exchange failed for user %s: %s", user_id, exc)
         return _closing_page(f"Could not connect: {exc}")
@@ -463,6 +472,72 @@ def youtube_callback(request: Request, db: Session = Depends(get_db)):
     db.commit()
     log.info("User %s connected channel %r.", user_id, title)
     return _closing_page(f"Connected to {title or 'your channel'}.", ok=True)
+
+
+class GoogleAppIn(BaseModel):
+    client_id: str = ""
+    client_secret: str = ""
+
+
+@router.get("/youtube/app")
+def google_app(user: User = Depends(current_user)):
+    """What is stored, never the secret itself.
+
+    The client id is shown because somebody has to be able to check they
+    pasted the right one; the secret is only ever reported as present or
+    absent. There is no reason for this API to hand a credential back, and
+    every reason not to.
+    """
+    return {
+        "client_id": user.google_client_id or "",
+        "has_secret": bool(user.google_client_secret),
+        "redirect_uri": settings.google_redirect_uri,
+        "scopes": list(youtube.SCOPES),
+        "configured": youtube.configured(user),
+        "connected": bool(user.youtube_refresh_token),
+        "channel_title": user.youtube_channel_title or "",
+    }
+
+
+@router.put("/youtube/app")
+def save_google_app(body: GoogleAppIn, user: User = Depends(current_user),
+                    db: Session = Depends(get_db)):
+    """Store the subscriber's own OAuth client."""
+    client_id = body.client_id.strip()
+    client_secret = body.client_secret.strip()
+
+    if client_id and not client_id.endswith(".apps.googleusercontent.com"):
+        # Every Google web client id ends this way. Saying so here beats a
+        # failed consent redirect with an error page from Google that does
+        # not mention which field was wrong.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "That does not look like a Google client ID — they end in "
+            "'.apps.googleusercontent.com'. Copy it from the OAuth client "
+            "you created, not the API key or the project number.")
+
+    user.google_client_id = client_id[:255]
+    # An empty secret leaves the stored one alone, so re-saving the form
+    # without retyping it does not silently wipe it.
+    if client_secret:
+        user.google_client_secret = client_secret
+    if not client_id:
+        user.google_client_secret = ""
+
+    # The channel was authorised by the old client and its refresh token
+    # cannot be renewed by a new one -- Google answers invalid_client. Better
+    # to ask for one more click now than to fail on the next upload.
+    if user.youtube_refresh_token:
+        user.youtube_refresh_token = None
+        user.youtube_channel_title = ""
+        user.youtube_channel_id = ""
+        user.youtube_connected_at = None
+
+    db.commit()
+    return {"configured": youtube.configured(user),
+            "client_id": user.google_client_id,
+            "has_secret": bool(user.google_client_secret),
+            "reconnect_needed": True}
 
 
 @router.post("/youtube/disconnect")

@@ -232,7 +232,9 @@ function renderHome() {
     const pill = { ready: '', action: ' warn', off: ' off' }[row.state] ?? '';
     const text = { ready: 'Ready', action: 'Action needed', off: 'Off' }[row.state];
     const connect = row.id === 'youtube' && row.state === 'action'
-      ? '<button class="linkish" id="connect-youtube">Connect</button>' : '';
+      ? `<button class="linkish" id="connect-youtube">${
+          row.action === 'setup-publishing' ? 'Set up publishing' : 'Connect'
+        }</button>` : '';
     return `<div class="row">
       <span class="row-label">${esc(row.label)}
         ${row.detail ? `<span class="row-sub">${esc(row.detail)} ${connect}</span>` : ''}</span>
@@ -241,7 +243,14 @@ function renderHome() {
   }).join('');
 
   const connectBtn = $('connect-youtube');
-  if (connectBtn) connectBtn.onclick = connectYouTube;
+  if (connectBtn) {
+    // No Google project yet means there is nothing to sign in to, so the
+    // button opens the walkthrough that creates one rather than a consent
+    // screen that would refuse.
+    const row = s.status.find((r) => r.id === 'youtube') || {};
+    connectBtn.onclick = row.action === 'setup-publishing'
+      ? openPublishing : connectYouTube;
+  }
 
   // Automation
   const auto = s.automation;
@@ -1316,8 +1325,321 @@ $('guide-next').onclick = async () => {
       // over an empty one somebody has not been asked anything about yet.
       if (guideFirstRun) {
         guideFirstRun = false;
-        openTour();
+        // Publishing before the tour, because it is the part that happens on
+        // somebody else's website and the one most likely to be abandoned if
+        // it is left to be discovered later. The tour follows it.
+        pubThenTour = true;
+        openPublishing();
       }
+    }
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+  }
+};
+
+
+/* ------------------------------------------- publishing setup -------- */
+/* Every account publishes through its own Google Cloud project.
+
+   Not a preference: the YouTube Data API gives each project 10,000 units a
+   day and one upload costs 1,600, so a single shared project is about six
+   uploads a day across every customer there will ever be. Raising that needs
+   an audit. A project the subscriber owns has its own ceiling, and reaching
+   it needs nothing from anybody.
+
+   The cost is that setup happens on somebody else's website, in a console
+   most people have never opened, and a wall of text describing it does not
+   work. So each step draws the screen being described and highlights the one
+   thing to click. The drawings are schematic on purpose -- real screenshots
+   of the Google console go stale within months and are somebody else's
+   copyright. */
+
+const PUB_LINKS = {
+  project: 'https://console.cloud.google.com/projectcreate',
+  library: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com',
+  consent: 'https://console.cloud.google.com/apis/credentials/consent',
+  credentials: 'https://console.cloud.google.com/apis/credentials',
+};
+
+/* A schematic browser window, so each drawing reads as "a page you will see"
+   rather than as an abstract diagram. */
+function pubFrame(inner, height = 150) {
+  return `<svg class="pub-svg" viewBox="0 0 420 ${height}" role="img"
+       xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1" width="418" height="${height - 2}" rx="8"
+          fill="var(--surface-2)" stroke="var(--border)"/>
+    <rect x="1" y="1" width="418" height="22" rx="8" fill="var(--surface)"/>
+    <rect x="1" y="15" width="418" height="8" fill="var(--surface)"/>
+    <circle cx="14" cy="12" r="3" fill="var(--border-firm)"/>
+    <circle cx="24" cy="12" r="3" fill="var(--border-firm)"/>
+    <circle cx="34" cy="12" r="3" fill="var(--border-firm)"/>
+    <line x1="1" y1="23" x2="419" y2="23" stroke="var(--border)"/>
+    ${inner}
+  </svg>`;
+}
+
+/* The ring that says "this one". */
+function pubRing(x, y, w, h) {
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="5" fill="none"
+       stroke="var(--accent)" stroke-width="2"/>`;
+}
+
+function pubLabel(x, y, text, size = 9, fill = 'var(--muted)') {
+  return `<text x="${x}" y="${y}" font-size="${size}" fill="${fill}"
+       font-family="system-ui, sans-serif">${esc(text)}</text>`;
+}
+
+const PUB_ART = {
+  project: () => pubFrame(`
+    ${pubLabel(14, 40, 'Google Cloud', 11, 'var(--text)')}
+    <rect x="96" y="30" width="120" height="18" rx="4" fill="var(--surface)"
+          stroke="var(--border-firm)"/>
+    ${pubLabel(104, 43, 'Select a project  ▾')}
+    ${pubRing(94, 28, 124, 22)}
+    ${pubLabel(14, 78, 'A panel opens. Top right of it:')}
+    <rect x="250" y="88" width="90" height="20" rx="4" fill="var(--accent)"/>
+    ${pubLabel(262, 102, 'NEW PROJECT', 9, '#fff')}
+    ${pubRing(248, 86, 94, 24)}
+    ${pubLabel(14, 130, 'Name it anything — "ClipForge" is fine.')}
+  `),
+
+  library: () => pubFrame(`
+    ${pubLabel(14, 40, 'APIs & Services  ›  Library', 10, 'var(--text)')}
+    <rect x="14" y="52" width="260" height="20" rx="4" fill="var(--surface)"
+          stroke="var(--border-firm)"/>
+    ${pubLabel(22, 66, 'youtube data api')}
+    ${pubRing(12, 50, 264, 24)}
+    <rect x="14" y="88" width="392" height="44" rx="6" fill="var(--surface)"
+          stroke="var(--border)"/>
+    ${pubLabel(26, 106, 'YouTube Data API v3', 10, 'var(--text)')}
+    ${pubLabel(26, 120, 'Google LLC')}
+    <rect x="316" y="98" width="76" height="22" rx="4" fill="var(--accent)"/>
+    ${pubLabel(338, 113, 'ENABLE', 9, '#fff')}
+    ${pubRing(314, 96, 80, 26)}
+  `, 148),
+
+  consent: () => pubFrame(`
+    ${pubLabel(14, 40, 'OAuth consent screen', 10, 'var(--text)')}
+    <circle cx="22" cy="58" r="5" fill="none" stroke="var(--border-firm)"/>
+    ${pubLabel(34, 62, 'Internal  — not available to you')}
+    <circle cx="22" cy="80" r="5" fill="var(--accent)"/>
+    ${pubLabel(34, 84, 'External', 10, 'var(--text)')}
+    ${pubRing(12, 70, 200, 20)}
+    ${pubLabel(14, 110, 'Then: app name, your email, save.')}
+    ${pubLabel(14, 128, 'Audience › Test users › + Add users — add your own', 9)}
+    ${pubLabel(14, 141, 'Google address. Without it, sign-in is refused.', 9)}
+  `, 156),
+
+  client: () => pubFrame(`
+    ${pubLabel(14, 40, 'Credentials  ›  Create credentials', 10, 'var(--text)')}
+    <rect x="14" y="50" width="150" height="20" rx="4" fill="var(--surface)"
+          stroke="var(--border-firm)"/>
+    ${pubLabel(22, 64, 'OAuth client ID')}
+    ${pubRing(12, 48, 154, 24)}
+    ${pubLabel(14, 90, 'Application type')}
+    <rect x="14" y="98" width="150" height="20" rx="4" fill="var(--surface)"
+          stroke="var(--border-firm)"/>
+    ${pubLabel(22, 112, 'Web application', 9, 'var(--text)')}
+    ${pubRing(12, 96, 154, 24)}
+    ${pubLabel(190, 90, 'Authorised redirect URIs')}
+    <rect x="190" y="98" width="216" height="20" rx="4" fill="var(--surface)"
+          stroke="var(--accent)"/>
+    ${pubLabel(196, 112, 'paste the address from above', 8)}
+    ${pubLabel(14, 140, 'The redirect URI must match exactly, or Google', 9)}
+    ${pubLabel(14, 152, 'refuses the sign-in with redirect_uri_mismatch.', 9)}
+  `, 166),
+};
+
+const PUB_STEPS = [
+  {
+    title: 'Publishing to your channel',
+    body: () => `
+      <p>To upload for you, ClipForge needs a <b>Google Cloud project</b> of
+      your own. It takes about five minutes, once, and then it is done
+      forever.</p>
+      <p>Why yours and not ours: Google allows each project a fixed number of
+      uploads per day. On a shared one, every customer would be competing for
+      about six uploads a day between them. On your own, the allowance is
+      yours alone.</p>
+      <p class="hint">Not interested in automatic uploads? Choose <b>I will
+      download them myself</b> below. Videos still get made; you post them
+      yourself, and you can turn this on later.</p>`,
+  },
+  {
+    title: 'Create a project',
+    body: () => `
+      <p>Open the Google Cloud console and make a new project. Any name will
+      do.</p>
+      ${PUB_ART.project()}
+      <p><a href="${PUB_LINKS.project}" target="_blank" rel="noopener"
+        class="pub-open">Open the project page &#8599;</a></p>`,
+  },
+  {
+    title: 'Turn on the YouTube API',
+    body: () => `
+      <p>With your new project selected, enable <b>YouTube Data API v3</b>.
+      This is what lets anything upload on your behalf.</p>
+      ${PUB_ART.library()}
+      <p><a href="${PUB_LINKS.library}" target="_blank" rel="noopener"
+        class="pub-open">Open the API page &#8599;</a></p>`,
+  },
+  {
+    title: 'Set up the consent screen',
+    body: () => `
+      <p>This is the screen you will see when you connect your channel. Choose
+      <b>External</b>, fill in an app name and your email, and save.</p>
+      ${PUB_ART.consent()}
+      <p><b>Do not skip the test user step.</b> Until the project is verified
+      by Google, only accounts listed there may sign in &mdash; everyone else
+      gets <i>Access blocked</i>. Add the Google account that owns your
+      YouTube channel.</p>
+      <p><a href="${PUB_LINKS.consent}" target="_blank" rel="noopener"
+        class="pub-open">Open the consent screen &#8599;</a></p>`,
+  },
+  {
+    title: 'Create the credentials',
+    body: () => `
+      <p>Now make an <b>OAuth client ID</b> of type <b>Web application</b>,
+      and give it this exact redirect address:</p>
+      <div class="pub-copy">
+        <code id="pub-redirect">${esc(state.pubApp?.redirect_uri || '')}</code>
+        <button class="ghost" id="pub-copy-btn" type="button">Copy</button>
+      </div>
+      ${PUB_ART.client()}
+      <p><a href="${PUB_LINKS.credentials}" target="_blank" rel="noopener"
+        class="pub-open">Open the credentials page &#8599;</a></p>`,
+    after: () => {
+      const btn = $('pub-copy-btn');
+      if (!btn) return;
+      btn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(state.pubApp?.redirect_uri || '');
+          btn.textContent = 'Copied';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+        } catch {
+          // Clipboard access is refused in some browsers and over plain http.
+          // Selecting the text for them still gets the job done.
+          const node = $('pub-redirect');
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          btn.textContent = 'Press Ctrl+C';
+        }
+      };
+    },
+  },
+  {
+    title: 'Paste them here',
+    body: () => `
+      <p>Google shows a client ID and a client secret once the client is
+      created. Copy both across.</p>
+      ${field('client_id', 'Client ID', 'input',
+              state.pubApp?.client_id || '',
+              'Ends in .apps.googleusercontent.com')}
+      ${field('client_secret', 'Client secret', 'password',
+              '', state.pubApp?.has_secret
+              ? 'Already saved — leave blank to keep it'
+              : 'Starts with GOCSPX-')}
+      <p class="hint">Stored for your account only, and used solely to upload
+      to the channel you connect next.</p>`,
+    apply: async (form) => {
+      const clientId = (form.client_id || '').trim();
+      const secret = (form.client_secret || '').trim();
+      if (!clientId) throw new Error('Paste the client ID from Google.');
+      if (!secret && !state.pubApp?.has_secret) {
+        throw new Error('Paste the client secret from Google.');
+      }
+      state.pubApp = await api('/api/youtube/app', {
+        method: 'PUT',
+        body: { client_id: clientId, client_secret: secret },
+      });
+    },
+  },
+];
+
+let pubAt = 0;
+
+/* Whether the tour is still waiting behind this. Set only on a first run, so
+   somebody opening the walkthrough later is not shown the tour again. */
+let pubThenTour = false;
+
+function pubFinished() {
+  $('pub').classList.add('hidden');
+  if (pubThenTour) { pubThenTour = false; openTour(); }
+}
+
+async function openPublishing() {
+  pubAt = 0;
+  try {
+    state.pubApp = await api('/api/youtube/app');
+  } catch { state.pubApp = null; }
+  $('pub').classList.remove('hidden');
+  renderPublishing();
+}
+
+function renderPublishing() {
+  const step = PUB_STEPS[pubAt];
+  $('pub-step').textContent = `Step ${pubAt + 1} of ${PUB_STEPS.length}`;
+  $('pub-title').textContent = step.title;
+  $('pub-body').innerHTML = step.body();
+  $('pub-dots').innerHTML = PUB_STEPS.map((_, i) =>
+    `<i class="${i === pubAt ? 'on' : ''}"></i>`).join('');
+  $('pub-back').disabled = pubAt === 0;
+  $('pub-next').textContent =
+    pubAt === PUB_STEPS.length - 1 ? 'Save and connect' : 'Next';
+  // Only offered while nothing has been entered; past that point the way out
+  // is to close the dialog, not to be told again that you could give up.
+  $('pub-skip').classList.toggle('hidden', pubAt > 0);
+  step.after?.();
+}
+
+function readPubForm() {
+  const out = {};
+  $('pub-body').querySelectorAll('[data-field]').forEach((input) => {
+    out[input.dataset.field] = input.value;
+  });
+  return out;
+}
+
+$('pub-close').onclick = pubFinished;
+$('pub').onclick = (e) => { if (e.target === $('pub')) $('pub-close').click(); };
+$('pub-back').onclick = () => { pubAt -= 1; renderPublishing(); };
+
+$('pub-skip').onclick = async () => {
+  // A real choice, saved as one: publishing off, so nothing later claims a
+  // video is on its way to a channel that was never connected.
+  try {
+    state.settings.auto_upload = false;
+    const { settings } = await api('/api/studio/settings', {
+      method: 'PUT', body: { settings: state.settings },
+    });
+    state.settings = settings;
+    renderSettings();
+    await loadStudio();
+  } catch { /* the dialog closing matters more than the setting */ }
+  pubFinished();
+  toast('Videos will be made for you to download. You can turn on publishing '
+        + 'any time from the Home screen.');
+};
+
+$('pub-next').onclick = async () => {
+  const step = PUB_STEPS[pubAt];
+  const button = $('pub-next');
+  button.disabled = true;
+  try {
+    await step.apply?.(readPubForm());
+    if (pubAt < PUB_STEPS.length - 1) {
+      pubAt += 1;
+      renderPublishing();
+    } else {
+      pubFinished();
+      await loadStudio();
+      toast('Saved. Now sign in with the Google account that owns your channel.');
+      connectYouTube();
     }
   } catch (err) {
     toast(err.message);

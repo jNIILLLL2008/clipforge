@@ -1732,15 +1732,19 @@ check("the setting being off says so, and names the setting",
       "Publish after rendering" in
       _decide({"auto_upload": False}, dry_run=False, refresh_token="t")[1])
 
-_yt.configured = lambda: False
+_yt.configured = lambda user=None: False
 try:
     _wants, _why = _decide(_ON, dry_run=False, refresh_token="t")
-    check("a server with no Google credentials says that", not _wants
-          and "GOOGLE_CLIENT_ID" in _why, _why)
+    check("no Google project anywhere says so, and points at the setup",
+          not _wants and "publishing setup" in _why, _why)
+    check("but an account with its own project is not stopped by that",
+          _decide(_ON, dry_run=False, refresh_token="t",
+                  google_app=("id.apps.googleusercontent.com", "sec"))[0],
+          "their project is the one that matters, not the server's")
 finally:
     _yt.configured = _saved_configured
 
-_yt.configured = lambda: True
+_yt.configured = lambda user=None: True
 try:
     _wants, _why = _decide(_ON, dry_run=False, refresh_token="")
     check("no connected channel says that instead", not _wants
@@ -1752,7 +1756,7 @@ finally:
 
 # The reason has to name the thing the reader can change, so the subscriber's
 # own settings are checked before the server's configuration.
-_yt.configured = lambda: False
+_yt.configured = lambda user=None: False
 try:
     check("their own setting is named before the server's",
           "Publish after rendering" in
@@ -1774,7 +1778,7 @@ _yt2 = None
 import backend.app.routes.studio as _studio_mod  # noqa: E402
 
 _saved_studio_yt = _studio_mod.youtube.configured
-_studio_mod.youtube.configured = lambda: False
+_studio_mod.youtube.configured = lambda user=None: False
 try:
     _rows = {r["id"]: r for r in _readiness(_U(), {"auto_upload": True,
                                                    "sources": ["upload"]})}
@@ -1793,6 +1797,136 @@ finally:
 _h = client.get("/api/health").json()
 check("health says whether this server can publish at all",
       "publishing" in _h and isinstance(_h["publishing"], bool), _h)
+
+section("each account publishes on its own Google project")
+# One shared project is 10,000 API units a day and an upload costs 1,600 --
+# about six uploads a day across every customer there will ever be. Raising
+# that needs an audit of an app that downloads YouTube videos, which is not an
+# audit anybody passes. A project the subscriber owns has its own ceiling and
+# needs nothing from anybody.
+import backend.app.youtube as _ytm  # noqa: E402
+
+
+class _Acct:
+    def __init__(self, cid="", secret=""):
+        self.google_client_id = cid
+        self.google_client_secret = secret
+
+    @property
+    def has_google_app(self):
+        return bool(self.google_client_id and self.google_client_secret)
+
+
+_theirs = _Acct("theirs.apps.googleusercontent.com", "GOCSPX-theirs")
+check("an account's own client is preferred",
+      _ytm.credentials_for(_theirs)[0] == "theirs.apps.googleusercontent.com")
+check("and it counts as configured even when the server is not",
+      _ytm.configured(_theirs))
+check("an account without one falls back to the server",
+      _ytm.credentials_for(_Acct()) == (settings.google_client_id,
+                                        settings.google_client_secret))
+check("half a client is not a client",
+      not _ytm.configured(_Acct("only-an-id.apps.googleusercontent.com", "")))
+check("the client config carries their pair, not the server's",
+      _ytm._client_config(_theirs)["web"]["client_secret"] == "GOCSPX-theirs")
+
+# A refresh token belongs to the client that issued it: renewing it against a
+# different client_id fails with invalid_client, so the pair that made the
+# token has to be the pair that renews it.
+_creds_seen = {}
+
+
+class _FakeCreds:
+    def __init__(self, **kw):
+        _creds_seen.update(kw)
+
+
+_saved_libs = _ytm._require_libs
+_ytm._require_libs = lambda: (_FakeCreds, None, None, None, None)
+try:
+    _ytm._credentials("refresh-abc", "theirs.apps.googleusercontent.com",
+                      "GOCSPX-theirs")
+    check("refreshing uses the client that issued the token",
+          _creds_seen["client_id"] == "theirs.apps.googleusercontent.com",
+          _creds_seen.get("client_id"))
+finally:
+    _ytm._require_libs = _saved_libs
+
+# The endpoints. A secret goes in and never comes back out.
+_r = client.put("/api/youtube/app", json={
+    "client_id": "1234.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-a-real-looking-secret"})
+check("credentials save", _r.status_code == 200, _r.text[:120])
+_got = client.get("/api/youtube/app").json()
+check("the client id is readable, so a typo can be spotted",
+      _got["client_id"] == "1234.apps.googleusercontent.com", _got)
+check("the secret is never returned, only its presence",
+      _got["has_secret"] is True and "client_secret" not in _got, _got)
+check("and the account now counts as configured", _got["configured"] is True)
+check("the redirect address is given, because it must match exactly",
+      _got["redirect_uri"].endswith("/api/youtube/callback"), _got)
+
+_bad = client.put("/api/youtube/app", json={"client_id": "12345",
+                                            "client_secret": "x"})
+check("something that is not a client id is refused", _bad.status_code == 422)
+check("and says which field is wrong and where to find it",
+      "apps.googleusercontent.com" in _bad.json()["detail"], _bad.json())
+
+# Re-saving without retyping the secret must not wipe it.
+client.put("/api/youtube/app", json={
+    "client_id": "5678.apps.googleusercontent.com", "client_secret": ""})
+check("a blank secret leaves the stored one alone",
+      client.get("/api/youtube/app").json()["has_secret"] is True)
+check("but the new id is stored",
+      client.get("/api/youtube/app").json()["client_id"]
+      == "5678.apps.googleusercontent.com")
+
+# Changing the client invalidates the channel connection: the old refresh
+# token cannot be renewed by a new client, and Google answers invalid_client.
+with session_scope() as _db:
+    _u = _db.query(User).filter(User.email == "tester@example.com").one()
+    _u.youtube_refresh_token = "old-token"
+    _u.youtube_channel_title = "Old Channel"
+client.put("/api/youtube/app", json={
+    "client_id": "9999.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-new"})
+with session_scope() as _db:
+    _u = _db.query(User).filter(User.email == "tester@example.com").one()
+    check("changing the client drops a connection it could not renew",
+          not _u.youtube_refresh_token, _u.youtube_refresh_token)
+
+# Clearing the id clears the secret with it, rather than leaving an orphan.
+client.put("/api/youtube/app", json={"client_id": "", "client_secret": ""})
+_cleared = client.get("/api/youtube/app").json()
+check("clearing the id clears the secret too",
+      _cleared["has_secret"] is False and _cleared["configured"] is False,
+      _cleared)
+
+# The home screen has to send people to the right place: there is nothing to
+# sign in to until a project exists.
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("with no project the row offers the walkthrough",
+      _rows["youtube"].get("action") == "setup-publishing", _rows["youtube"])
+client.put("/api/youtube/app", json={
+    "client_id": "1111.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-x"})
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("with a project it offers the sign-in instead",
+      _rows["youtube"].get("action") == "connect", _rows["youtube"])
+client.put("/api/youtube/app", json={"client_id": "", "client_secret": ""})
+
+# The walkthrough itself.
+_APPJS = Path("frontend/app.js").read_text(encoding="utf-8")
+check("the setup is six steps with drawings of the console",
+      "PUB_STEPS" in _APPJS and "PUB_ART" in _APPJS)
+check("the redirect address is offered to copy, not retyped",
+      "pub-copy-btn" in _APPJS and "navigator.clipboard" in _APPJS)
+check("the test-user trap is called out, since it is what blocks sign-in",
+      "Access blocked" in _APPJS)
+check("and there is a way out for somebody who will not publish",
+      "pub-skip" in _APPJS and "auto_upload = false" in _APPJS)
+check("publishing setup follows the niche setup on a first run",
+      "pubThenTour" in _APPJS)
 
 section("first-run tour")
 check("a new account has not seen it",
