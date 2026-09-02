@@ -1465,7 +1465,10 @@ const PUB_STEPS = [
       yours alone.</p>
       <p class="hint">Not interested in automatic uploads? Choose <b>I will
       download them myself</b> below. Videos still get made; you post them
-      yourself, and you can turn this on later.</p>`,
+      yourself, and you can turn this on later.</p>
+      <p><a class="pub-open" href="/connect" target="_blank" rel="noopener">Open
+      these steps as a page &#8599;</a> &mdash; easier to follow on a second
+      screen, or to send to whoever runs your Google account.</p>`,
   },
   {
     title: 'Create a project',

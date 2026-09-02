@@ -1,0 +1,129 @@
+/* connect.css -- the channel setup walkthrough at /connect.
+ *
+ * Sits on top of legal.css, which already supplies the page shell, the
+ * heading scale and the summary block. Only the parts a step-by-step guide
+ * needs that a policy page does not: the numbered rail, the console
+ * drawings, and the two traps that decide whether somebody finishes.
+ *
+ * The drawings are schematic rather than screenshots on purpose. Real
+ * captures of the Google console go stale within months, they are somebody
+ * else's copyright, and they carry whatever account happened to be signed in
+ * when they were taken. */
+
+/* ------------------------------------------------------------ steps --- */
+.cx-step {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr;
+  gap: 0 1.15rem;
+  margin: 0 0 3.25rem;
+}
+
+.cx-num {
+  display: grid;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  margin-top: .1rem;
+  border: 1px solid var(--accent, #e2603a);
+  border-radius: 50%;
+  color: var(--accent, #e2603a);
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: .85rem;
+  font-weight: 500;
+}
+
+.cx-body h2 {
+  margin: 0 0 .55rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -.018em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.cx-body p { margin: 0 0 .9rem; }
+.cx-body p:last-child { margin-bottom: 0; }
+
+.cx-note { font-size: .9rem; opacity: .75; }
+
+/* ---------------------------------------------------------- screens --- */
+.cx-screen {
+  margin: 1.1rem 0;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .025);
+  overflow: hidden;
+}
+.cx-screen svg { display: block; width: 100%; height: auto; }
+
+/* One class per role, so a colour is never repeated across eight drawings
+   and then changed in seven of them. */
+.cx-screen .s-head  { font: 600 13px 'Geist', system-ui, sans-serif; fill: #e7eaee; }
+.cx-screen .s-body  { font: 400 12px 'Geist', system-ui, sans-serif; fill: #e7eaee; }
+.cx-screen .s-label { font: 600 11px 'Geist', system-ui, sans-serif; fill: #e7eaee; }
+.cx-screen .s-dim   { font: 400 12px 'Geist', system-ui, sans-serif; fill: #8b949f; }
+.cx-screen .s-mono  { font: 400 11px 'Geist Mono', ui-monospace, monospace; fill: #8b949f; }
+.cx-screen .s-on-accent { font: 600 11px 'Geist', system-ui, sans-serif; fill: #fff; }
+
+.cx-screen .s-fill   { fill: rgba(255, 255, 255, .04); stroke: rgba(255, 255, 255, .11); }
+.cx-screen .s-accent { fill: var(--accent, #e2603a); }
+.cx-screen .s-ring   { fill: none; stroke: var(--accent, #e2603a); stroke-width: 2; }
+.cx-screen .s-radio    { fill: none; stroke: rgba(255, 255, 255, .3); stroke-width: 2; }
+.cx-screen .s-radio-on { fill: var(--accent, #e2603a); }
+
+/* ------------------------------------------------------------ traps --- */
+/* The two things that silently stop a setup finishing. Both are the user
+   doing exactly what the page said and still ending up stuck, so they get
+   their own weight rather than a sentence in a paragraph. */
+.cx-trap {
+  margin: 1.15rem 0;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgba(226, 96, 58, .32);
+  border-left: 3px solid var(--accent, #e2603a);
+  border-radius: 10px;
+  background: rgba(226, 96, 58, .07);
+}
+/* Direct child only. Without the ">" this also matched a <b> that merely
+   happened to open a paragraph -- text nodes do not count for :first-child --
+   so "Audience > Test users" mid-sentence rendered as an uppercase orange
+   block label. */
+.cx-trap > b:first-child {
+  display: block;
+  margin-bottom: .45rem;
+  color: var(--accent, #e2603a);
+  font-size: .76rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.cx-trap p { margin: 0 0 .5rem; font-size: .94rem; }
+.cx-trap p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------- copy --- */
+/* The redirect address has to reach Google's field character for character,
+   so it gets a button rather than an invitation to retype it. */
+.cx-copy {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin: 1rem 0;
+  padding: .55rem .55rem .55rem .85rem;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .04);
+}
+.cx-copy code {
+  flex: 1;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: .84rem;
+  word-break: break-all;
+}
+.cx-copy .btn { flex-shrink: 0; }
+
+.cx-after { margin-top: 1rem; }
+.cx-back { margin: 2rem 0 0; }
+
+@media (max-width: 30rem) {
+  .cx-step { grid-template-columns: 1fr; gap: .55rem; }
+  .cx-num { margin-bottom: .15rem; }
+}

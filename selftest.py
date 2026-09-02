@@ -2084,6 +2084,48 @@ check("and pairing still persists whatever it paired against",
       "which is why changing the default cannot strand an existing install")
 
 
+section("the setup guide has a page of its own")
+# The Google Cloud half of setup happens on somebody else's website, which
+# makes a dialog the wrong container for it: it cannot be read on a second
+# screen, cannot be sent to whoever actually administers the Google account,
+# and cannot be found again by somebody who closed it.
+_conn = client.get("/connect")
+check("the guide is served", _conn.status_code == 200, _conn.status_code)
+_html = _conn.text
+check("it is a real page, not the app shell",
+      "Connect your channel" in _html and "<title>" in _html)
+check("all six steps are there",
+      _html.count('class="cx-step"') == 6, _html.count('class="cx-step"'))
+
+# The address has to reach Google's field exactly, so it is generated from the
+# server's own configuration rather than typed into the page. Hardcoding it
+# is how a guide ends up naming the domain the product used to be on.
+check("no placeholder survives into the served page", "__ORIGIN__" not in _html)
+check("the redirect address is built from PUBLIC_URL",
+      f"{settings.public_url}/api/youtube/callback" in _html,
+      settings.public_url)
+check("and it can be copied rather than retyped",
+      'id="cx-copy"' in _html and "clipboard" in _html)
+
+# The two things that silently stop a setup finishing.
+_flat = " ".join(_html.split())
+check("the test-user trap is called out",
+      "Access blocked" in _flat and "Test users" in _flat)
+check("so is the exact-match rule on the address",
+      "redirect_uri_mismatch" in _html)
+
+check("it is discoverable", "/connect" in client.get("/sitemap.xml").text)
+check("and reachable from the walkthrough",
+      'href="/connect"' in Path("frontend/app.js").read_text(encoding="utf-8"))
+
+# A <b> that merely opens a paragraph is not a section label. Without the
+# child combinator, "Audience > Test users" mid-sentence rendered as an
+# uppercase orange block.
+_css = Path("frontend/connect.css").read_text(encoding="utf-8")
+check("the trap label styles only its own heading",
+      ".cx-trap > b:first-child" in _css and ".cx-trap b:first-child {" not in _css)
+
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)
