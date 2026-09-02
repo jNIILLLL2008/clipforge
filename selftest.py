@@ -2126,6 +2126,72 @@ check("the trap label styles only its own heading",
       ".cx-trap > b:first-child" in _css and ".cx-trap b:first-child {" not in _css)
 
 
+section("a new account is told to make its own Google project")
+# The regression that made bring-your-own-credentials invisible. The server's
+# credentials were an unconditional fallback, so on any deployment whose
+# operator had configured Google -- which is every deployment that publishes
+# anything -- a brand-new subscriber read as already set up. The walkthrough
+# never appeared, the home screen offered "Connect" instead of "Set up
+# publishing", and anybody who did connect spent the operator's quota. It
+# looked like it worked, for about six uploads a day between everyone.
+import backend.app.youtube as _yt3  # noqa: E402
+
+_saved_pair = (settings.google_client_id, settings.google_client_secret)
+_saved_shared = settings.shared_google_app
+settings.google_client_id = "server.apps.googleusercontent.com"
+settings.google_client_secret = "GOCSPX-server"
+settings.shared_google_app = False
+
+
+def _acct(own=False, admin=False):
+    class A:
+        google_client_id = "mine.apps.googleusercontent.com" if own else ""
+        google_client_secret = "GOCSPX-mine" if own else ""
+        is_admin = admin
+
+        @property
+        def has_google_app(self):
+            return bool(self.google_client_id and self.google_client_secret)
+    return A()
+
+
+try:
+    check("a new subscriber does not inherit the server's project",
+          not _yt3.configured(_acct()),
+          "otherwise nothing ever asks them to make their own")
+    check("and is given no credentials to publish with",
+          _yt3.credentials_for(_acct()) == ("", ""))
+    check("their own project is used once they have one",
+          _yt3.credentials_for(_acct(own=True))[0]
+          == "mine.apps.googleusercontent.com")
+    check("the operator still falls back to the server's",
+          _yt3.credentials_for(_acct(admin=True))[0]
+          == "server.apps.googleusercontent.com",
+          "so a single-operator install keeps working")
+
+    settings.shared_google_app = True
+    check("and a single-tenant install can opt everyone back in",
+          _yt3.configured(_acct()),
+          "ALLOW_SHARED_GOOGLE_APP, for a deployment with one account")
+    settings.shared_google_app = False
+
+    # What the home screen tells them, which is the part that was missing.
+    _rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+    check("the row sends them to the walkthrough, not to a sign-in",
+          _rows["youtube"].get("action") == "setup-publishing", _rows["youtube"])
+    check("and says what happens if they skip it",
+          "go nowhere" in _rows["youtube"]["detail"], _rows["youtube"]["detail"])
+    check("the screen stops claiming it is ready",
+          "YouTube account" in client.get("/api/studio").json()["blocked_by"])
+finally:
+    settings.google_client_id, settings.google_client_secret = _saved_pair
+    settings.shared_google_app = _saved_shared
+
+check("sharing is off unless a deployment asks for it",
+      _saved_shared is False,
+      "the default that makes each account bring its own project")
+
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)
