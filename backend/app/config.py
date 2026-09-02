@@ -190,6 +190,13 @@ class Settings:
         self.build_ref: str = (_str("RAILWAY_GIT_COMMIT_SHA")
                                or _str("GIT_COMMIT") or "dev")[:12]
 
+        # The mark burned into a free-plan render. One place, because it was
+        # three copies of the same literal in three files, and a brand string
+        # that lives in three places is a brand string that will one day be
+        # right in two of them. Settable without a deploy, since a domain can
+        # change faster than a release.
+        self.watermark: str = _str("WATERMARK_TEXT", "clipforgee.app")
+
         # --- AI ---------------------------------------------------------- #
         self.anthropic_api_key: str = _str("ANTHROPIC_API_KEY")
         self.ai_model: str = _str("AI_MODEL", "claude-sonnet-5")

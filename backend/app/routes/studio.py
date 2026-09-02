@@ -256,7 +256,7 @@ def preview(body: PreviewIn, user: User = Depends(current_user)):
             cfg,
             at_clip=body.at_clip,
             user_upload=sample,
-            watermark="clipforge.app" if user.limits["watermark"] else "",
+            watermark=settings.watermark if user.limits["watermark"] else "",
         )
     except Exception as exc:  # noqa: BLE001 - a preview must never 500 the app
         log.warning("Preview failed for user %s: %s", user.id, exc)

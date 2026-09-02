@@ -251,7 +251,7 @@ if settings.legal_entity.strip().lower() in ("", "clipforge"):
 else:
     ok(f"Controller is {settings.legal_entity}")
 
-if settings.legal_contact_email.strip().lower() in ("", "support@clipforge.app"):
+if settings.legal_contact_email.strip().lower() in ("", "support@clipforgee.app"):
     warn("LEGAL_CONTACT_EMAIL points nowhere real",
          "Data requests, complaints and copyright notices all go here. Point "
          "it at an address somebody reads.")
