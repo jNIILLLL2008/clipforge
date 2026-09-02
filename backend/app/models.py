@@ -127,6 +127,13 @@ class User(Base):
     youtube_channel_title = Column(String(160), default="", nullable=False)
     youtube_channel_id = Column(String(64), default="", nullable=False)
     youtube_connected_at = Column(DateTime(timezone=True), nullable=True)
+    #: Why the channel is no longer connected, when it was disconnected for
+    #: us rather than by the subscriber. An unverified Google project expires
+    #: its refresh tokens after seven days, so this is the ordinary end of a
+    #: connection rather than a rare fault, and "Not connected" on its own
+    #: reads as though they never finished setting it up.
+    youtube_disconnected_reason = Column(String(255), default="",
+                                         nullable=False)
 
     # Daily automation (paid plans only).
     automate_daily = Column(Boolean, default=False, nullable=False)

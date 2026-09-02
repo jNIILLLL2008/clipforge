@@ -28,11 +28,50 @@ SCOPES = [
 ]
 
 RETRIABLE_STATUS = {500, 502, 503, 504}
+
+#: One sentence, used wherever a connection turns out to be dead, so the job
+#: card, the home screen and the log all say the same thing.
+_AUTH_MESSAGE = (
+    "Your YouTube connection has expired or was revoked. Reconnect your "
+    "channel from the Home screen to start publishing again."
+)
 MAX_ATTEMPTS = 5
 
 
 class YouTubeError(RuntimeError):
     """Anything that stops a publish, phrased for the user."""
+
+
+class YouTubeAuthError(YouTubeError):
+    """The stored permission is gone, so no amount of retrying will help.
+
+    Its own type because the caller has to do something different: a network
+    blip is worth another attempt, and a revoked token is worth clearing the
+    connection and asking the subscriber to sign in again.
+    """
+
+
+#: What Google says when a refresh token is dead rather than the request
+#: being unlucky. The first is what every unverified project produces after
+#: seven days, which is the ordinary case rather than an exotic one.
+_AUTH_SIGNS = (
+    "invalid_grant", "token has been expired or revoked",
+    "unauthorized_client", "invalid_client", "invalid_token",
+    "account has been deleted", "token was revoked",
+)
+
+
+def _is_auth_failure(exc: Exception) -> bool:
+    """Whether this failure means the permission is gone for good."""
+    # google.auth raises RefreshError for exactly this, but importing it here
+    # would make the check depend on an optional library being installed.
+    if type(exc).__name__ in {"RefreshError", "DefaultCredentialsError"}:
+        return True
+    status = getattr(getattr(exc, "resp", None), "status", None)
+    if status in (401,):
+        return True
+    lowered = str(exc).lower()
+    return any(sign in lowered for sign in _AUTH_SIGNS)
 
 
 @dataclass
@@ -226,6 +265,8 @@ def upload(
             if progress and on_progress:
                 on_progress(int(progress.progress() * 100))
         except HttpError as exc:
+            if _is_auth_failure(exc):
+                raise YouTubeAuthError(_AUTH_MESSAGE) from exc
             if exc.resp.status in RETRIABLE_STATUS and attempt < MAX_ATTEMPTS:
                 attempt += 1
                 wait = 2 ** attempt
@@ -235,6 +276,12 @@ def upload(
                 continue
             raise YouTubeError(_explain(exc)) from exc
         except Exception as exc:  # noqa: BLE001
+            # Before the retry, not after: a dead refresh token fails
+            # identically every time, so retrying it five times with backoff
+            # spends a minute of the render worker to arrive at the same
+            # answer, and buries the cause under "Upload failed".
+            if _is_auth_failure(exc):
+                raise YouTubeAuthError(_AUTH_MESSAGE) from exc
             if attempt < MAX_ATTEMPTS:
                 attempt += 1
                 time.sleep(2 ** attempt)

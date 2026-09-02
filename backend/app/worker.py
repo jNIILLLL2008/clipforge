@@ -385,6 +385,25 @@ def _publish(job_id: int, refresh_token: str, job_settings: dict,
             client_id=google_app[0],
             client_secret=google_app[1],
         )
+    except youtube.YouTubeAuthError as exc:
+        # The permission is gone, so the stored token is worthless and every
+        # later run would fail the same way. Clearing it turns an endless
+        # stream of failed uploads into one thing to do: connect again.
+        log.warning("Upload for job %s hit a dead connection: %s", job_id, exc)
+        with session_scope() as db:
+            job = db.get(Job, job_id)
+            if job:
+                job.upload_state = "failed"
+                job.upload_error = str(exc)[:1000]
+                job.stage_detail = ""
+                user = db.get(User, job.owner_id)
+                if user:
+                    user.youtube_refresh_token = None
+                    user.youtube_channel_title = ""
+                    user.youtube_channel_id = ""
+                    user.youtube_connected_at = None
+                    user.youtube_disconnected_reason = str(exc)[:255]
+        return
     except Exception as exc:  # noqa: BLE001 - the render still succeeded
         log.warning("Upload failed for job %s: %s", job_id, exc)
         with session_scope() as db:

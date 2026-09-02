@@ -1928,6 +1928,130 @@ check("and there is a way out for somebody who will not publish",
 check("publishing setup follows the niche setup on a first run",
       "pubThenTour" in _APPJS)
 
+section("an expired channel connection says so and asks for one click")
+# Until a subscriber's Google project is verified, its refresh tokens expire
+# after seven days. So this is the ordinary end of a connection rather than a
+# rare fault: it works all week, then uploads start failing with whatever
+# Google's client library happened to raise, and the home screen goes on
+# saying "Not connected" as though setup was never finished.
+from backend.app.youtube import (  # noqa: E402
+    YouTubeAuthError as _AuthErr, _is_auth_failure as _is_auth,
+)
+
+
+class _Resp:
+    def __init__(self, status):
+        self.status = status
+
+
+class _Http(Exception):
+    def __init__(self, status, message=""):
+        super().__init__(message or f"HTTP {status}")
+        self.resp = _Resp(status)
+
+
+class RefreshError(Exception):
+    """Named to match what google.auth actually raises."""
+
+
+for _name, _exc in [
+    ("google's own RefreshError", RefreshError("invalid_grant")),
+    ("an invalid_grant message", Exception("invalid_grant: bad")),
+    ("a revoked token", Exception("Token has been expired or revoked.")),
+    ("the wrong client", Exception("unauthorized_client")),
+    ("a 401", _Http(401)),
+]:
+    check(f"a dead connection is recognised: {_name}", _is_auth(_exc))
+
+for _name, _exc in [
+    ("a server wobble", _Http(503)),
+    ("a rate limit", _Http(429, "quotaExceeded")),
+    ("a broken pipe", OSError("connection reset by peer")),
+    ("a missing file", Exception("The rendered file is missing.")),
+]:
+    check(f"but a retriable failure is not: {_name}", not _is_auth(_exc))
+
+check("quota exhaustion is not mistaken for a dead login",
+      not _is_auth(_Http(403, "quotaExceeded")),
+      "the fix for that is waiting, not signing in again")
+
+# The whole point of the separate type: retrying a dead token spends five
+# backoffs -- about a minute of a render worker -- to arrive at the same
+# answer, with the cause buried under "Upload failed".
+check("it is refused immediately rather than retried",
+      issubclass(_AuthErr, Exception) and _AuthErr is not Exception)
+
+# What the subscriber is told, in one sentence, in all three places.
+from backend.app.youtube import _AUTH_MESSAGE as _MSG  # noqa: E402
+
+check("the message says what happened and what to do",
+      "expired" in _MSG and "Reconnect" in _MSG, _MSG)
+
+# A connection that cannot be renewed is cleared, so the home screen stops
+# claiming a channel is attached and offers the one click that fixes it.
+# A project has to exist before a connection to it can expire.
+client.put("/api/youtube/app", json={
+    "client_id": "4444.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-four"})
+with session_scope() as _db:
+    _u = _db.query(User).filter(User.email == "tester@example.com").one()
+    _u.youtube_refresh_token = "dead-token"
+    _u.youtube_channel_title = "Some Channel"
+    _u.youtube_disconnected_reason = ""
+
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("while it looks alive the row is ready",
+      _rows["youtube"]["state"] == "ready", _rows["youtube"])
+
+with session_scope() as _db:
+    _u = _db.query(User).filter(User.email == "tester@example.com").one()
+    _u.youtube_refresh_token = None
+    _u.youtube_channel_title = ""
+    _u.youtube_disconnected_reason = _MSG
+
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("once it dies the row explains rather than saying 'Not connected'",
+      "expired" in _rows["youtube"]["detail"], _rows["youtube"])
+check("and still offers the sign-in",
+      _rows["youtube"]["action"] == "connect", _rows["youtube"])
+check("the reason reaches the export too",
+      "expired" in client.get("/api/me/export").json()["youtube"]
+      ["disconnected_reason"])
+
+# Disconnecting on purpose is not an expiry, and must not be explained as one.
+client.post("/api/youtube/disconnect")
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("a deliberate disconnect leaves no expiry notice behind",
+      _rows["youtube"]["detail"] == "Not connected", _rows["youtube"])
+
+# Saving new credentials invalidates the sign-in, and says which of the two
+# reasons that is.
+client.put("/api/youtube/app", json={
+    "client_id": "2222.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-two"})
+with session_scope() as _db:
+    _u = _db.query(User).filter(User.email == "tester@example.com").one()
+    _u.youtube_refresh_token = "t"
+client.put("/api/youtube/app", json={
+    "client_id": "3333.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-three"})
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("changing credentials explains itself as its own reason",
+      "credentials" in _rows["youtube"]["detail"], _rows["youtube"])
+
+# And connecting again clears whatever was said before.
+with session_scope() as _db:
+    _u = _db.query(User).filter(User.email == "tester@example.com").one()
+    _u.youtube_refresh_token = "fresh"
+    _u.youtube_channel_title = "Reconnected"
+    _u.youtube_disconnected_reason = ""
+_rows = {r["id"]: r for r in client.get("/api/studio").json()["status"]}
+check("a working connection says the channel name and nothing else",
+      _rows["youtube"]["state"] == "ready"
+      and _rows["youtube"]["detail"] == "Reconnected", _rows["youtube"])
+client.post("/api/youtube/disconnect")
+client.put("/api/youtube/app", json={"client_id": "", "client_secret": ""})
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)
