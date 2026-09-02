@@ -90,12 +90,22 @@ def credentials_for(user=None) -> Tuple[str, str]:
     the subscriber owns has its own quota and its own consent screen, so the
     ceiling is theirs and so is the relationship with Google.
 
-    The server's credentials stay as a fallback so a single-tenant install,
-    and the operator's own account, keep working exactly as before.
+    The server's own credentials are a fallback, not a default. They apply
+    to the operator's account, and to a single-tenant install that sets
+    ALLOW_SHARED_GOOGLE_APP -- nobody else.
+
+    That restriction is the whole feature. With an unconditional fallback, a
+    deployment whose operator has configured Google credentials hands them to
+    every subscriber: each one reads as already set up, so the walkthrough
+    that would have had them make their own project never appears, and they
+    all end up sharing one 10,000-unit daily quota. The bug is invisible from
+    the inside -- everything works, for about six uploads a day in total.
     """
     if user is not None and getattr(user, "has_google_app", False):
         return user.google_client_id, user.google_client_secret
-    return settings.google_client_id, settings.google_client_secret
+    if user is None or settings.shared_google_app             or getattr(user, "is_admin", False):
+        return settings.google_client_id, settings.google_client_secret
+    return "", ""
 
 
 def configured(user=None) -> bool:

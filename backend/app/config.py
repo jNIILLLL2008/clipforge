@@ -190,6 +190,19 @@ class Settings:
         self.build_ref: str = (_str("RAILWAY_GIT_COMMIT_SHA")
                                or _str("GIT_COMMIT") or "dev")[:12]
 
+        # Whether an account with no Google project of its own may publish
+        # through the server's credentials.
+        #
+        # Off, because on a deployment serving subscribers it defeats the
+        # point of them having their own: everyone lands back on one 10,000
+        # unit daily quota, and -- worse -- nobody is ever *asked* to make a
+        # project, because the account already reads as configured and the
+        # setup walkthrough never appears.
+        #
+        # On for a single-tenant install, where the operator's credentials
+        # are the only ones there will ever be.
+        self.shared_google_app: bool = _bool("ALLOW_SHARED_GOOGLE_APP", False)
+
         # The mark burned into a free-plan render. One place, because it was
         # three copies of the same literal in three files, and a brand string
         # that lives in three places is a brand string that will one day be
