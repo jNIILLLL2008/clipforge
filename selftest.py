@@ -2205,6 +2205,55 @@ check("sharing is off unless a deployment asks for it",
       "the default that makes each account bring its own project")
 
 
+section("setup finishes on the configuration it just produced")
+# The guided setup applies the "One TV show" preset, which turns the show
+# filter on, and then asks for a playlist. That is a complete, working
+# configuration -- and the advice called it a blocker, so the last step
+# refused to save. Somebody followed the walkthrough exactly and could not
+# press "Save and finish", with the offered fix being busywork for a filter
+# the playlist had already satisfied.
+_SHOWCFG = {"sources": ["youtube", "upload"], "clips": 5,
+            "target_seconds": 120, "max_clip_seconds": 32,
+            "banner_enabled": True, "require_show_match": True,
+            "show_terms": [], "show_people": [], "moments_per_video": 2}
+_PL = ["https://www.youtube.com/playlist?list=PLabc123def456"]
+
+_with = _review({**_SHOWCFG, "source_playlists": _PL}, upload_count=0,
+                available_sources=["upload", "youtube"])
+check("what the walkthrough produces can be saved",
+      _with.can_run, [f.title for f in _with.findings if f.level == "blocker"])
+check("and the empty show filter is not even mentioned",
+      not any("show filter" in f.title.lower() for f in _with.findings),
+      "a playlist answers the question the filter asks")
+
+# The blocker is still right where it was right: no playlist, nothing to
+# prove a clip belongs to the show.
+_without = _review({**_SHOWCFG, "source_channels": ["@somechannel"]},
+                   upload_count=0, available_sources=["upload", "youtube"])
+check("an empty filter with no playlist still blocks",
+      not _without.can_run
+      and any("show filter" in f.title.lower() for f in _without.findings),
+      [f.title for f in _without.findings])
+
+# What the walkthrough offers, and where the agent panel lives.
+_APPJS2 = Path("frontend/app.js").read_text(encoding="utf-8")
+check("the walkthrough offers the one shape it is built for",
+      _APPJS2.count("choices('shape', [") == 1
+      and "id: 'top5'" not in _APPJS2 and "id: 'memes'" not in _APPJS2,
+      "the others are still on Settings > Load a preset")
+check("and picks it even if nobody clicks the single option",
+      "(value || 'show')" in _APPJS2)
+check("the render agent is loaded for the home screen",
+      "if (name === 'home') loadAgent();" in _APPJS2)
+check("and on first paint, before any tab is clicked",
+      "loadSettings(), loadAgent()" in _APPJS2)
+check("the agent panel sits on Home, not Activity",
+      Path("frontend/index.html").read_text(encoding="utf-8")
+      .index('id="h-agent"') > Path("frontend/index.html")
+      .read_text(encoding="utf-8").index('id="h-overview"'),
+      "it decides whether a run happens, so it belongs beside Publish")
+
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)

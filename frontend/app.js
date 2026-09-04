@@ -100,7 +100,9 @@ function showGate() {
 async function enterApp() {
   $('gate').classList.add('hidden');
   $('app').classList.remove('hidden');
-  await Promise.all([loadStudio(), loadSettings()]);
+  // Home is the screen you land on, and nothing has clicked a tab yet, so
+  // the agent panel would sit empty until you navigated away and back.
+  await Promise.all([loadStudio(), loadSettings(), loadAgent()]);
   state.poll = setInterval(tick, 2500);
 
   // Covers both ways in: already signed in at load, and signed in just now.
@@ -163,7 +165,11 @@ function showTab(name, { focus = false } = {}) {
   $(`tab-${name}`).classList.remove('hidden');
   window.scrollTo(0, 0);
   if (name === 'history') loadJobs();
-  if (name === 'activity') { loadUploads(); loadSources(); loadPlans(); loadAgent(); }
+  // The agent panel lives on Home now: whether a run happens at all can
+  // depend on it, so it belongs with the other things Publish waits for
+  // rather than three screens away beside the file uploads.
+  if (name === 'home') loadAgent();
+  if (name === 'activity') { loadUploads(); loadSources(); loadPlans(); }
   // Build the preview only when the screen showing it is opened, so it never
   // costs an ffmpeg run for someone who is not looking at it.
   if (name === 'settings') { fillPreviewClips(); previewSoon(150); }
@@ -1001,21 +1007,25 @@ const GUIDE = [
   {
     title: 'What are you making?',
     choiceKey: 'shape',
-    intro: `<p>Pick the <b>shape</b> of video. This decides the pacing and what
-      goes on screen, which matters more for retention than the topic does.</p>`,
+    intro: `<p>This walkthrough sets up a channel built from <b>one show or
+      series</b>: it reads a playlist of full episodes and cuts the good
+      moments out of them.</p>
+      <p class="hint">Making something else &mdash; a meme cut, loose
+      highlights from your own footage? Close this and use <b>Load a
+      preset</b> on the Settings screen instead.</p>`,
+    /* One option, deliberately. The other three shapes still exist and are
+       still loadable from Settings > Load a preset -- but they are built
+       around footage you upload, and offering them here sent people down a
+       path where the sourcing question never gets asked properly. The
+       walkthrough is for the thing the product is actually good at. */
     render: () => choices('shape', [
-      { id: 'top5', title: 'A ranked countdown',
-        note: 'Numbered list, best clip last. The strongest format for holding attention.' },
-      { id: 'funny', title: 'Loose highlights',
-        note: 'No ranking. The best moment goes first instead of last.' },
-      { id: 'memes', title: 'Fast meme cut',
-        note: 'Very short clips, big captions, built for rewatching.' },
       { id: 'show', title: 'One specific TV show or series',
         note: 'Reads a playlist of full episodes and cuts the moments out of them.' },
     ]),
     apply: async (value) => {
       const { presets } = await api('/api/presets');
-      const preset = presets.find((p) => p.slug === value);
+      // Defaulted, because a single choice nobody clicked is still a choice.
+      const preset = presets.find((p) => p.slug === (value || 'show'));
       if (preset) {
         const data = await api(`/api/presets/${preset.id}/apply`, { method: 'POST' });
         state.settings = data.settings;

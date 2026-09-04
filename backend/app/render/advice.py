@@ -22,6 +22,8 @@ BOUNDARY = r"\b"
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+from .selection import from_a_chosen_playlist
+
 
 @dataclass
 class Finding:
@@ -239,20 +241,32 @@ def review(cfg: Dict, *, upload_count: int = 0,
     if cfg.get("require_show_match"):
         show_terms = [t for t in (cfg.get("show_terms") or []) if str(t).strip()]
         people = [p for p in (cfg.get("show_people") or []) if str(p).strip()]
-        if not show_terms and not people:
-            add(Finding(
-                "blocker", "The show filter is on but empty",
-                "It will reject every clip, because nothing can prove a clip "
-                "belongs to your show.",
-                "Add show keywords, the regulars' names, or turn the filter "
-                "off.", "show_terms"))
-        elif not show_terms and len(people) < 2:
-            add(Finding(
-                "warning", "Only one person named in the show filter",
-                "A clip qualifies on a show keyword, or on two different "
-                "regulars appearing together. One name alone will reject "
-                "almost everything.",
-                "Add show keywords, or a second regular.", "show_people"))
+
+        # A pasted playlist answers the question this filter asks, so an empty
+        # filter beside one is not a problem -- selection.matches_show returns
+        # on provenance before it ever looks at keywords.
+        #
+        # Saying otherwise was worse than noise: it was a *blocker*, on the
+        # exact configuration the guided setup produces. Somebody following
+        # the walkthrough reached the last step and could not press Save and
+        # finish, and the fix it offered -- add show keywords, or turn the
+        # filter off -- was busywork for a filter that was already satisfied.
+        if not from_a_chosen_playlist(cfg):
+            if not show_terms and not people:
+                add(Finding(
+                    "blocker", "The show filter is on but empty",
+                    "It will reject every clip, because nothing can prove a "
+                    "clip belongs to your show.",
+                    "Add show keywords, the regulars' names, or turn the "
+                    "filter off.", "show_terms"))
+            elif not show_terms and len(people) < 2:
+                add(Finding(
+                    "warning", "Only one person named in the show filter",
+                    "A clip qualifies on a show keyword, or on two different "
+                    "regulars appearing together. One name alone will reject "
+                    "almost everything.",
+                    "Add show keywords, or a second regular.", "show_people"))
+
         if people and not any("|" in str(p) for p in people):
             add(Finding(
                 "tip", "Add name variations",
