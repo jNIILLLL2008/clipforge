@@ -2094,8 +2094,21 @@ check("the guide is served", _conn.status_code == 200, _conn.status_code)
 _html = _conn.text
 check("it is a real page, not the app shell",
       "Connect your channel" in _html and "<title>" in _html)
-check("all six steps are there",
-      _html.count('class="cx-step"') == 6, _html.count('class="cx-step"'))
+check("all seven steps are there",
+      _html.count('class="cx-step"') == 7, _html.count('class="cx-step"'))
+
+# Promoted out of a warning inside step 3, because the first person to follow
+# the guide skipped it there and lost an hour to Access blocked. A numbered
+# walkthrough teaches you that the numbers are the work and the prose between
+# them is commentary, so the thing that decides whether setup finishes has to
+# be a number.
+check("adding a test user is a step of its own, not a footnote",
+      "<h2>Add yourself as a test user</h2>" in _html)
+check("and the walkthrough has it too, so the two cannot diverge",
+      "title: 'Add yourself as a test user'"
+      in Path("frontend/app.js").read_text(encoding="utf-8"))
+check("it explains why Google's own error misleads",
+      "talks about verification rather than test users" in _html)
 
 # The address has to reach Google's field exactly, so it is generated from the
 # server's own configuration rather than typed into the page. Hardcoding it

@@ -45,7 +45,7 @@
       <p class="eyebrow">Setup</p>
       <h1 class="display-lg">Connect your channel.</h1>
       <p class="lede">
-        Six steps, about five minutes, once. At the end, ClipForge can upload
+        Seven steps, about five minutes, once. At the end, ClipForge can upload
         finished videos straight to your YouTube channel.
       </p>
     </div>
@@ -141,25 +141,52 @@
             <rect x="20" y="78" width="240" height="28" rx="6" class="s-ring"/>
           </svg>
         </div>
+      </div>
+    </article>
+
+    <!-- 4 ----------------------------------------------------------- -->
+    <!-- Its own step, not a warning inside the one before it. This was a
+         bold callout under "Set up the consent screen" and got skipped by
+         the first person who followed the guide, because a numbered list
+         teaches you that the numbers are the work and everything else is
+         commentary. It is the single most common way this setup fails. -->
+    <article class="cx-step">
+      <div class="cx-num" aria-hidden="true">4</div>
+      <div class="cx-body">
+        <h2>Add yourself as a test user</h2>
+        <p>
+          Still on the consent screen, open <b>Audience</b> and add the Google
+          account that owns your YouTube channel under <b>Test users</b>.
+        </p>
+        <div class="cx-screen">
+          <svg viewBox="0 0 620 168" role="img"
+               aria-label="The Audience page with the Add users button and an email added under Test users.">
+            <text x="24" y="36" class="s-head">Audience</text>
+            <text x="24" y="62" class="s-dim">Publishing status: Testing</text>
+            <text x="24" y="92" class="s-label">Test users</text>
+            <rect x="24" y="102" width="118" height="28" rx="5" class="s-fill s-ring"/>
+            <text x="42" y="121" class="s-body">+ Add users</text>
+            <rect x="160" y="102" width="240" height="28" rx="14" class="s-fill"/>
+            <text x="176" y="121" class="s-mono">you@gmail.com</text>
+            <text x="24" y="154" class="s-dim">1 user (1 test, 0 other) / 100 user cap</text>
+          </svg>
+        </div>
         <div class="cx-trap">
-          <b>Do not skip this</b>
+          <b>This is the one everybody misses</b>
           <p>
-            Still on the consent screen, find <b>Audience &rsaquo; Test
-            users</b> and add the Google account that owns your channel.
-          </p>
-          <p>
-            Until Google verifies your project, only accounts listed there may
-            sign in. Everyone else &mdash; including you, if you skip it
-            &mdash; gets <b>Access blocked</b> at the final step, and nothing
-            explains why.
+            Until Google verifies your project, <b>only accounts on that list
+            may sign in</b>. Everyone else &mdash; including you, if you skip
+            it &mdash; gets <b>Access blocked</b> at the last step, and the
+            message talks about verification rather than test users, so it
+            sends you looking in the wrong place.
           </p>
         </div>
       </div>
     </article>
 
-    <!-- 4 ----------------------------------------------------------- -->
+    <!-- 5 ----------------------------------------------------------- -->
     <article class="cx-step">
-      <div class="cx-num" aria-hidden="true">4</div>
+      <div class="cx-num" aria-hidden="true">5</div>
       <div class="cx-body">
         <h2>Copy your redirect address</h2>
         <p>
@@ -181,16 +208,16 @@
       </div>
     </article>
 
-    <!-- 5 ----------------------------------------------------------- -->
+    <!-- 6 ----------------------------------------------------------- -->
     <article class="cx-step">
-      <div class="cx-num" aria-hidden="true">5</div>
+      <div class="cx-num" aria-hidden="true">6</div>
       <div class="cx-body">
         <h2>Create the credentials</h2>
         <p>
           Go to <a href="https://console.cloud.google.com/apis/credentials"
           target="_blank" rel="noopener">Credentials &rsaquo; Create
           credentials &rsaquo; OAuth client ID</a>. Choose <b>Web
-          application</b> as the type, then paste the address from step 4 under
+          application</b> as the type, then paste the address from step 5 under
           <b>Authorised redirect URIs</b>.
         </p>
         <div class="cx-screen">
@@ -206,15 +233,15 @@
             <rect x="21" y="107" width="206" height="34" rx="7" class="s-ring"/>
             <text x="264" y="103" class="s-dim">Authorised redirect URIs</text>
             <rect x="264" y="110" width="332" height="28" rx="5" class="s-fill s-ring"/>
-            <text x="277" y="129" class="s-mono">paste the address from step 4</text>
+            <text x="277" y="129" class="s-mono">paste the address from step 5</text>
           </svg>
         </div>
       </div>
     </article>
 
-    <!-- 6 ----------------------------------------------------------- -->
+    <!-- 7 ----------------------------------------------------------- -->
     <article class="cx-step">
-      <div class="cx-num" aria-hidden="true">6</div>
+      <div class="cx-num" aria-hidden="true">7</div>
       <div class="cx-body">
         <h2>Paste the two values into ClipForge</h2>
         <p>

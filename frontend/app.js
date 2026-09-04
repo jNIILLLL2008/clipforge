@@ -1432,6 +1432,20 @@ const PUB_ART = {
     ${pubLabel(14, 141, 'Google address. Without it, sign-in is refused.', 9)}
   `, 156),
 
+  testers: () => pubFrame(`
+    ${pubLabel(14, 36, 'Audience', 11, 'var(--text)')}
+    ${pubLabel(14, 58, 'Publishing status: Testing')}
+    ${pubLabel(14, 86, 'Test users', 10, 'var(--text)')}
+    <rect x="14" y="96" width="112" height="24" rx="4" fill="var(--surface)"
+          stroke="var(--border-firm)"/>
+    ${pubLabel(30, 112, '+ Add users', 9, 'var(--text)')}
+    ${pubRing(12, 94, 116, 28)}
+    <rect x="142" y="96" width="210" height="24" rx="12" fill="var(--surface)"
+          stroke="var(--border)"/>
+    ${pubLabel(156, 112, 'you@gmail.com', 9)}
+    ${pubLabel(14, 142, '1 user (1 test, 0 other) / 100 user cap', 9)}
+  `, 158),
+
   client: () => pubFrame(`
     ${pubLabel(14, 40, 'Credentials  ›  Create credentials', 10, 'var(--text)')}
     <rect x="14" y="50" width="150" height="20" rx="4" fill="var(--surface)"
@@ -1494,10 +1508,25 @@ const PUB_STEPS = [
       <p>This is the screen you will see when you connect your channel. Choose
       <b>External</b>, fill in an app name and your email, and save.</p>
       ${PUB_ART.consent()}
-      <p><b>Do not skip the test user step.</b> Until the project is verified
-      by Google, only accounts listed there may sign in &mdash; everyone else
-      gets <i>Access blocked</i>. Add the Google account that owns your
-      YouTube channel.</p>
+      <p><a href="${PUB_LINKS.consent}" target="_blank" rel="noopener"
+        class="pub-open">Open the consent screen &#8599;</a></p>`,
+  },
+  {
+    /* Its own step, not a warning inside the one before it. It was a bold
+       paragraph under the consent screen and the first person to follow this
+       skipped it anyway -- a numbered walkthrough teaches you that the steps
+       are the work and the prose around them is commentary. It is also the
+       single most common way the whole setup fails, and the error Google
+       shows for it talks about verification rather than test users, so it
+       sends people looking in the wrong place entirely. */
+    title: 'Add yourself as a test user',
+    body: () => `
+      <p>Still on the consent screen, open <b>Audience</b> and add the Google
+      account that owns your YouTube channel under <b>Test users</b>.</p>
+      ${PUB_ART.testers()}
+      <p class="hint warn"><b>This is the one everybody misses.</b> Until
+      Google verifies your project, only accounts on that list may sign in.
+      Skip it and the last step fails with <i>Access blocked</i>.</p>
       <p><a href="${PUB_LINKS.consent}" target="_blank" rel="noopener"
         class="pub-open">Open the consent screen &#8599;</a></p>`,
   },
