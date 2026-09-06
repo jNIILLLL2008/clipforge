@@ -42,6 +42,9 @@
 
   --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* Only the logo wordmark is set in this: a grotesque with a width axis,
+     compressed to 92% so it reads as stamped rather than typed. */
+  --display: "Archivo", "Geist", ui-sans-serif, system-ui, sans-serif;
 
   --max: 1200px;
   --gutter: 24px;
@@ -51,6 +54,14 @@
   /* The spring in the reference reads as a slow arrival with a slight
      overshoot. This is the closest a plain transition gets to it. */
   --ease-rise: cubic-bezier(.2, .8, .2, 1);
+
+  /* The mark, verbatim from the brand kit: an angular C that is also a clip
+     bracket, with a spark struck in its mouth. It is a *stroked* polyline on a
+     64-unit grid at a constant 11-unit stroke -- kept as stroke rather than
+     converted to outlines, so it stays the geometry the kit draws. Carried as a
+     mask rather than an inline <svg> per header, so the path is written once and
+     the colour still comes from --ember. */
+  --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M50 13H27L15.5 32L27 51H50' fill='none' stroke='%23000' stroke-width='11' stroke-linejoin='miter' stroke-linecap='butt'/%3E%3Cpath d='M45 23L47.26 29.74L54 32L47.26 34.26L45 41L42.74 34.26L36 32L42.74 29.74Z' fill='%23000'/%3E%3C/svg%3E");
 }
 
 @media (prefers-color-scheme: light) {
@@ -246,16 +257,35 @@ section + section { padding-top: 0; }
   pointer-events: none;
 }
 
+/* The horizontal lockup, measured off the kit's own: the 64-unit glyph box is
+   .9362em and the gap .3082em, which puts the glyph's drawn height at 1.043x the
+   wordmark's cap height. (The kit's prose gives the gap as 0.4x the glyph width;
+   that is the drawn glyph, not the 64-unit box this mask is painted into.) Below
+   ~96px wide the wordmark should be dropped and the glyph used alone; nothing on
+   this site renders it that small. */
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -.02em;
+  gap: .3082em;
+  font-size: 17px;
   flex: none;
 }
-.brand-mark { color: var(--ember); font-size: 13px; line-height: 1; }
+.brand-mark {
+  width: .9362em;
+  height: .9362em;
+  flex: none;
+  background: var(--ember);
+  -webkit-mask: var(--mark) center / contain no-repeat;
+          mask: var(--mark) center / contain no-repeat;
+}
+.brand-word {
+  font-family: var(--display);
+  font-weight: 880;
+  font-stretch: 92%;
+  text-transform: uppercase;
+  letter-spacing: -.035em;
+  line-height: .82;
+}
 
 .nav-links { display: flex; align-items: center; gap: 26px; margin-left: auto; }
 .nav-links a {

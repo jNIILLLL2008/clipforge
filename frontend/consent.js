@@ -121,7 +121,7 @@
     el.setAttribute("role", "region");
     el.setAttribute("aria-label", "Cookie choices");
     el.innerHTML =
-      '<p class="cc-title"><span class="brand-mark" aria-hidden="true">&#9670;</span> Cookies</p>' +
+      '<p class="cc-title"><span class="brand-mark" aria-hidden="true"></span> Cookies</p>' +
       '<p>Signing in needs one cookie, so that one is always on. Beyond it we ' +
       'would like to measure which pages get used, which you can decline with ' +
       'no loss of function. <a href="/cookies">What we store</a>.</p>' +

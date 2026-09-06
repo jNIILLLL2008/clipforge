@@ -53,6 +53,7 @@ colors:
 typography:
   sans: Geist            # via Google Fonts, weights 400/500/600
   mono: Geist Mono       # weights 400/500, used for numbers only
+  display: Archivo       # wdth 92 / wght 880. The logo wordmark only, nothing else
   display-xl: "clamp(38px, 4.4vw, 56px), line-height 1.06, tracking -.035em"
   display-lg: "clamp(32px, 3.9vw, 46px), line-height 1.10, tracking -.030em"
   display-md: "clamp(26px, 2.9vw, 34px), line-height 1.15, tracking -.025em"
@@ -170,6 +171,52 @@ delivering would leave the page blank rather than merely unanimated. There is a
 nothing has been revealed by then. Keep it. The whole reveal layer is also gated
 behind a `.js` class on `<html>`, so the page is fully readable with JavaScript
 off, and it collapses to static under `prefers-reduced-motion`.
+
+## The logo
+
+The mark comes from the Clipforge brand kit, and the path here is the kit's own,
+not a redraw: an angular C that is also a clip bracket, with a spark struck in
+its mouth. Raw footage goes in the open side, the finished cut comes out. It is
+a *stroked* polyline -- `M50 13 H27 L15.5 32 L27 51 H50` at a constant 11-unit
+stroke on a 64-unit grid, miter joins, butt caps -- plus a straight-edged
+four-point spark. Kept as stroke rather than converted to outlines, so it stays
+the same geometry the kit draws. Never re-weight the stroke to balance a layout;
+scale the whole glyph instead.
+
+The lockup measurements were taken off the kit's own rendered lockup rather than
+guessed: the 64-unit glyph box is `.9362em` and the gap `.3082em`, which puts the
+glyph's drawn height at 1.043x the wordmark's cap height and its left ink edge
+where the kit puts it. The kit's prose gives the gap as 0.4x the glyph width;
+that describes the drawn glyph, not the 64-unit box the mask is painted into, so
+the box figure above is what the CSS uses. Clearspace on every side is the height
+of the spark. Below roughly 96px wide the wordmark should be dropped and the
+glyph used alone; nothing on this site currently renders it that small.
+
+The path is written once per stylesheet, as the `--mark` token, and applied as a
+`mask` on `.brand-mark`. That keeps the colour coming from `--ember` (so the
+reversed lockup is a one-line override) and avoids pasting an inline `<svg>` into
+all twelve headers and footers. It is the same reason the pricing check marks are
+CSS: no build step, no icon family to install.
+
+The wordmark is Archivo at wdth 92 / wght 880, uppercase, tracking -.035em,
+line-height .82 -- the kit's wordmark instance, not its Display 1 spec. It is the
+only thing on either surface set in that face; everything else stays Geist. The
+DOM text is still "Clipforge" and the uppercasing is CSS, so a screen reader
+reads the brand name rather than an acronym.
+
+One deliberate divergence: the kit's ember is `#F25C1E`, and this site's accent
+is `#e2603a`. The mark takes the site's `--ember` so the logo agrees with every
+button beside it. Moving the whole palette onto the kit's temperature scale is a
+separate decision, not a side effect of the logo.
+
+The favicon is the kit's app icon rather than the mark on the page canvas: its
+gradient tile at 22% radius with the glyph knocked out in forge black. On
+near-black the mark goes to mud at 16px, and the orange tile is what makes the
+tab findable. `frontend/img/og-cover.png` carries the same lockup, and has to be
+redrawn by hand if the mark changes -- there is no script that generates it.
+
+The kit itself is a published artifact, and it is the source of truth for the
+path: claude.ai/code/artifact/6de84cc7-15ce-4c89-b5b5-818c00108b14
 
 ## Third-party assets, and what to replace
 
