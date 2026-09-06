@@ -257,7 +257,7 @@
   color: var(--ink-subtle, var(--muted));
   margin: 0 0 10px;
 }
-.cc-title .brand-mark { font-size: 11px; color: var(--ember, var(--accent)); }
+.cc-title .brand-mark { font-size: 14px; background: var(--ember, var(--accent)); }
 
 .cc p { margin: 0 0 14px; color: var(--ink-muted, var(--muted)); }
 .cc a { color: var(--ember-ink, var(--accent-ink)); text-decoration: underline; text-underline-offset: 3px; }
