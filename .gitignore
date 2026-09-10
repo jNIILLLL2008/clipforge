@@ -41,3 +41,8 @@ agent/ClipForgeAgent-windows/
 build/
 dist/
 *.spec.bak
+
+# The promo video (promo/). Dependencies, and the rendered master, which is
+# 10MB and is rebuilt from source by `npx remotion render`.
+promo/node_modules/
+promo/out/
