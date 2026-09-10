@@ -484,6 +484,91 @@ section + section { padding-top: 0; }
   .sources-logos img { opacity: .8; }
 }
 
+/* ---------------------------------------------------------------- film -- */
+/* The launch film, framed like the hero panel so the two product shots on the
+   page read as the same object rather than two unrelated treatments.
+
+   It is narrated, so it does not autoplay: a page that starts talking at you
+   unprompted is the thing this product is not. That is also what makes
+   preload="none" affordable -- the poster is a real frame out of the film, so
+   somebody who never presses play still sees what is in it, and pays nothing
+   for the 2.8MB behind it. */
+.film {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--r-panel) + 6px);
+  background: var(--surface-sunk);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+}
+.film video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The file is exactly 16/9, so this only ever absorbs sub-pixel rounding. */
+  object-fit: cover;
+}
+
+/* Unhidden by script. Without JS the element's own controls are the entire
+   interface, which is why this starts hidden rather than starting visible and
+   then being taken away. */
+.film-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  /* Only enough to seat the disc. The poster is three real renders, and
+     darkening it to make a button legible would be the wrong trade. */
+  background: radial-gradient(62% 62% at 50% 50%, rgba(8, 8, 10, .20), rgba(8, 8, 10, .52));
+}
+/* display:grid above would otherwise outrank the browser's own [hidden]. */
+.film-play[hidden] { display: none; }
+/* The shared focus ring is drawn 3px outside the box. This box is the full
+   bleed of an overflow:hidden parent, so that ring would be clipped away
+   entirely; it goes inwards instead, and follows the frame rather than the
+   999px the global rule assumes. */
+.film-play:focus-visible {
+  outline-offset: -7px;
+  border-radius: var(--r-panel);
+}
+
+.film-disc {
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  border-radius: var(--r-chip);
+  background: var(--ember);
+  color: var(--on-ember);
+  box-shadow: 0 12px 34px rgba(226, 96, 58, .34);
+  transition: transform .3s var(--ease);
+}
+.film-play:hover .film-disc,
+.film-play:focus-visible .film-disc { transform: scale(1.06); }
+.film-disc svg {
+  width: 24px;
+  height: 24px;
+  /* A triangle's bounding box is not its optical centre. */
+  margin-left: 4px;
+}
+
+/* Runtime and the sound warning sit under the frame rather than on it. Over
+   the poster they were unreadable, and darkening three real renders to fix
+   that would have cost more than the line is worth. */
+.film-cap {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+  margin: 14px 0 0;
+}
+
 /* --------------------------------------------------------------- steps -- */
 /* No cards and no step numbers. Vertical hairlines carry the grouping, and the
    first column is wider so this does not read as three equal tiles. */
@@ -848,6 +933,11 @@ footer .fine { color: var(--ink-subtle); font-size: 13.5px; max-width: 40ch; mar
 
   .sources .wrap { gap: 18px; }
   .sources-logos { margin-left: 0; gap: 28px; }
+
+  /* 74px of disc is most of a phone-width frame. */
+  .film-disc { width: 58px; height: 58px; }
+  .film-disc svg { width: 19px; height: 19px; margin-left: 3px; }
+  .film-cap { font-size: 10px; }
 
   .rules { grid-template-columns: 1fr; gap: 0; }
   .rules li { padding: 9px 0; }

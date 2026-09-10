@@ -29,7 +29,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@92,880&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
-<link rel="stylesheet" href="/static/landing.css?v=3">
+<link rel="stylesheet" href="/static/landing.css?v=5">
 <link rel="stylesheet" href="/static/legal.css?v=2">
 <script>document.documentElement.className += " js";</script>
 
@@ -84,8 +84,10 @@
        Centred, with the glow and the framed panel from the reference design.
        The badge, headline, subtext and buttons rise and unblur in sequence.
        What sits in the frame is three real renders rather than a stock app
-       screenshot, and the strip below names the one service this actually
-       talks to rather than a wall of logos belonging to strangers. -->
+       screenshot -- two niches rather than three of the same one, because the
+       point is the format and not the sport -- and the strip below names the
+       one service this actually talks to rather than a wall of logos
+       belonging to strangers. -->
   <section class="hero">
     <div class="wrap hero-inner">
       <a class="badge rise" href="#retention">
@@ -139,9 +141,9 @@
             </div>
           </div>
           <div class="still">
-            <img src="/static/img/hero-frame-3.jpg"
-                 width="266" height="480"
-                 alt="A finished ClipForge render: a top five CBS Sports countdown with a banner, a numbered list and burned-in captions."
+            <img src="/static/img/hero-frame-spiderman.jpg"
+                 width="270" height="480"
+                 alt="A finished ClipForge render: a top four Spectacular Spider-Man countdown, the clip letterboxed over its own blurred frame with a banner and a numbered list."
                  decoding="async">
           </div>
         </div>
@@ -160,6 +162,46 @@
       </div>
     </div>
   </div>
+
+  <!-- ============================== film ==============================
+       Fifteen seconds is cheaper for a visitor than the three steps below it,
+       so it goes first. It does not autoplay, and it does not load until it is
+       asked to: the poster is a frame out of the film itself, so the section
+       still says something to somebody who scrolls straight past. -->
+  <section id="film">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Fifteen seconds</p>
+        <h2 class="display-lg">Or just watch it do the thing.</h2>
+        <p class="body">
+          The format settings, the retention rules, the Publish button, and
+          three of the videos that came out the other end.
+        </p>
+      </div>
+
+      <div class="film reveal reveal-d1">
+        <video class="film-video"
+               poster="/static/img/ad-poster.jpg"
+               width="1280" height="720"
+               preload="none" controls playsinline>
+          <source src="/static/video/clipforge-ad.mp4" type="video/mp4">
+          <p>
+            Your browser cannot play this video.
+            <a href="/static/video/clipforge-ad.mp4">Download it instead</a>.
+          </p>
+        </video>
+
+        <button class="film-play" type="button" hidden
+                aria-label="Play the launch film. Fifteen seconds, with sound.">
+          <span class="film-disc" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <p class="film-cap reveal reveal-d2">0:15 &middot; sound on</p>
+    </div>
+  </section>
 
   <!-- ============================== how ===============================
        Hairline-separated columns rather than three equal cards, and the verb
@@ -506,6 +548,36 @@
          here would push the observed area past a sentinel pinned at y=0, and
          the bar would come up already contracted. */
     }).observe(sentinel);
+  }
+
+  /* The film. Its own controls are already on the element, so this only puts
+     a target worth pressing in front of them -- and only when script is here
+     to take it away again, which is why the button ships hidden. */
+  var film = document.querySelector('.film-video');
+  var filmPlay = document.querySelector('.film-play');
+  if (film && filmPlay) {
+    /* controls ships in the markup so the film is playable with no script at
+       all, and comes straight back off here because the overlay is the better
+       affordance when there is one. It returns the moment the film runs, which
+       is the only point at which a scrub bar is worth anything. */
+    film.removeAttribute('controls');
+    filmPlay.hidden = false;
+    filmPlay.addEventListener('click', function () {
+      var started = film.play();
+      /* Older browsers return nothing here. A rejection means the play never
+         happened, so the button has to come back. */
+      if (started && started.catch) {
+        started.catch(function () { filmPlay.hidden = false; });
+      }
+    });
+    /* One way only. The film ends on its own end card, which is a Start free
+       button, and putting a replay disc on top of that would be covering the
+       one thing the last three seconds are for. Watching it again is the
+       control bar's job from here on. */
+    film.addEventListener('play', function () {
+      filmPlay.hidden = true;
+      film.controls = true;
+    });
   }
 
   var nodes = document.querySelectorAll('.reveal');
