@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv\\Scripts\\python.exe",
       "runtimeArgs": ["-m", "uvicorn", "backend.app.main:app", "--port", "8000"],
       "port": 8000
+    },
+    {
+      "name": "promo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "promo", "run", "dev"],
+      "port": 3000
     }
   ]
 }
