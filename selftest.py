@@ -1552,6 +1552,59 @@ with session_scope() as _db:
     check("a cancelled subscription drops back to free",
           _db.get(User, _bid).plan == Plan.FREE)
 
+# A customer only exists in the mode it was made in. Accounts that tried to
+# upgrade on test keys kept a test customer, and when the key went live every
+# checkout for them failed "No such customer" -- shown as checkout being down.
+import stripe as _stripe_sdk  # noqa: E402
+from types import SimpleNamespace as _NS  # noqa: E402
+
+from backend.app.routes.billing import _customer_id  # noqa: E402
+
+
+class _FakeStripe:
+    """Just enough of the SDK for _customer_id."""
+    InvalidRequestError = _stripe_sdk.InvalidRequestError
+
+    def __init__(self, known=(), fail_code="resource_missing"):
+        self.known, self.created, self.fail_code = set(known), [], fail_code
+        self.Customer = self
+
+    def retrieve(self, cid):
+        if cid not in self.known:
+            raise self.InvalidRequestError(f"No such customer: '{cid}'", "id",
+                                           code=self.fail_code)
+        return {"id": cid}
+
+    def create(self, **kwargs):
+        self.created.append(kwargs)
+        return _NS(id=f"cus_live_{len(self.created)}")
+
+
+with session_scope() as _db:
+    _b = _db.get(User, _bid)
+    _b.stripe_customer_id = "cus_from_the_sandbox"
+    _fs = _FakeStripe()
+    _fresh = _customer_id(_fs, _db, _b)
+    check("a customer the key cannot see is replaced, not reused",
+          _fresh == "cus_live_1" and len(_fs.created) == 1, _fresh)
+with session_scope() as _db:
+    check("and the replacement is saved to the account",
+          _db.get(User, _bid).stripe_customer_id == "cus_live_1")
+with session_scope() as _db:
+    _fs = _FakeStripe(known=["cus_live_1"])
+    check("a customer that does exist is kept, not duplicated",
+          _customer_id(_fs, _db, _db.get(User, _bid)) == "cus_live_1"
+          and not _fs.created)
+with session_scope() as _db:
+    _fs = _FakeStripe(fail_code="rate_limit")
+    _surfaced = False
+    try:
+        _customer_id(_fs, _db, _db.get(User, _bid))
+    except _stripe_sdk.InvalidRequestError:
+        _surfaced = True
+    check("any other Stripe error is raised rather than replacing them",
+          _surfaced and not _fs.created)
+
 
 
 section("setup asks the question that decides the outcome")

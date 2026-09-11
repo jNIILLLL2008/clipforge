@@ -71,6 +71,35 @@ def _plain(obj) -> dict:
         return {}
 
 
+def _customer_id(stripe, db: Session, user: User) -> str:
+    """This account's Stripe customer, as the current key sees it.
+
+    A customer only exists in the mode it was created in. An account that
+    tried to upgrade while the site ran on test keys kept that test-mode ID,
+    and once the key went live every checkout for it failed with "No such
+    customer" -- which the customer sees as checkout being down, for good.
+    So look the saved one up, and start a fresh one when it is not there.
+    """
+    if user.stripe_customer_id:
+        try:
+            found = _plain(stripe.Customer.retrieve(user.stripe_customer_id))
+            if not found.get("deleted"):
+                return user.stripe_customer_id
+        except stripe.InvalidRequestError as exc:
+            # Anything else -- a bad key, Stripe having a moment -- is not
+            # proof the customer is gone, and replacing them would orphan
+            # whatever they are subscribed to.
+            if exc.code != "resource_missing":
+                raise
+        log.info("User %s: customer %s does not exist for this Stripe key; "
+                 "creating a new one.", user.id, user.stripe_customer_id)
+    customer = stripe.Customer.create(email=user.email,
+                                      metadata={"user_id": str(user.id)})
+    user.stripe_customer_id = customer.id
+    db.commit()
+    return customer.id
+
+
 def _plan_for_price(price_id: str) -> Optional[Plan]:
     if price_id and price_id == settings.stripe_price_starter:
         return Plan.STARTER
@@ -95,16 +124,10 @@ def checkout(plan: str, user: User = Depends(current_user),
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
                             f"No Stripe price configured for {plan}.")
 
-    if not user.stripe_customer_id:
-        customer = stripe.Customer.create(email=user.email,
-                                          metadata={"user_id": str(user.id)})
-        user.stripe_customer_id = customer.id
-        db.commit()
-
     try:
         session = stripe.checkout.Session.create(
             mode="subscription",
-            customer=user.stripe_customer_id,
+            customer=_customer_id(stripe, db, user),
             line_items=[{"price": price, "quantity": 1}],
             # /app, not /. Stripe was returning paying customers to the
             # marketing page, which has no idea what ?billing=success means
@@ -137,10 +160,18 @@ def portal(user: User = Depends(current_user)):
     if not user.stripe_customer_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "No subscription to manage yet.")
-    session = stripe.billing_portal.Session.create(
-        customer=user.stripe_customer_id,
-        return_url=settings.public_url,
-    )
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=user.stripe_customer_id,
+            return_url=settings.public_url,
+        )
+    except stripe.InvalidRequestError as exc:
+        # A customer from the other mode (see _customer_id): nothing on this
+        # side to manage, which is a 400 rather than a crash.
+        if exc.code != "resource_missing":
+            raise
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "No subscription to manage yet.") from exc
     return {"url": session.url}
 
 
