@@ -415,9 +415,29 @@ def set_automation(body: AutomationIn, user: User = Depends(current_user),
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "Time must be HH:MM in 24-hour form.")
 
+    # The scheduler falls back to UTC for a name it can't resolve, which is
+    # right for a loop that must not stop, and wrong for a form: "London"
+    # would be saved, and every run would land an hour or more off with
+    # nothing on screen to say why. So a name is checked here, where it can
+    # still be refused. Blank means UTC.
+    zone = body.timezone.strip()[:64]
+    if zone:
+        try:
+            from zoneinfo import ZoneInfo
+
+            ZoneInfo(zone)
+        # ZoneInfoNotFoundError is a KeyError; ValueError is a malformed key;
+        # a folder of zones, like "America", can surface as an OSError.
+        except (KeyError, ValueError, OSError):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f'Unknown timezone "{zone}". Use a name like Europe/London, '
+                "or leave it blank for UTC.",
+            )
+
     user.automate_daily = bool(body.enabled)
     user.automate_time = f"{hour:02d}:{minute:02d}"
-    user.automate_timezone = body.timezone.strip()[:64]
+    user.automate_timezone = zone
     db.commit()
     return {"enabled": user.automate_daily, "time": user.automate_time,
             "timezone": user.automate_timezone}

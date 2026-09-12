@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@92,880&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
-<link rel="stylesheet" href="/static/styles.css?v=4">
+<link rel="stylesheet" href="/static/styles.css?v=5">
 <link rel="stylesheet" href="/static/legal.css?v=2">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='.135' y1='-.084' x2='.865' y2='1.084'><stop offset='0' stop-color='%23F25C1E'/><stop offset='.52' stop-color='%23FF8A3C'/><stop offset='1' stop-color='%23E8B54A'/></linearGradient></defs><rect width='64' height='64' rx='14.08' fill='url(%23g)'/><g transform='translate(14.08 14.08) scale(.56)' fill='none' stroke='%230C0B0A' stroke-width='11'><path d='M50 13H27L15.5 32L27 51H50'/></g><path transform='translate(14.08 14.08) scale(.56)' fill='%230C0B0A' d='M45 23L47.26 29.74L54 32L47.26 34.26L45 41L42.74 34.26L36 32L42.74 29.74Z'/></svg>">
 </head>
@@ -147,10 +147,13 @@
           <div class="rows" aria-labelledby="h-auto">
             <div class="row">
               <label class="row-label" for="automate-toggle">Run every day</label>
-              <span class="switch">
+              <!-- A label, like the switches on Settings. As a span, the track
+                   you can see ignored clicks: the checkbox under it is 0x0,
+                   so only the words beside it could flip it. -->
+              <label class="switch">
                 <input type="checkbox" id="automate-toggle">
                 <span class="track" aria-hidden="true"></span>
-              </span>
+              </label>
             </div>
             <div class="row">
               <label class="row-label" for="automate-time">Time</label>
@@ -158,7 +161,7 @@
             </div>
             <div class="row">
               <label class="row-label" for="automate-tz">Timezone</label>
-              <input class="row-input right" type="text" id="automate-tz" placeholder="system">
+              <input class="row-input right" type="text" id="automate-tz" placeholder="UTC">
             </div>
           </div>
           <p class="note" id="automation-note">Runs on our servers, so nothing needs to stay open.</p>
@@ -391,7 +394,7 @@
 </div>
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-<script src="/static/app.js?v=4"></script>
+<script src="/static/app.js?v=5"></script>
 <script src="/static/consent.js?v=2" data-optional="__CONSENT_OPTIONAL__" data-ga="__GA_ID__"></script>
 </body>
 </html>

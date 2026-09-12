@@ -258,12 +258,16 @@ function renderHome() {
       ? openPublishing : connectYouTube;
   }
 
-  // Automation
+  // Automation. This re-renders on every 2.5s poll, so it leaves alone a
+  // control somebody is using: it was typing over the timezone mid-word, and
+  // could flip the switch back before its save had landed.
   const auto = s.automation;
-  $('automate-toggle').checked = auto.enabled;
+  if (!savingAutomation) {
+    $('automate-toggle').checked = auto.enabled;
+    if (document.activeElement !== $('automate-time')) $('automate-time').value = auto.time;
+    if (document.activeElement !== $('automate-tz')) $('automate-tz').value = auto.timezone;
+  }
   $('automate-toggle').disabled = !auto.allowed;
-  $('automate-time').value = auto.time;
-  $('automate-tz').value = auto.timezone;
   $('automation-note').textContent = auto.allowed
     ? 'Runs on our servers — nothing needs to stay open.'
     : 'Daily automation is included with Starter and Pro.';
@@ -318,7 +322,12 @@ async function startRun(dry) {
   }
 }
 
+/* True while a save is in flight, so a poll landing in between doesn't put
+   the old values back on screen. */
+let savingAutomation = false;
+
 async function saveAutomation() {
+  savingAutomation = true;
   try {
     await api('/api/studio/automation', {
       method: 'PUT',
@@ -328,15 +337,20 @@ async function saveAutomation() {
         timezone: $('automate-tz').value.trim(),
       },
     });
+    savingAutomation = false;
     await loadStudio();
     toast($('automate-toggle').checked ? 'Daily runs on.' : 'Daily runs off.');
   } catch (err) {
+    savingAutomation = false;
     toast(err.message);
     await loadStudio();
   }
 }
 $('automate-toggle').onchange = saveAutomation;
 $('automate-time').onchange = saveAutomation;
+// Had no handler at all, so a timezone was only ever saved by accident, when
+// the switch or the time happened to change straight after it.
+$('automate-tz').onchange = saveAutomation;
 $('automate-tz').onchange = saveAutomation;
 
 async function connectYouTube() {

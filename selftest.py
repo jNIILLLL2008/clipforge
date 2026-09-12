@@ -2685,6 +2685,40 @@ check("bad time refused",
       client.put("/api/studio/automation",
                  json={"enabled": True, "time": "25:99"}).status_code == 400)
 
+# A name the scheduler can't resolve used to be saved anyway, and the loop's
+# UTC fallback then ran the account at the wrong hour with nothing to say so.
+_london = client.put("/api/studio/automation",
+                     json={"enabled": True, "time": "07:30",
+                           "timezone": "Europe/London"})
+check("a real timezone is stored",
+      _london.status_code == 200
+      and _london.json()["timezone"] == "Europe/London", _london.text[:90])
+for _bad in ("London", "Mars/Olympus", "America", "../etc/passwd"):
+    _refused = client.put("/api/studio/automation",
+                          json={"enabled": True, "time": "07:30",
+                                "timezone": _bad})
+    check(f"timezone {_bad!r} refused rather than saved as UTC",
+          _refused.status_code == 400,
+          f"{_refused.status_code}: {_refused.text[:60]}")
+check("a blank timezone still means UTC",
+      client.put("/api/studio/automation",
+                 json={"enabled": True, "time": "07:30",
+                       "timezone": ""}).status_code == 200)
+client.put("/api/studio/automation",
+           json={"enabled": True, "time": "07:30", "timezone": "UTC"})
+
+# The Home switch was a <span>. Its checkbox is 0x0, so the track you can see
+# ignored clicks and only the words beside it could flip it.
+_INDEX = Path("frontend/index.html").read_text(encoding="utf-8")
+check("the Run every day switch is a label, like the ones on Settings",
+      re.search(r'<label class="switch">\s*<input type="checkbox" '
+                r'id="automate-toggle">', _INDEX) is not None)
+check("no switch anywhere is a span",
+      '<span class="switch">' not in _INDEX
+      and '<span class="switch">' not in _APP)
+check("the timezone saves when it changes",
+      "$('automate-tz').onchange = saveAutomation" in _APP)
+
 from backend.app.scheduler import due  # noqa: E402
 
 
