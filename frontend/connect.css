@@ -10,6 +10,13 @@
  * else's copyright, and they carry whatever account happened to be signed in
  * when they were taken. */
 
+/* ------------------------------------------------------------- film --- */
+/* The one-minute walkthrough above the steps. Its frame, play disc and
+   caption are the launch film's, from landing.css; this only spaces it. It
+   shows ClipForge's own setup dialog, not Google's console, so the rule above
+   does not bite: when the dialog changes, promo/ renders the film again. */
+.cx-film { margin: 0 0 clamp(36px, 5vw, 56px); }
+
 /* ------------------------------------------------------------ steps --- */
 .cx-step {
   display: grid;
