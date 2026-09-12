@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
 <link rel="stylesheet" href="/static/landing.css?v=3">
 <link rel="stylesheet" href="/static/legal.css?v=2">
-<link rel="stylesheet" href="/static/connect.css?v=1">
+<link rel="stylesheet" href="/static/connect.css?v=2">
 <script>document.documentElement.className += " js";</script>
 </head>
 <body>
@@ -48,6 +48,35 @@
         Seven steps, about five minutes, once. At the end, ClipForge can upload
         finished videos straight to your YouTube channel.
       </p>
+    </div>
+
+    <!-- The whole setup in one minute, ahead of the written steps. It is the
+         launch film's frame and play disc from landing.css, so the two videos
+         on the site are the same object. It has no sound, but it still waits
+         to be asked: preload="none" with a real frame as the poster costs
+         nothing for somebody who scrolls straight to the steps. -->
+    <div class="cx-film">
+      <div class="film">
+        <video class="film-video"
+               poster="/static/img/youtube-setup-poster.jpg"
+               width="1920" height="1080"
+               preload="none" controls playsinline>
+          <source src="/static/video/youtube-setup.mp4" type="video/mp4">
+          <p>
+            Your browser cannot play this video.
+            <a href="/static/video/youtube-setup.mp4">Download it instead</a>.
+          </p>
+        </video>
+
+        <button class="film-play" type="button" hidden
+                aria-label="Play the setup walkthrough. One minute, no sound.">
+          <span class="film-disc" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <p class="film-cap">1:00 &middot; no sound</p>
     </div>
 
     <div class="legal-summary">
@@ -340,6 +369,30 @@
       btn.textContent = 'Press Ctrl+C';
     });
   });
+
+  /* The walkthrough film, wired the same way as the launch film on the
+     landing page. controls ship in the markup so it plays with no script at
+     all; with script the disc is the better target, and the control bar comes
+     back the moment it runs, which is when a scrub bar is worth having. */
+  var film = document.querySelector('.film-video');
+  var filmPlay = document.querySelector('.film-play');
+  if (film && filmPlay) {
+    film.removeAttribute('controls');
+    filmPlay.hidden = false;
+    filmPlay.addEventListener('click', function () {
+      var started = film.play();
+      // Older browsers return nothing here. A rejection means it never played.
+      if (started && started.catch) {
+        started.catch(function () { filmPlay.hidden = false; });
+      }
+    });
+    // No replay disc on ended: the film finishes on the ClipForge sign-off,
+    // and the control bar is there for a second watch.
+    film.addEventListener('play', function () {
+      filmPlay.hidden = true;
+      film.controls = true;
+    });
+  }
 </script>
 
 </body>
