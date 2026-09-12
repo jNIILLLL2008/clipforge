@@ -1486,16 +1486,16 @@ const PUB_STEPS = [
       <div class="pub-film">
         <video id="pub-film" poster="/static/img/youtube-setup-poster.jpg"
                preload="none" playsinline>
-          <source src="/static/video/youtube-setup.mp4" type="video/mp4">
+          <source src="/static/video/youtube-setup.mp4?v=2" type="video/mp4">
         </video>
         <button class="pub-film-play" id="pub-film-play" type="button"
-                aria-label="Play the setup walkthrough. One minute, no sound.">
+                aria-label="Play the setup walkthrough. One minute, with sound.">
           <span class="pub-film-disc" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
           </span>
         </button>
       </div>
-      <p class="pub-film-cap">1:00 &middot; no sound</p>
+      <p class="pub-film-cap">1:00 &middot; sound on</p>
       <p>Why yours and not ours: Google allows each project a fixed number of
       uploads per day. On a shared one, every customer would be competing for
       about six uploads a day between them. On your own, the allowance is
