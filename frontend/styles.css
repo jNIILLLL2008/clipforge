@@ -315,7 +315,9 @@ code {
 .unit { color: var(--muted); font-size: .82rem; margin-left: .3rem; }
 
 /* toggle */
-.switch { position: relative; display: inline-block; width: 50px; height: 30px; flex: none; }
+/* Always a <label> around its checkbox: the input is 0x0, so the label is what
+   takes the click. */
+.switch { position: relative; display: inline-block; width: 50px; height: 30px; flex: none; cursor: pointer; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .switch .track {
   position: absolute; inset: 0; background: #34343d; border-radius: 999px; transition: .2s;
@@ -326,6 +328,12 @@ code {
 }
 .switch input:checked + .track { background: var(--good); }
 .switch input:checked + .track::before { transform: translateX(20px); }
+/* The input is invisible, so its focus ring has to be drawn on the track. */
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A disabled switch (daily runs on the free plan) looked exactly like an off
+   one that ignored you. */
+.switch:has(input:disabled) { cursor: not-allowed; }
+.switch input:disabled + .track { opacity: .4; }
 
 /* colour swatch inside a row */
 .swatch { width: 26px; height: 26px; border-radius: var(--radius-ctrl); border: 1px solid var(--border); padding: 0; background: none; }
