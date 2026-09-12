@@ -52,31 +52,33 @@
 
     <!-- The whole setup in one minute, ahead of the written steps. It is the
          launch film's frame and play disc from landing.css, so the two videos
-         on the site are the same object. It has no sound, but it still waits
-         to be asked: preload="none" with a real frame as the poster costs
-         nothing for somebody who scrolls straight to the steps. -->
+         on the site are the same object. It is narrated, so like the launch
+         film it waits to be asked: preload="none" with a real frame as the
+         poster costs nothing for somebody who scrolls straight to the steps.
+         ?v= moves whenever the film is re-rendered, so an hour of static
+         caching can't serve the old cut. -->
     <div class="cx-film">
       <div class="film">
         <video class="film-video"
                poster="/static/img/youtube-setup-poster.jpg"
                width="1920" height="1080"
                preload="none" controls playsinline>
-          <source src="/static/video/youtube-setup.mp4" type="video/mp4">
+          <source src="/static/video/youtube-setup.mp4?v=2" type="video/mp4">
           <p>
             Your browser cannot play this video.
-            <a href="/static/video/youtube-setup.mp4">Download it instead</a>.
+            <a href="/static/video/youtube-setup.mp4?v=2">Download it instead</a>.
           </p>
         </video>
 
         <button class="film-play" type="button" hidden
-                aria-label="Play the setup walkthrough. One minute, no sound.">
+                aria-label="Play the setup walkthrough. One minute, with sound.">
           <span class="film-disc" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
           </span>
         </button>
       </div>
 
-      <p class="film-cap">1:00 &middot; no sound</p>
+      <p class="film-cap">1:00 &middot; sound on</p>
     </div>
 
     <div class="legal-summary">

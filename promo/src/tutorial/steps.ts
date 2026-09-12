@@ -21,7 +21,9 @@ import { WINDOWS } from "./timeline";
  *
  * BEATS
  * `at` is seconds after the step's window opens (see WINDOWS in timeline.ts;
- * a beat at 0 lands on the cut). Actions:
+ * a beat at 0 lands on the cut). They are timed against the narration in
+ * soundtrack.ts, so a ring or a click lands as its words are spoken; move a
+ * line there and these follow. Actions:
  *   ring    draw the ember ring on a target, dim the rest of the screenshot
  *           and move the spotlight there. It stays until the next ring.
  *   point   glide the cursor to a target's centre, arriving at `at`.
@@ -127,9 +129,10 @@ export const STEPS: readonly Step[] = [
     targets: {
       next: { rect: [0.8684, 0.8526, 0.102, 0.1084], radius: 12 },
     },
+    // Next is pressed as the line finishes.
     beats: [
-      { at: 2.4, action: "ring", target: "next" },
-      { at: 3.4, action: "click", target: "next" },
+      { at: 3.0, action: "ring", target: "next" },
+      { at: 4.0, action: "click", target: "next" },
     ],
   },
   {
@@ -144,11 +147,12 @@ export const STEPS: readonly Step[] = [
       selectProject: { rect: [0.2402, 0.3384, 0.2777, 0.0692], radius: RING, baked: true },
       newProject: { rect: [0.5851, 0.5209, 0.2105, 0.0755], radius: RING, baked: true },
     },
+    // "...open Google Cloud" on the dropdown, "and create a new project" on the click.
     beats: [
       { at: 1.0, action: "ring", target: "selectProject" },
       { at: 1.5, action: "point", target: "selectProject" },
-      { at: 2.2, action: "zoom", focus: "newProject", scale: 1.45 },
-      { at: 2.4, action: "ring", target: "newProject" },
+      { at: 2.4, action: "zoom", focus: "newProject", scale: 1.45 },
+      { at: 2.6, action: "ring", target: "newProject" },
       { at: 3.3, action: "click", target: "newProject" },
       { at: 4.9, action: "unzoom" },
     ],
@@ -165,13 +169,14 @@ export const STEPS: readonly Step[] = [
       search: { rect: [0.0566, 0.4378, 0.5912, 0.0724], radius: RING, baked: true },
       enable: { rect: [0.7329, 0.5766, 0.1792, 0.0785], radius: RING, baked: true },
     },
+    // The click lands on "...and click Enable".
     beats: [
       { at: 1.0, action: "ring", target: "search" },
       { at: 1.5, action: "point", target: "search" },
-      { at: 2.6, action: "zoom", focus: "enable", scale: 1.4 },
-      { at: 2.8, action: "ring", target: "enable" },
-      { at: 3.7, action: "click", target: "enable" },
-      { at: 5.8, action: "unzoom" },
+      { at: 3.2, action: "zoom", focus: "enable", scale: 1.4 },
+      { at: 3.4, action: "ring", target: "enable" },
+      { at: 4.6, action: "click", target: "enable" },
+      { at: 6.0, action: "unzoom" },
     ],
   },
   {
@@ -185,11 +190,12 @@ export const STEPS: readonly Step[] = [
     targets: {
       external: { rect: [0.0566, 0.4864, 0.4479, 0.0589], radius: RING, baked: true },
     },
+    // The click lands on "choose External".
     beats: [
-      { at: 1.0, action: "ring", target: "external" },
+      { at: 1.1, action: "ring", target: "external" },
       { at: 1.3, action: "zoom", focus: "external", scale: 1.5 },
-      { at: 2.5, action: "click", target: "external" },
-      { at: 4.9, action: "unzoom" },
+      { at: 2.4, action: "click", target: "external" },
+      { at: 4.8, action: "unzoom" },
     ],
   },
   {
@@ -200,18 +206,20 @@ export const STEPS: readonly Step[] = [
     height: 1164,
     headline: "Add yourself as a test user",
     sub: "Use the Google account that owns your channel.",
-    callout: { at: 4.7, kind: "badge", text: "The step everybody misses" },
+    // Up with "Here's the step everyone misses", which opens the line.
+    callout: { at: 0.8, kind: "badge", text: "The step everybody misses" },
     targets: {
       addUsers: { rect: [0.0566, 0.4945, 0.2598, 0.0732], radius: RING, baked: true },
       warning: { rect: [0.0297, 0.6867, 0.9406, 0.0809], radius: 12 },
     },
+    // "...as a test user" on the click, "or sign-in gets blocked" on the warning.
     beats: [
       // The Test users block: its label, + Add users and the email field.
-      { at: 1.0, action: "zoom", focus: [0.44, 0.54], scale: 1.55 },
-      { at: 1.5, action: "ring", target: "addUsers" },
-      { at: 2.6, action: "click", target: "addUsers" },
-      { at: 4.2, action: "unzoom" },
-      { at: 4.5, action: "ring", target: "warning" },
+      { at: 1.9, action: "zoom", focus: [0.44, 0.54], scale: 1.55 },
+      { at: 2.3, action: "ring", target: "addUsers" },
+      { at: 4.4, action: "click", target: "addUsers" },
+      { at: 5.3, action: "unzoom" },
+      { at: 5.6, action: "ring", target: "warning" },
     ],
   },
   {
@@ -223,17 +231,18 @@ export const STEPS: readonly Step[] = [
     headline: "Create an OAuth client ID",
     sub: "Type Web application, with this exact redirect URI.",
     subLater: {
-      at: 7.9,
+      at: 7.7,
       text: "It must match exactly, or Google refuses with redirect_uri_mismatch.",
     },
-    // Gone before the Web application ring, whose field it would otherwise cover.
+    // Copied as "Copy ClipForge's redirect address" ends, and gone before the
+    // Web application ring, whose field it would otherwise cover.
     callout: {
-      at: 0.7,
-      until: 4.0,
+      at: 0.5,
+      until: 3.5,
       kind: "url",
       text: REDIRECT_URI,
       typeSeconds: 1.5,
-      copiedAt: 2.9,
+      copiedAt: 2.3,
     },
     targets: {
       copyRow: { rect: [0.0297, 0.2366, 0.9406, 0.1068], radius: 12 },
@@ -247,18 +256,20 @@ export const STEPS: readonly Step[] = [
         field: { inset: 9, fontSize: 12, background: "#131316" },
       },
     },
+    // "OAuth client ID", "web application" and "paste the address in" each
+    // land on their field.
     beats: [
-      { at: 0.9, action: "ring", target: "copyRow" },
-      { at: 2.9, action: "click", target: "copyButton" },
-      { at: 4.0, action: "ring", target: "clientIdType" },
-      { at: 4.3, action: "point", target: "clientIdType" },
-      { at: 5.2, action: "ring", target: "webApp" },
-      { at: 5.5, action: "point", target: "webApp" },
-      { at: 6.5, action: "zoom", focus: "redirectField", scale: 1.5 },
-      { at: 6.7, action: "ring", target: "redirectField" },
-      { at: 7.5, action: "click", target: "redirectField" },
-      { at: 7.9, action: "fill", target: "redirectField", text: REDIRECT_URI },
-      { at: 9.9, action: "unzoom" },
+      { at: 0.7, action: "ring", target: "copyRow" },
+      { at: 2.3, action: "click", target: "copyButton" },
+      { at: 3.4, action: "ring", target: "clientIdType" },
+      { at: 3.8, action: "point", target: "clientIdType" },
+      { at: 4.9, action: "ring", target: "webApp" },
+      { at: 5.3, action: "point", target: "webApp" },
+      { at: 6.0, action: "zoom", focus: "redirectField", scale: 1.5 },
+      { at: 6.2, action: "ring", target: "redirectField" },
+      { at: 6.9, action: "click", target: "redirectField" },
+      { at: 7.2, action: "fill", target: "redirectField", text: REDIRECT_URI },
+      { at: 9.6, action: "unzoom" },
     ],
   },
   {
@@ -274,18 +285,19 @@ export const STEPS: readonly Step[] = [
       clientSecret: { rect: [0.0297, 0.5578, 0.9406, 0.0935], radius: 12, field: INPUT_FIELD },
       save: { rect: [0.7305, 0.86, 0.2398, 0.103], radius: 12 },
     },
-    // Masked dots only. Never a realistic-looking ID or secret.
+    // Masked dots only. Never a realistic-looking ID or secret. "Client ID",
+    // "and secret" and "Save and connect" each land on their control.
     beats: [
       { at: 0.9, action: "ring", target: "clientId" },
       { at: 1.1, action: "chip", target: "clientId", text: "ends in .apps.googleusercontent.com" },
       { at: 1.4, action: "click", target: "clientId" },
-      { at: 1.6, action: "fill", target: "clientId", masked: 28, seconds: 0.9 },
-      { at: 2.7, action: "ring", target: "clientSecret" },
-      { at: 2.9, action: "chip", target: "clientSecret", text: "starts with GOCSPX-" },
-      { at: 3.2, action: "click", target: "clientSecret" },
-      { at: 3.4, action: "fill", target: "clientSecret", masked: 22, seconds: 0.8 },
-      { at: 4.4, action: "ring", target: "save" },
-      { at: 5.0, action: "click", target: "save" },
+      { at: 1.6, action: "fill", target: "clientId", masked: 28, seconds: 0.7 },
+      { at: 2.4, action: "ring", target: "clientSecret" },
+      { at: 2.6, action: "chip", target: "clientSecret", text: "starts with GOCSPX-" },
+      { at: 2.8, action: "click", target: "clientSecret" },
+      { at: 3.0, action: "fill", target: "clientSecret", masked: 22, seconds: 0.8 },
+      { at: 4.0, action: "ring", target: "save" },
+      { at: 4.8, action: "click", target: "save" },
     ],
   },
 ];

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { C } from "./brand";
 import { Backdrop } from "./components/Backdrop";
 import { StepChrome } from "./components/Chrome";
+import { Soundtrack } from "./components/Soundtrack";
 import { blurAway, slideFade } from "./presentations";
 import { Intro } from "./scenes/Intro";
 import { Outro } from "./scenes/Outro";
@@ -24,7 +25,8 @@ const timing = springTiming({ config: { damping: 200 }, durationInFrames: TRANSI
  *
  * The backdrop and the chrome (small lockup, stepper) sit outside the
  * TransitionSeries, so they hold still while the scenes slide and fade over
- * them. Every duration comes from timeline.ts.
+ * them, and so does the soundtrack. Every duration comes from timeline.ts,
+ * and every sound from soundtrack.ts.
  */
 export const YouTubeSetupTutorial: React.FC<z.infer<typeof tutorialSchema>> = ({
   showGuides,
@@ -73,6 +75,7 @@ export const YouTubeSetupTutorial: React.FC<z.infer<typeof tutorialSchema>> = ({
         </TransitionSeries.Sequence>
       </TransitionSeries>
       <StepChrome />
+      <Soundtrack />
     </AbsoluteFill>
   );
 };
