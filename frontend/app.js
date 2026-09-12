@@ -1483,6 +1483,19 @@ const PUB_STEPS = [
       <p>To upload for you, ClipForge needs a <b>Google Cloud project</b> of
       your own. It takes about five minutes, once, and then it is done
       forever.</p>
+      <div class="pub-film">
+        <video id="pub-film" poster="/static/img/youtube-setup-poster.jpg"
+               preload="none" playsinline>
+          <source src="/static/video/youtube-setup.mp4" type="video/mp4">
+        </video>
+        <button class="pub-film-play" id="pub-film-play" type="button"
+                aria-label="Play the setup walkthrough. One minute, no sound.">
+          <span class="pub-film-disc" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+          </span>
+        </button>
+      </div>
+      <p class="pub-film-cap">1:00 &middot; no sound</p>
       <p>Why yours and not ours: Google allows each project a fixed number of
       uploads per day. On a shared one, every customer would be competing for
       about six uploads a day between them. On your own, the allowance is
@@ -1493,6 +1506,22 @@ const PUB_STEPS = [
       <p><a class="pub-open" href="/connect" target="_blank" rel="noopener">Open
       these steps as a page &#8599;</a> &mdash; easier to follow on a second
       screen, or to send to whoever runs your Google account.</p>`,
+    /* The walkthrough film, the same one /connect plays. The disc is the
+       target until it runs; after that the control bar is, for scrubbing
+       back to a step. */
+    after: () => {
+      const film = $('pub-film');
+      const play = $('pub-film-play');
+      if (!film || !play) return;
+      play.onclick = () => {
+        // A rejection means it never played, so the disc has to come back.
+        film.play()?.catch?.(() => play.classList.remove('hidden'));
+      };
+      film.onplay = () => {
+        play.classList.add('hidden');
+        film.controls = true;
+      };
+    },
   },
   {
     title: 'Create a project',
@@ -1610,6 +1639,10 @@ let pubAt = 0;
 let pubThenTour = false;
 
 function pubFinished() {
+  // Hiding the dialog would leave the walkthrough film playing out of sight.
+  // Moving to another step needs no such care: the body is replaced, and a
+  // video taken out of the page pauses itself.
+  $('pub-body').querySelector('video')?.pause();
   $('pub').classList.add('hidden');
   if (pubThenTour) { pubThenTour = false; openTour(); }
 }
