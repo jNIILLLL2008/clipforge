@@ -168,6 +168,7 @@ def studio(user: User = Depends(current_user), db: Session = Depends(get_db)):
             "channel": user.youtube_channel_title,
         },
         "onboarded": bool(user.onboarded),
+        "setup_video_seen": bool(user.setup_video_seen),
     }
 
 
@@ -178,6 +179,15 @@ def set_onboarded(seen: bool = True, user: User = Depends(current_user),
     user.onboarded = bool(seen)
     db.commit()
     return {"onboarded": user.onboarded}
+
+
+@router.post("/studio/setup-video")
+def set_setup_video_seen(seen: bool = True, user: User = Depends(current_user),
+                         db: Session = Depends(get_db)):
+    """Remember that the setup video has been shown, so it opens only once."""
+    user.setup_video_seen = bool(seen)
+    db.commit()
+    return {"setup_video_seen": user.setup_video_seen}
 
 
 @router.get("/studio/settings")

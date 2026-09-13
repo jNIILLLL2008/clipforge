@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@92,880&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
-<link rel="stylesheet" href="/static/styles.css?v=5">
+<link rel="stylesheet" href="/static/styles.css?v=6">
 <link rel="stylesheet" href="/static/legal.css?v=2">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='.135' y1='-.084' x2='.865' y2='1.084'><stop offset='0' stop-color='%23F25C1E'/><stop offset='.52' stop-color='%23FF8A3C'/><stop offset='1' stop-color='%23E8B54A'/></linearGradient></defs><rect width='64' height='64' rx='14.08' fill='url(%23g)'/><g transform='translate(14.08 14.08) scale(.56)' fill='none' stroke='%230C0B0A' stroke-width='11'><path d='M50 13H27L15.5 32L27 51H50'/></g><path transform='translate(14.08 14.08) scale(.56)' fill='%230C0B0A' d='M45 23L47.26 29.74L54 32L47.26 34.26L45 41L42.74 34.26L36 32L42.74 29.74Z'/></svg>">
 </head>
@@ -119,7 +119,14 @@
   <main id="main">
     <!-- ============================ HOME ============================ -->
     <section id="tab-home" class="screen" role="tabpanel" aria-labelledby="nav-home" tabindex="0">
-      <h1 class="screen-title">Studio</h1>
+      <div class="screen-head">
+        <h1 class="screen-title">Studio</h1>
+        <!-- The setup video a new account is shown first, whenever it's wanted again. -->
+        <button class="ghost film-replay" id="replay-setup-video" type="button">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+          Watch the setup video
+        </button>
+      </div>
 
       <div class="home-grid">
         <div class="home-main">
@@ -326,6 +333,50 @@
   </div>
 </div>
 
+<!-- ============================ setup video ========================= -->
+<!-- Two minutes of the whole setup: the render agent, pairing, the settings
+     that matter, YouTube and the first run. A new account gets it on Home
+     before anything else, then the setup questions; the button beside the
+     Studio title plays it again. -->
+<div id="setup-video" class="modal hidden" role="dialog" aria-modal="true"
+     aria-labelledby="setup-video-title">
+  <div class="guide-card">
+    <header class="guide-head">
+      <div>
+        <p class="tour-step" id="setup-video-step">Welcome to ClipForge</p>
+        <h2 id="setup-video-title">Setting up, in two minutes</h2>
+      </div>
+      <button class="ghost" id="setup-video-close">Close</button>
+    </header>
+
+    <div class="guide-scroll">
+      <div class="guide-body">
+        <div class="film">
+          <video id="setup-video-film" poster="/static/img/setup-guide-poster.jpg"
+                 preload="none" playsinline>
+            <source src="/static/video/setup-guide.mp4?v=1" type="video/mp4">
+          </video>
+          <button class="film-play" id="setup-video-play" type="button"
+                  aria-label="Play the setup video. Two minutes, with sound.">
+            <span class="film-disc" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+            </span>
+          </button>
+        </div>
+        <p class="film-cap">2:00 &middot; sound on</p>
+        <p id="setup-video-note"></p>
+      </div>
+    </div>
+
+    <footer class="guide-foot">
+      <span></span>
+      <div class="head-actions">
+        <button class="primary" id="setup-video-done">Start setup</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
 <!-- ===================== guided niche setup ======================== -->
 <!-- Publishing setup: the subscriber's own Google Cloud project. Its own
      walkthrough rather than a page of instructions, because this is the one
@@ -394,7 +445,7 @@
 </div>
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-<script src="/static/app.js?v=5"></script>
+<script src="/static/app.js?v=6"></script>
 <script src="/static/consent.js?v=2" data-optional="__CONSENT_OPTIONAL__" data-ga="__GA_ID__"></script>
 </body>
 </html>
