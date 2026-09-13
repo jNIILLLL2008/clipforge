@@ -120,13 +120,15 @@ async function enterApp() {
   // actually configures it, and until now the explaining was automatic while
   // the configuring sat behind a link on the settings screen. So a new
   // subscriber met a 79-field form and a red blocker before anyone had asked
-  // them a single question. The tour still runs, straight after.
+  // them a single question. The tour still runs, straight after. Ahead of
+  // both, once, the setup video: two minutes of the whole thing before the
+  // first question about it.
   //
   // Not while a pairing is waiting. Someone who arrived from an agent has a
   // program open on another screen polling for their answer, and a setup
   // wizard is not the thing to put in front of them first.
   if (state.studio && !state.studio.onboarded && !state.pairCode) {
-    openGuide({ firstRun: true });
+    startFirstRun();
   }
 }
 
@@ -842,7 +844,7 @@ function closePair() {
   $('pair').classList.add('hidden');
   state.pairCode = '';
   // The setup it displaced, now that the screen is free.
-  if (state.studio && !state.studio.onboarded) openGuide({ firstRun: true });
+  if (state.studio && !state.studio.onboarded) startFirstRun();
   // Leave the URL clean so a refresh, or a bookmark, does not reopen a code
   // that has already been used.
   history.replaceState({}, '', '/app');
@@ -1012,6 +1014,81 @@ function renderFindings(data) {
 
 if ($('preview-refresh')) $('preview-refresh').onclick = () => refreshPreview();
 if ($('preview-clip')) $('preview-clip').onchange = () => refreshPreview();
+
+/* --------------------------------------------------- setup video ------ */
+/* Two minutes of the whole setup, start to finish. A new account gets it on
+   Home before anything else, and then the setup questions; the button beside
+   the Studio title plays it again whenever. Whether it has been shown is kept
+   on the account, like the tour, so it opens once per account rather than
+   once per browser. */
+
+/* A film with the launch film's play disc over its poster. The disc is the
+   target until it runs; after that the control bar is, for scrubbing back. */
+function wireFilm(film, play) {
+  if (!film || !play) return;
+  play.onclick = () => {
+    // A rejection means it never played, so the disc has to come back.
+    film.play()?.catch?.(() => play.classList.remove('hidden'));
+  };
+  film.onplay = () => {
+    play.classList.add('hidden');
+    film.controls = true;
+  };
+}
+
+/* What a new account meets first: the video, then the setup questions, which
+   lead on to publishing and the tour. */
+function startFirstRun() {
+  if (state.studio?.setup_video_seen) openGuide({ firstRun: true });
+  else openSetupVideo({ firstRun: true });
+}
+
+let setupVideoFirstRun = false;
+
+function openSetupVideo({ firstRun = false } = {}) {
+  setupVideoFirstRun = firstRun;
+  const film = $('setup-video-film');
+  // Back to the poster and the disc, so playing it again starts it over.
+  if (film.currentTime > 0) film.load();
+  film.controls = false;
+  $('setup-video-play').classList.remove('hidden');
+
+  $('setup-video-step').textContent = firstRun ? 'Welcome to ClipForge' : 'Setup video';
+  $('setup-video-note').textContent = firstRun
+    ? 'Watch it through once. The next few screens then set it up with you, '
+      + 'one question at a time.'
+    : 'The render agent, pairing it, the settings that matter, then '
+      + 'connecting YouTube and your first video.';
+  $('setup-video-done').textContent = firstRun ? 'Start setup' : 'Done';
+  $('setup-video').classList.remove('hidden');
+  document.addEventListener('keydown', setupVideoKeys);
+  $('setup-video-play').focus();
+}
+
+function closeSetupVideo() {
+  $('setup-video-film').pause();
+  $('setup-video').classList.add('hidden');
+  document.removeEventListener('keydown', setupVideoKeys);
+  if (state.studio && !state.studio.setup_video_seen) {
+    state.studio.setup_video_seen = true;
+    api('/api/studio/setup-video?seen=true', { method: 'POST' }).catch(() => {});
+  }
+  if (setupVideoFirstRun) {
+    setupVideoFirstRun = false;
+    openGuide({ firstRun: true });
+  }
+}
+
+function setupVideoKeys(event) {
+  if (event.key === 'Escape') { event.preventDefault(); closeSetupVideo(); }
+}
+
+wireFilm($('setup-video-film'), $('setup-video-play'));
+// At the end, the next thing to press is the way on.
+$('setup-video-film').onended = () => $('setup-video-done').focus();
+$('setup-video-close').onclick = () => closeSetupVideo();
+$('setup-video-done').onclick = () => closeSetupVideo();
+$('replay-setup-video').onclick = () => openSetupVideo();
 
 /* -------------------------------------------------- guided setup ------ */
 /* A walkthrough that actually configures the niche, checking each answer
@@ -1497,19 +1574,19 @@ const PUB_STEPS = [
       <p>To upload for you, ClipForge needs a <b>Google Cloud project</b> of
       your own. It takes about five minutes, once, and then it is done
       forever.</p>
-      <div class="pub-film">
+      <div class="film">
         <video id="pub-film" poster="/static/img/youtube-setup-poster.jpg"
                preload="none" playsinline>
           <source src="/static/video/youtube-setup.mp4?v=2" type="video/mp4">
         </video>
-        <button class="pub-film-play" id="pub-film-play" type="button"
+        <button class="film-play" id="pub-film-play" type="button"
                 aria-label="Play the setup walkthrough. One minute, with sound.">
-          <span class="pub-film-disc" aria-hidden="true">
+          <span class="film-disc" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
           </span>
         </button>
       </div>
-      <p class="pub-film-cap">1:00 &middot; sound on</p>
+      <p class="film-cap">1:00 &middot; sound on</p>
       <p>Why yours and not ours: Google allows each project a fixed number of
       uploads per day. On a shared one, every customer would be competing for
       about six uploads a day between them. On your own, the allowance is
@@ -1520,22 +1597,8 @@ const PUB_STEPS = [
       <p><a class="pub-open" href="/connect" target="_blank" rel="noopener">Open
       these steps as a page &#8599;</a> &mdash; easier to follow on a second
       screen, or to send to whoever runs your Google account.</p>`,
-    /* The walkthrough film, the same one /connect plays. The disc is the
-       target until it runs; after that the control bar is, for scrubbing
-       back to a step. */
-    after: () => {
-      const film = $('pub-film');
-      const play = $('pub-film-play');
-      if (!film || !play) return;
-      play.onclick = () => {
-        // A rejection means it never played, so the disc has to come back.
-        film.play()?.catch?.(() => play.classList.remove('hidden'));
-      };
-      film.onplay = () => {
-        play.classList.add('hidden');
-        film.controls = true;
-      };
-    },
+    // The walkthrough film, the same one /connect plays.
+    after: () => wireFilm($('pub-film'), $('pub-film-play')),
   },
   {
     title: 'Create a project',

@@ -101,6 +101,11 @@ class User(Base):
     # and does not vanish when someone clears their site data.
     onboarded = Column(Boolean, default=False, nullable=False)
 
+    # Whether the two-minute setup video has been shown, which a new account
+    # gets on Home before anything else. On the account for the same reasons
+    # as `onboarded`.
+    setup_video_seen = Column(Boolean, default=False, nullable=False)
+
     # The studio configuration. One per account, like the desktop app: the
     # Settings screen edits this, and Publish uses it. Presets seed it.
     settings = Column(JSON, default=dict, nullable=False)

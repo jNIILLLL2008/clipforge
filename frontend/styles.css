@@ -237,6 +237,18 @@ button { font: inherit; cursor: pointer; border-radius: var(--radius-ctrl); tran
 
 .screen { max-width: 620px; margin: 0 auto; padding: 1.2rem 1rem 2rem; }
 .screen-title { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; margin-bottom: 1rem; }
+/* Home's title, with the setup video's replay beside it. It wraps under the
+   title on a phone rather than squeezing it. */
+.screen-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: .6rem 1rem; margin-bottom: 1rem;
+}
+.screen-head .screen-title { margin-bottom: 0; }
+.film-replay {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .55rem .9rem; font-size: .9rem;
+}
+.film-replay svg { width: 12px; height: 12px; flex: none; }
 
 .group-title {
   font-size: .76rem; font-weight: 600; letter-spacing: .07em;
@@ -778,40 +790,52 @@ code {
 }
 .pub-open:hover { text-decoration: underline; }
 
-/* The one-minute walkthrough on the first step, the same film /connect plays,
-   with the launch film's play disc. preload="none": the dialog opens for
-   everyone, and the file is only fetched for those who press play. */
-.pub-film {
+/* A film in a dialog: the one-minute walkthrough on publishing's first step
+   (the same film /connect plays), and the two-minute setup video. Both wear
+   the launch film's play disc. preload="none": the dialogs open for everyone,
+   and the file is only fetched for those who press play. */
+.film {
   position: relative; aspect-ratio: 16 / 9; margin: .9rem 0 .5rem;
   overflow: hidden; background: var(--bg);
   border: 1px solid var(--border); border-radius: var(--radius-ctrl);
 }
-.pub-film video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.film video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* Full bleed over the poster, so it undoes the global button rule. It only
    darkens enough to seat the disc. */
-.pub-film-play {
+.film-play {
   position: absolute; inset: 0; display: grid; place-items: center;
   padding: 0; border: 0; border-radius: 0;
   background: radial-gradient(62% 62% at 50% 50%, rgba(8, 8, 10, .20), rgba(8, 8, 10, .52));
 }
-.pub-film-play:focus-visible {
+.film-play:focus-visible {
   outline: 2px solid var(--accent); outline-offset: -4px;
   border-radius: var(--radius-ctrl);
 }
-.pub-film-disc {
+.film-disc {
   display: grid; place-items: center; width: 58px; height: 58px;
   border-radius: 999px; background: var(--accent); color: var(--accent-text);
   box-shadow: 0 10px 28px rgba(226, 96, 58, .34);
   transition: transform .3s cubic-bezier(.16, 1, .3, 1);
 }
-.pub-film-play:hover .pub-film-disc,
-.pub-film-play:focus-visible .pub-film-disc { transform: scale(1.06); }
+.film-play:hover .film-disc,
+.film-play:focus-visible .film-disc { transform: scale(1.06); }
 /* A triangle's bounding box is not its optical centre. */
-.pub-film-disc svg { width: 19px; height: 19px; margin-left: 3px; }
+.film-disc svg { width: 19px; height: 19px; margin-left: 3px; }
 /* Scoped like .guide-body > p, which would otherwise outrank it. */
-.guide-body > .pub-film-cap {
+.guide-body > .film-cap {
   margin: 0 0 1rem; font-family: var(--mono); font-size: .7rem;
   letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+}
+
+/* The setup video's dialog is the guide's card, wider, since the film is
+   the whole point of it and its screenshots want the room. */
+#setup-video .guide-card { width: min(880px, 100%); }
+#setup-video .film { margin-top: .2rem; }
+/* A bigger disc for the bigger film, but not on a phone, where the film is
+   barely taller than the disc already is. */
+@media (min-width: 760px) {
+  #setup-video .film-disc { width: 68px; height: 68px; }
+  #setup-video .film-disc svg { width: 22px; height: 22px; }
 }
 
 /* The redirect URI. It has to match Google's field exactly, so it gets its

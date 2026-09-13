@@ -301,6 +301,7 @@ def export_my_data(user: User = Depends(current_user),
             "period_started_at": (user.period_started_at.isoformat()
                                   if user.period_started_at else None),
             "onboarded": user.onboarded,
+            "setup_video_seen": user.setup_video_seen,
             "is_active": user.is_active,
             "password": "Stored only as a salted PBKDF2-HMAC-SHA256 hash, "
                         "which is not included here and cannot be reversed.",

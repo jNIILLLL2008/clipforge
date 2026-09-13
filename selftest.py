@@ -2317,6 +2317,27 @@ check("it can be replayed",
       client.post("/api/studio/onboarded?seen=false").json()["onboarded"] is False)
 client.post("/api/studio/onboarded?seen=true")
 
+section("setup video")
+check("a new account has not been shown it",
+      client.get("/api/studio").json()["setup_video_seen"] is False)
+check("marking it shown sticks",
+      client.post("/api/studio/setup-video?seen=true").json()["setup_video_seen"] is True)
+check("and it stays shown", client.get("/api/studio").json()["setup_video_seen"] is True)
+check("it is in the data export",
+      client.get("/api/me/export").json()["account"]["setup_video_seen"] is True)
+_INDEX = Path("frontend/index.html").read_text(encoding="utf-8")
+_APPJS3 = Path("frontend/app.js").read_text(encoding="utf-8")
+check("the film and its poster ship with the site",
+      Path("frontend/video/setup-guide.mp4").stat().st_size > 1_000_000
+      and Path("frontend/img/setup-guide-poster.jpg").exists())
+check("Home has a button to play it again",
+      _INDEX.index('id="replay-setup-video"') > _INDEX.index('id="tab-home"')
+      and _INDEX.index('id="replay-setup-video"') < _INDEX.index('id="tab-settings"'))
+check("a new account gets it before the setup questions",
+      _APPJS3.count("startFirstRun();") == 2
+      and "openGuide({ firstRun: true })" in _APPJS3.split("function startFirstRun")[1][:200],
+      "both ways into first run, straight in and after pairing, go through it")
+
 section("waiting for the database")
 from backend.app.db import wait_for_database  # noqa: E402
 
