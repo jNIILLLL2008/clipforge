@@ -1,9 +1,7 @@
 import React from "react";
 import { Img, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { C, SPRING } from "../brand";
-import type { PlaneLayout } from "../layout";
-import { CARD_CSS_RADIUS } from "../steps";
-import type { Step } from "../steps";
+import type { PlaneLayout, Shot } from "../plane";
 import { Chips, Fills } from "./Annotations";
 import { Camera } from "./Camera";
 import { Cursor } from "./Cursor";
@@ -15,11 +13,11 @@ import { Highlights } from "./Highlights";
  *
  *   box       where the screenshot rests in the frame
  *   tilt      the 3D entrance, flattening as it settles
- *   viewport  the card's rounded rect: clips everything inside, carries the
- *             shadow and the hairline edge
+ *   viewport  the screenshot's rounded rect: clips everything inside, carries
+ *             the shadow and the hairline edge
  *   camera    the zoom (Camera.tsx). It lives inside the viewport, so a zoom
- *             magnifies within the card's frame instead of spilling over the
- *             caption, the stepper and the edge of the video.
+ *             magnifies within the screenshot's frame instead of spilling over
+ *             the caption, the chrome and the edge of the video.
  *   content   the image, the fills, the spotlight, the rings, the chips and
  *             the cursor, in that order, so chips and the cursor sit above
  *             the dim.
@@ -29,14 +27,18 @@ import { Highlights } from "./Highlights";
  * on its pixel whatever the plane is doing.
  */
 export const ScreenshotPlane: React.FC<{
-  step: Step;
+  shot: Shot;
   plane: PlaneLayout;
   showGuides: boolean;
-}> = ({ step, plane, showGuides }) => {
+  /** The viewport's corner radius, in the frame's px. */
+  radius: number;
+  /** "tilt" swings in from `enterAt`; "none" is already in place, for a shot carrying on from the scene before. */
+  enter?: "tilt" | "none";
+  enterAt?: number;
+}> = ({ shot, plane, showGuides, radius, enter = "tilt", enterAt = 0 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = spring({ frame, fps, config: SPRING.plane });
-  const radius = CARD_CSS_RADIUS * plane.k;
+  const settled = enter === "none" ? 1 : spring({ frame: frame - enterAt, fps, config: SPRING.plane });
 
   return (
     <div
@@ -53,7 +55,7 @@ export const ScreenshotPlane: React.FC<{
           position: "absolute",
           inset: 0,
           transformOrigin: "50% 50%",
-          transform: `perspective(1600px) rotateX(${16 * (1 - enter)}deg) rotateY(${-8 * (1 - enter)}deg) translateY(${60 * (1 - enter)}px) scale(${0.92 + 0.08 * enter})`,
+          transform: `perspective(1600px) rotateX(${16 * (1 - settled)}deg) rotateY(${-8 * (1 - settled)}deg) translateY(${60 * (1 - settled)}px) scale(${0.92 + 0.08 * settled})`,
         }}
       >
         <div
@@ -66,16 +68,16 @@ export const ScreenshotPlane: React.FC<{
               "0 40px 120px rgba(0, 0, 0, 0.6), 0 24px 90px -12px rgba(226, 96, 58, 0.14)",
           }}
         >
-          <Camera step={step} plane={plane}>
+          <Camera shot={shot} plane={plane}>
             <Img
-              src={staticFile(step.image)}
+              src={staticFile(shot.image)}
               style={{ display: "block", width: plane.W, height: plane.H }}
             />
-            <Fills step={step} plane={plane} />
-            <Highlights step={step} plane={plane} />
-            <Chips step={step} plane={plane} />
-            <Cursor step={step} plane={plane} />
-            {showGuides ? <Guides step={step} plane={plane} /> : null}
+            <Fills shot={shot} plane={plane} />
+            <Highlights shot={shot} plane={plane} />
+            <Chips shot={shot} plane={plane} />
+            <Cursor shot={shot} plane={plane} />
+            {showGuides ? <Guides shot={shot} plane={plane} /> : null}
           </Camera>
           <div
             style={{

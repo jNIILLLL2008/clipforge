@@ -1,10 +1,10 @@
 import React from "react";
 import { AbsoluteFill, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { z } from "zod";
-import { C, MONO, SANS, SPRING } from "../brand";
-import { Backdrop } from "../components/Backdrop";
-import { Lockup, lockupEntrance } from "../components/Lockup";
-import { riseStyle } from "../motion";
+import { C, MONO, SANS, SPRING } from "../../shared/brand";
+import { Backdrop } from "../../shared/components/Backdrop";
+import { Lockup, lockupEntrance } from "../../shared/components/Lockup";
+import { riseStyle } from "../../shared/motion";
 import { FPS, TRANSITION, sceneFrames } from "../timeline";
 import type { bookendSchema } from "./Intro";
 

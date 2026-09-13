@@ -1,15 +1,14 @@
 import React from "react";
 import { Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { C, SPRING } from "../brand";
-import type { PlaneLayout } from "../layout";
-import { centreOf, rectPx } from "../layout";
+import type { BeatFrame } from "../clock";
+import { useBeatFrame } from "../clock";
 import { CLAMP, mix } from "../motion";
-import type { Step } from "../steps";
-import { targetOf } from "../steps";
-import { sec, windowFrame } from "../timeline";
+import type { PlaneLayout, Shot } from "../plane";
+import { centreOf, rectPx, targetOf } from "../plane";
 
-/** How early the cursor sets off, so it arrives on the beat. */
-const TRAVEL = sec(0.6);
+/** How early the cursor sets off, in seconds, so it arrives on the beat. */
+const TRAVEL_SECONDS = 0.6;
 /**
  * Where the cursor waits before its first move: just past the screenshot's
  * lower right, outside the card's clip, so it glides in over the edge.
@@ -20,16 +19,16 @@ const RIPPLE_FRAMES = 18;
 
 type Waypoint = { x: number; y: number; at: number; leave: number; click: boolean };
 
-const waypoints = (step: Step, plane: PlaneLayout): Waypoint[] => {
+const waypoints = (shot: Shot, plane: PlaneLayout, at: BeatFrame, travel: number): Waypoint[] => {
   const out: Waypoint[] = [];
-  for (const beat of step.beats) {
+  for (const beat of shot.beats) {
     if (beat.action !== "point" && beat.action !== "click") continue;
-    const at = windowFrame(step.id, beat.at);
+    const arrive = at(beat.at);
     const previous = out.length > 0 ? out[out.length - 1].at : -Infinity;
     // Never leave a target before arriving at it.
-    const leave = Math.max(at - TRAVEL, previous + 2);
-    const box = rectPx(plane, targetOf(step, beat.target).rect);
-    out.push({ ...centreOf(box), at, leave, click: beat.action === "click" });
+    const leave = Math.max(arrive - travel, previous + 2);
+    const box = rectPx(plane, targetOf(shot, beat.target).rect);
+    out.push({ ...centreOf(box), at: arrive, leave, click: beat.action === "click" });
   }
   return out;
 };
@@ -59,10 +58,10 @@ const arc = (a: { x: number; y: number }, b: { x: number; y: number }, t: number
  * The cursor and its click ripples, in the plane's own px, so they stay on
  * their targets while the plane tilts and zooms.
  */
-export const Cursor: React.FC<{ step: Step; plane: PlaneLayout }> = ({ step, plane }) => {
+export const Cursor: React.FC<{ shot: Shot; plane: PlaneLayout }> = ({ shot, plane }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const points = waypoints(step, plane);
+  const points = waypoints(shot, plane, useBeatFrame(), Math.round(TRAVEL_SECONDS * fps));
   if (points.length === 0) return null;
 
   // Walk the moves in order. A move that starts before the last one settled

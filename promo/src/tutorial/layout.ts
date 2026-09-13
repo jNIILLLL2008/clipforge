@@ -1,4 +1,5 @@
-import type { Rect, Step, Target } from "./steps";
+import type { PlaneLayout } from "../shared/plane";
+import type { Step } from "./steps";
 import { CARD_CSS_WIDTH } from "./steps";
 
 /*
@@ -20,18 +21,9 @@ export const CAPTION_OVERLAP = 120;
 export const CHROME_Y = 100;
 export const STEPPER_X = PLANE_BOX.left + PLANE_BOX.width / 2;
 
-export type PlaneLayout = {
-  left: number;
-  top: number;
-  /** The screenshot's displayed size at rest. */
-  W: number;
-  H: number;
-  /** Displayed px per modal CSS px. */
-  k: number;
-  captionLeft: number;
-};
+export type TutorialPlane = PlaneLayout & { captionLeft: number };
 
-export const planeLayout = (step: Step): PlaneLayout => {
+export const planeLayout = (step: Step): TutorialPlane => {
   const fit = Math.min(PLANE_BOX.width / step.width, PLANE_BOX.height / step.height);
   const W = step.width * fit;
   const H = step.height * fit;
@@ -46,36 +38,3 @@ export const planeLayout = (step: Step): PlaneLayout => {
     captionLeft: Math.max(CAPTION_LEFT, left + CAPTION_OVERLAP - CAPTION_WIDTH),
   };
 };
-
-export type Box = { x: number; y: number; w: number; h: number; r: number };
-
-/** A rect in the plane's own px (0,0 is the screenshot's top-left at rest). */
-export const rectPx = (plane: PlaneLayout, rect: Rect, radius = 0): Box => ({
-  x: rect[0] * plane.W,
-  y: rect[1] * plane.H,
-  w: rect[2] * plane.W,
-  h: rect[3] * plane.H,
-  r: radius * plane.k,
-});
-
-export const grow = (box: Box, by: number): Box => ({
-  x: box.x - by,
-  y: box.y - by,
-  w: box.w + by * 2,
-  h: box.h + by * 2,
-  r: box.r + by,
-});
-
-/** How far an animated ring sits outside a target that has no ring of its own, in CSS px. */
-const RING_OFFSET = 4;
-
-/**
- * Where the animated ring goes: exactly on a baked ring, or just outside a
- * plain button or field.
- */
-export const ringBox = (plane: PlaneLayout, target: Target): Box => {
-  const box = rectPx(plane, target.rect, target.radius);
-  return target.baked ? box : grow(box, RING_OFFSET * plane.k);
-};
-
-export const centreOf = (box: Box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });

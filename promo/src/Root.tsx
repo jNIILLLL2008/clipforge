@@ -1,6 +1,10 @@
 import { Composition, Folder } from "remotion";
 import "./index.css";
 import { ClipForgeLaunchAd } from "./clipforge/ClipForgeLaunchAd";
+import { ClipForgeSetupGuide, guideSchema } from "./guide/ClipForgeSetupGuide";
+import { GuideIntro, GuideOutro, bookendSchema as guideBookendSchema } from "./guide/scenes/Bookends";
+import { GuideScene, guideSceneSchema } from "./guide/scenes/GuideScene";
+import { TOTAL_FRAMES as GUIDE_FRAMES, sceneFrames as guideSceneFrames } from "./guide/timeline";
 import { EndCard } from "./clipforge/EndCard";
 import { FeatureBanner } from "./clipforge/FeatureBanner";
 import { KineticHook } from "./clipforge/KineticHook";
@@ -16,6 +20,10 @@ import { YouTubeSetupTutorial, tutorialSchema } from "./tutorial/YouTubeSetupTut
 // fail here rather than render a video that ends early or runs long.
 if (TOTAL_FRAMES !== 1800) {
   throw new Error(`YouTubeSetupTutorial should be 1800 frames, timeline.ts adds up to ${TOTAL_FRAMES}.`);
+}
+// The guide is 120s at 30fps, checked the same way.
+if (GUIDE_FRAMES !== 3600) {
+  throw new Error(`ClipForgeSetupGuide should be 3600 frames, guide/timeline.ts adds up to ${GUIDE_FRAMES}.`);
 }
 
 export const RemotionRoot: React.FC = () => {
@@ -178,6 +186,142 @@ export const RemotionRoot: React.FC = () => {
           width={1920}
           height={1080}
           schema={bookendSchema}
+          defaultProps={{ standalone: true }}
+        />
+      </Folder>
+
+      <Composition
+        id="ClipForgeSetupGuide"
+        component={ClipForgeSetupGuide}
+        durationInFrames={3600}
+        fps={30}
+        width={1920}
+        height={1080}
+        schema={guideSchema}
+        defaultProps={{ showGuides: false }}
+      />
+
+      {/* The guide's scenes on their own, with their backdrop and chrome, for
+          tuning. Same components as in the full video. */}
+      <Folder name="Guide-Scenes">
+        <Composition
+          id="Guide-Intro"
+          component={GuideIntro}
+          durationInFrames={guideSceneFrames("intro")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideBookendSchema}
+          defaultProps={{ standalone: true }}
+        />
+        <Composition
+          id="Guide-Agent"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("agent")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "agent", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-ffmpeg"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("ffmpeg")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "ffmpeg", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-Pair"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("pair")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "pair", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-Niche"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("niche")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "niche", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-Banner"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("banner")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "banner", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-Sources"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("sources")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "sources", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-LongForm"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("longform")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "longform", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-ShowFilter"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("showfilter")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "showfilter", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-YouTube"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("youtube")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "youtube", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-Publish"
+          component={GuideScene}
+          durationInFrames={guideSceneFrames("publish")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideSceneSchema}
+          defaultProps={{ scene: "publish", standalone: true, showGuides: false }}
+        />
+        <Composition
+          id="Guide-Outro"
+          component={GuideOutro}
+          durationInFrames={guideSceneFrames("outro")}
+          fps={30}
+          width={1920}
+          height={1080}
+          schema={guideBookendSchema}
           defaultProps={{ standalone: true }}
         />
       </Folder>

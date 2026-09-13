@@ -1,0 +1,78 @@
+{
+  "voice": "JBFqnCBsd6RMkjVDRZzb",
+  "model": "eleven_multilingual_v2",
+  "lines": [
+    {
+      "scene": "intro",
+      "text": "Let's set up ClipForge, from download to your first video.",
+      "from": 0.05,
+      "to": 3.14
+    },
+    {
+      "scene": "agent",
+      "text": "Start on Home. Scroll down to Render agent and download it. The agent renders your videos on your own PC, using your own connection.",
+      "from": 3.53,
+      "to": 11.57
+    },
+    {
+      "scene": "ffmpeg",
+      "text": "Unzip it into its own folder. Inside is ffmpeg, the engine that cuts your clips, adds the banner and captions, and encodes the video. Keep it with the agent.",
+      "from": 12.1,
+      "to": 22.51
+    },
+    {
+      "scene": "pair",
+      "text": "Now run ClipForgeAgent. Your browser opens with a code. Check it matches the one in the agent's window, click Pair it, and that's done.",
+      "from": 22.88,
+      "to": 31.13
+    },
+    {
+      "scene": "niche",
+      "text": "Next, Settings. Say what your niche is, and add a few search terms.",
+      "from": 31.78,
+      "to": 35.84
+    },
+    {
+      "scene": "banner",
+      "text": "Lines one and two are the banner across the top of every video.",
+      "from": 36.2,
+      "to": 39.47
+    },
+    {
+      "scene": "sources",
+      "text": "Then the part that matters most. Paste a playlist, or name the YouTube channels to take clips from. That's how you get the clips you actually want.",
+      "from": 39.99,
+      "to": 48.07
+    },
+    {
+      "scene": "longform",
+      "text": "Full-length videos are fine in a playlist. The AI finds the best moments and cuts them in for you.",
+      "from": 48.72,
+      "to": 54.06
+    },
+    {
+      "scene": "showfilter",
+      "text": "Turn on Only from one show to keep every clip on your niche, then save.",
+      "from": 54.62,
+      "to": 58.65
+    },
+    {
+      "scene": "youtube",
+      "text": "Back on Home, connect your YouTube channel. Set up publishing walks you through it.",
+      "from": 59.26,
+      "to": 63.25
+    },
+    {
+      "scene": "publish",
+      "text": "When everything says Ready, click Publish now.",
+      "from": 63.84,
+      "to": 66.11
+    },
+    {
+      "scene": "outro",
+      "text": "That's it. ClipForge takes it from here.",
+      "from": 66.34,
+      "to": 68.82
+    }
+  ]
+}

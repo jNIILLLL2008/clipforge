@@ -1,19 +1,18 @@
 import React from "react";
 import { MONO } from "../brand";
-import type { PlaneLayout } from "../layout";
-import { rectPx } from "../layout";
-import type { Step } from "../steps";
+import type { PlaneLayout, Shot } from "../plane";
+import { rectPx } from "../plane";
 import { zoomFoci } from "./Camera";
 
 /*
  * A tuning overlay, off by default: a 10% grid labelled in percent, every
  * target's rect with its key, and every zoom's focus as a crosshair. Read a
- * position off the grid and type it into steps.ts.
+ * position off the grid and type it into the beats.
  */
 const LINE = "rgba(255, 255, 255, 0.28)";
 const LABEL = "rgba(255, 255, 255, 0.85)";
 
-export const Guides: React.FC<{ step: Step; plane: PlaneLayout }> = ({ step, plane }) => {
+export const Guides: React.FC<{ shot: Shot; plane: PlaneLayout }> = ({ shot, plane }) => {
   const ticks: number[] = [];
   for (let i = 1; i < 10; i++) ticks.push(i / 10);
   const label: React.CSSProperties = {
@@ -37,8 +36,8 @@ export const Guides: React.FC<{ step: Step; plane: PlaneLayout }> = ({ step, pla
           <div style={{ ...label, left: 3, top: t * plane.H + 3 }}>{Math.round(t * 100)}</div>
         </React.Fragment>
       ))}
-      {Object.keys(step.targets).map((key) => {
-        const box = rectPx(plane, step.targets[key].rect);
+      {Object.keys(shot.targets).map((key) => {
+        const box = rectPx(plane, shot.targets[key].rect);
         return (
           <React.Fragment key={key}>
             <div
@@ -55,7 +54,7 @@ export const Guides: React.FC<{ step: Step; plane: PlaneLayout }> = ({ step, pla
           </React.Fragment>
         );
       })}
-      {zoomFoci(step).map((focus, i) => (
+      {zoomFoci(shot).map((focus, i) => (
         <React.Fragment key={i}>
           <div style={{ position: "absolute", left: focus.x * plane.W - 14, top: focus.y * plane.H, width: 28, height: 1, backgroundColor: LABEL }} />
           <div style={{ position: "absolute", left: focus.x * plane.W, top: focus.y * plane.H - 14, width: 1, height: 28, backgroundColor: LABEL }} />

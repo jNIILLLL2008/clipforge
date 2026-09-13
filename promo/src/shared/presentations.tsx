@@ -62,3 +62,35 @@ export const blurAway = (): TransitionPresentation<NoProps> => ({
   component: BlurAway,
   props: {},
 });
+
+type ScrollProps = { direction: "down" | "up" };
+
+/*
+ * Between two parts of one long page: the outgoing part rises out and the
+ * incoming one rises in beneath it, the way a page moves when you scroll down
+ * it (or the reverse, for up). Fades staggered as in slideFade.
+ */
+const Scroll: React.FC<TransitionPresentationComponentProps<ScrollProps>> = ({
+  children,
+  presentationDirection,
+  presentationProgress: p,
+  passedProps,
+}) => {
+  const sign = passedProps.direction === "down" ? 1 : -1;
+  const style: React.CSSProperties =
+    presentationDirection === "entering"
+      ? {
+          opacity: interpolate(p, [0.25, 1], [0, 1], CLAMP),
+          transform: `translateY(${sign * (1 - p) * 220}px)`,
+        }
+      : {
+          opacity: interpolate(p, [0, 0.7], [1, 0], CLAMP),
+          transform: `translateY(${-sign * p * 160}px)`,
+        };
+  return <AbsoluteFill style={style}>{children}</AbsoluteFill>;
+};
+
+export const scroll = (direction: ScrollProps["direction"]): TransitionPresentation<ScrollProps> => ({
+  component: Scroll,
+  props: { direction },
+});
