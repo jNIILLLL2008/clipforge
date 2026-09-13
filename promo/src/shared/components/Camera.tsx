@@ -1,11 +1,11 @@
 import React from "react";
 import { spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { SPRING } from "../brand";
-import type { PlaneLayout } from "../layout";
+import type { BeatFrame } from "../clock";
+import { useBeatFrame } from "../clock";
 import { mix } from "../motion";
-import type { Step } from "../steps";
-import { beatsOf, focusOf } from "../steps";
-import { windowFrame } from "../timeline";
+import type { PlaneLayout, Shot } from "../plane";
+import { beatsOf, focusOf } from "../plane";
 
 /*
  * The camera: a zoom toward a focus point on the screenshot.
@@ -31,7 +31,7 @@ import { windowFrame } from "../timeline";
  * every frame. Easing t directly would make the focus point swim sideways
  * during a move.
  *
- * TO ADJUST A ZOOM, edit its beat in steps.ts:
+ * TO ADJUST A ZOOM, edit its beat:
  *   focus  a target key, or [x, y] fractions of the screenshot.
  *          Moving x or y by 0.02 is a small nudge.
  *   scale  1.3 is a gentle push, 1.6 is close.
@@ -55,23 +55,24 @@ const mixState = (a: CameraState, b: CameraState, t: number): CameraState => ({
  * the camera actually is when it fires, so a move that interrupts another one
  * picks up smoothly instead of snapping.
  */
-export const cameraAt = (step: Step, frame: number, fps: number): CameraState => {
-  let from = REST;
-  let to = REST;
+export const cameraAt = (shot: Shot, frame: number, fps: number, at: BeatFrame): CameraState => {
+  const initial = shot.camera ? { scale: shot.camera.scale, ...focusOf(shot, shot.camera.focus) } : REST;
+  let from = initial;
+  let to = initial;
   let start: number | null = null;
-  const moves = step.beats.filter((b) => b.action === "zoom" || b.action === "unzoom");
+  const moves = shot.beats.filter((b) => b.action === "zoom" || b.action === "unzoom");
 
   for (const beat of moves) {
-    const at = windowFrame(step.id, beat.at);
-    if (at > frame) break;
+    const fire = at(beat.at);
+    if (fire > frame) break;
     if (start !== null) {
-      from = mixState(from, to, spring({ frame: at - start, fps, config: SPRING.camera }));
+      from = mixState(from, to, spring({ frame: fire - start, fps, config: SPRING.camera }));
     }
-    to = beat.action === "zoom" ? { scale: beat.scale, ...focusOf(step, beat.focus) } : REST;
-    start = at;
+    to = beat.action === "zoom" ? { scale: beat.scale, ...focusOf(shot, beat.focus) } : REST;
+    start = fire;
   }
 
-  if (start === null) return REST;
+  if (start === null) return initial;
   return mixState(from, to, spring({ frame: frame - start, fps, config: SPRING.camera }));
 };
 
@@ -83,14 +84,14 @@ export const cameraTransform = (cam: CameraState, W: number, H: number) => {
   return `translate(${tx}px, ${ty}px) scale(${cam.scale})`;
 };
 
-export const Camera: React.FC<{ step: Step; plane: PlaneLayout; children: React.ReactNode }> = ({
-  step,
+export const Camera: React.FC<{ shot: Shot; plane: PlaneLayout; children: React.ReactNode }> = ({
+  shot,
   plane,
   children,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const cam = cameraAt(step, frame, fps);
+  const cam = cameraAt(shot, frame, fps, useBeatFrame());
 
   return (
     <div
@@ -107,5 +108,5 @@ export const Camera: React.FC<{ step: Step; plane: PlaneLayout; children: React.
 };
 
 /** Every zoom's focus, for the guides overlay. */
-export const zoomFoci = (step: Step) =>
-  beatsOf(step, "zoom").map((b) => ({ ...focusOf(step, b.focus), scale: b.scale }));
+export const zoomFoci = (shot: Shot) =>
+  beatsOf(shot, "zoom").map((b) => ({ ...focusOf(shot, b.focus), scale: b.scale }));

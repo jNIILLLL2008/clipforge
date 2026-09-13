@@ -1,15 +1,43 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { C, MONO, SANS, SPRING } from "../brand";
-import { CAPTION_BOTTOM, CAPTION_WIDTH } from "../layout";
+import { useBeatFrame } from "../clock";
 import { CLAMP, riseStyle } from "../motion";
-import type { Callout, Step } from "../steps";
-import { TOTAL_STEPS } from "../steps";
-import { sec, windowFrame } from "../timeline";
 
-/** When the caption's lines start rising, in seconds after the cut. */
+/** When the caption's lines start rising, in beat seconds (so: after the cut). */
 const TEXT_AT = 0.05;
 const STAGGER = 4;
+
+/** `until`, when set, is when the callout lifts away; otherwise it stays to the end of the scene. */
+export type Callout =
+  | { at: number; until?: number; kind: "badge"; text: string }
+  | {
+      at: number;
+      until?: number;
+      kind: "url";
+      text: string;
+      typeSeconds: number;
+      copiedAt: number;
+    };
+
+export type CaptionProps = {
+  left: number;
+  bottom?: number;
+  width?: number;
+  eyebrow: React.ReactNode;
+  headline: string;
+  sub: string;
+  /** Replaces the sub line partway through. */
+  subLater?: { at: number; text: string };
+  /** Sits above the card. */
+  callout?: Callout;
+  /**
+   * When the whole caption lifts away, in beat seconds. For a scene that
+   * hands over to another on the same screenshot, so the two cards never
+   * stack during the dissolve between them.
+   */
+  exitAt?: number;
+};
 
 const SUB_TYPE: React.CSSProperties = {
   gridArea: "1 / 1",
@@ -23,27 +51,38 @@ const SUB_TYPE: React.CSSProperties = {
 /*
  * The caption: a floating glass card at lower left, overlapping the
  * screenshot's edge. Each line lifts and unblurs in, a few frames apart.
- * A callout (the step 5 badge, the step 6 URL) sits above the card; the stack
- * is anchored at the bottom, so a callout grows upward and never moves the card.
+ * A callout sits above the card; the stack is anchored at the bottom, so a
+ * callout grows upward and never moves the card.
  */
-export const Caption: React.FC<{ step: Step; left: number }> = ({ step, left }) => {
+export const Caption: React.FC<CaptionProps> = ({
+  left,
+  bottom = 100,
+  width = 640,
+  eyebrow,
+  headline,
+  sub,
+  subLater,
+  callout,
+  exitAt,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const start = windowFrame(step.id, TEXT_AT);
+  const at = useBeatFrame();
+  const start = at(TEXT_AT);
+  const exit = exitAt === undefined ? 0 : interpolate(frame, [at(exitAt), at(exitAt) + 8], [0, 1], CLAMP);
   const line = (i: number) =>
     riseStyle(spring({ frame: frame - (start + i * STAGGER), fps, config: SPRING.text }));
   const card = spring({ frame: frame - (start - 4), fps, config: SPRING.plane });
 
-  // The sub line rises with the others; on a step with subLater it lifts away
-  // and the replacement rises into the same place.
+  // The sub line rises with the others; with subLater it lifts away and the
+  // replacement rises into the same place.
   const subIn = spring({ frame: frame - (start + 2 * STAGGER), fps, config: SPRING.text });
-  const swapAt = step.subLater ? windowFrame(step.id, step.subLater.at) : null;
+  const swapAt = subLater ? at(subLater.at) : null;
   const subOut = swapAt === null ? 0 : interpolate(frame, [swapAt, swapAt + 8], [0, 1], CLAMP);
   const laterIn =
     swapAt === null ? 0 : spring({ frame: frame - (swapAt + 5), fps, config: SPRING.text });
 
-  const calloutUntil =
-    step.callout?.until === undefined ? null : windowFrame(step.id, step.callout.until);
+  const calloutUntil = callout?.until === undefined ? null : at(callout.until);
   const calloutOut =
     calloutUntil === null ? 0 : interpolate(frame, [calloutUntil, calloutUntil + 8], [0, 1], CLAMP);
 
@@ -52,22 +91,23 @@ export const Caption: React.FC<{ step: Step; left: number }> = ({ step, left }) 
       style={{
         position: "absolute",
         left,
-        bottom: CAPTION_BOTTOM,
-        width: CAPTION_WIDTH,
+        bottom,
+        width,
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-start",
         gap: 18,
+        ...(exit > 0 ? { opacity: 1 - exit, transform: `translateY(${-12 * exit}px)` } : {}),
       }}
     >
-      {step.callout ? (
+      {callout ? (
         <div
           style={{
             opacity: 1 - calloutOut,
             transform: `translateY(${-10 * calloutOut}px)`,
           }}
         >
-          <CalloutView step={step} callout={step.callout} />
+          <CalloutView callout={callout} />
         </div>
       ) : null}
       <div
@@ -95,7 +135,7 @@ export const Caption: React.FC<{ step: Step; left: number }> = ({ step, left }) 
             ...line(0),
           }}
         >
-          STEP {step.n} OF {TOTAL_STEPS}
+          {eyebrow}
         </div>
         <div
           style={{
@@ -109,7 +149,7 @@ export const Caption: React.FC<{ step: Step; left: number }> = ({ step, left }) 
             ...line(1),
           }}
         >
-          {step.headline}
+          {headline}
         </div>
         {/* Both sub lines share one grid cell, so the card is sized for the
             longer one from the start and never jumps when they swap. */}
@@ -122,21 +162,20 @@ export const Caption: React.FC<{ step: Step; left: number }> = ({ step, left }) 
               transform: `translateY(${(1 - subIn) * 24 - subOut * 10}px)`,
             }}
           >
-            {step.sub}
+            {sub}
           </div>
-          {step.subLater ? (
-            <div style={{ ...SUB_TYPE, ...riseStyle(laterIn) }}>{step.subLater.text}</div>
-          ) : null}
+          {subLater ? <div style={{ ...SUB_TYPE, ...riseStyle(laterIn) }}>{subLater.text}</div> : null}
         </div>
       </div>
     </div>
   );
 };
 
-const CalloutView: React.FC<{ step: Step; callout: Callout }> = ({ step, callout }) => {
+const CalloutView: React.FC<{ callout: Callout }> = ({ callout }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const at = windowFrame(step.id, callout.at);
+  const beat = useBeatFrame();
+  const at = beat(callout.at);
   const pop = spring({ frame: frame - at, fps, config: SPRING.pop });
 
   if (callout.kind === "badge") {
@@ -166,12 +205,12 @@ const CalloutView: React.FC<{ step: Step; callout: Callout }> = ({ step, callout
 
   // The redirect URI, typed on, then a Copied tick as the cursor hits Copy.
   const typeFrom = at + 6;
-  const typeTo = typeFrom + sec(callout.typeSeconds);
+  const typeTo = typeFrom + Math.round(callout.typeSeconds * fps);
   const chars = Math.floor(
     interpolate(frame, [typeFrom, typeTo], [0, callout.text.length], CLAMP),
   );
-  const copiedAt = windowFrame(step.id, callout.copiedAt);
-  const copiedUntil = copiedAt + sec(1.4);
+  const copiedAt = beat(callout.copiedAt);
+  const copiedUntil = copiedAt + Math.round(1.4 * fps);
   const caretOn = frame < copiedAt && (frame < typeTo || Math.floor((frame - typeTo) / 8) % 2 === 0);
   const copied = spring({ frame: frame - copiedAt, fps, config: SPRING.pop });
   const copiedOpacity =

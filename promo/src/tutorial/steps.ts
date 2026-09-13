@@ -1,9 +1,13 @@
+import type { Callout } from "../shared/components/Caption";
+import type { Shot } from "../shared/plane";
+import { focusOf, targetOf } from "../shared/plane";
 import type { SceneId } from "./timeline";
 import { WINDOWS } from "./timeline";
 
 /*
  * What each step shows and does. StepScene reads this; no step has timing of
- * its own in JSX.
+ * its own in JSX. A step is a Shot (shared/plane.ts, which also documents the
+ * beat actions) with the caption's copy on top.
  *
  * THE SCREENSHOTS
  * public/step1.png to step7.png are the "Connect your channel" modal from
@@ -23,18 +27,7 @@ import { WINDOWS } from "./timeline";
  * `at` is seconds after the step's window opens (see WINDOWS in timeline.ts;
  * a beat at 0 lands on the cut). They are timed against the narration in
  * soundtrack.ts, so a ring or a click lands as its words are spoken; move a
- * line there and these follow. Actions:
- *   ring    draw the ember ring on a target, dim the rest of the screenshot
- *           and move the spotlight there. It stays until the next ring.
- *   point   glide the cursor to a target's centre, arriving at `at`.
- *   click   the same, then press and send out a ripple at `at`.
- *   zoom    push the camera in on `focus` (a target key, or [x, y] fractions
- *           of the screenshot) to `scale`. Starts at `at`, settles in about
- *           0.8s.
- *   unzoom  ease the camera back to the whole screenshot.
- *   fill    put text in a field: `text` is pasted (or typed over `seconds`),
- *           `masked` types that many dots over `seconds`.
- *   chip    pop a small label on a target's top-right corner.
+ * line there and these follow. The actions are listed in shared/plane.ts.
  *
  * TUNING A ZOOM
  *   - Reframe: change `focus`. A target key zooms on its centre; [x, y] lets
@@ -45,12 +38,10 @@ import { WINDOWS } from "./timeline";
  *   - The camera moves the focus toward the middle of the screenshot's box but
  *     never far enough to drag an edge of the screenshot into view, so a
  *     focus near an edge ends up off-centre. That is on purpose. The maths is
- *     in components/Camera.tsx.
+ *     in shared/components/Camera.tsx.
  *   - Set showGuides in the Studio props panel to see a 10% grid, every rect
  *     and every zoom focus drawn over the screenshot.
  */
-
-export type Rect = readonly [left: number, top: number, width: number, height: number];
 
 /** The modal's width in CSS px. Radii and insets below are in these units. */
 export const CARD_CSS_WIDTH = 680;
@@ -58,58 +49,19 @@ export const CARD_CSS_WIDTH = 680;
 export const CARD_CSS_RADIUS = 16;
 
 // The rings the modal draws around its illustrations: rx 5 and a 2-unit
-// stroke in a 420-unit SVG that renders 640 CSS px wide.
+// stroke in a 420-unit SVG that renders 640 CSS px wide. Their stroke is the
+// shared default ring stroke.
 const RING = 7.61;
-export const BAKED_RING_STROKE = 3.05;
 
-export type Target = {
-  rect: Rect;
-  /** Corner radius, in the modal's CSS px. */
-  radius: number;
-  /**
-   * The screenshot already has an ember ring on exactly this rect, so the
-   * animated ring is drawn on top of it rather than around it.
-   */
-  baked?: boolean;
-  /** For fill beats: where text starts inside the field, and how it is set. */
-  field?: { inset: number; fontSize: number; background: string };
-};
-
-export type Beat =
-  | { at: number; action: "ring"; target: string }
-  | { at: number; action: "point"; target: string }
-  | { at: number; action: "click"; target: string }
-  | { at: number; action: "zoom"; focus: string | readonly [number, number]; scale: number }
-  | { at: number; action: "unzoom" }
-  | { at: number; action: "fill"; target: string; text?: string; masked?: number; seconds?: number }
-  | { at: number; action: "chip"; target: string; text: string };
-
-/** `until`, when set, is when the callout lifts away; otherwise it stays to the end of the step. */
-export type Callout =
-  | { at: number; until?: number; kind: "badge"; text: string }
-  | {
-      at: number;
-      until?: number;
-      kind: "url";
-      text: string;
-      typeSeconds: number;
-      copiedAt: number;
-    };
-
-export type Step = {
+export type Step = Shot & {
   id: SceneId;
   n: number;
-  image: string;
-  width: number;
-  height: number;
   headline: string;
   sub: string;
   /** Replaces the sub line partway through the step. */
   subLater?: { at: number; text: string };
   /** Sits above the caption card. */
   callout?: Callout;
-  targets: Record<string, Target>;
-  beats: readonly Beat[];
 };
 
 const REDIRECT_URI = "https://clipforgee.app/api/youtube/callback";
@@ -303,26 +255,6 @@ export const STEPS: readonly Step[] = [
 ];
 
 export const TOTAL_STEPS = STEPS.length;
-
-export const beatsOf = <A extends Beat["action"]>(step: Step, action: A) =>
-  step.beats.filter((b): b is Extract<Beat, { action: A }> => b.action === action);
-
-export const targetOf = (step: Step, key: string): Target => {
-  const target = step.targets[key];
-  if (!target) {
-    throw new Error(`${step.id}: no target called "${key}".`);
-  }
-  return target;
-};
-
-/** The centre of a target, or a literal [x, y], as fractions of the screenshot. */
-export const focusOf = (step: Step, focus: string | readonly [number, number]) => {
-  if (typeof focus !== "string") {
-    return { x: focus[0], y: focus[1] };
-  }
-  const [l, t, w, h] = targetOf(step, focus).rect;
-  return { x: l + w / 2, y: t + h / 2 };
-};
 
 // Fail loudly while tuning: a typo'd target or a beat outside its window.
 for (const step of STEPS) {

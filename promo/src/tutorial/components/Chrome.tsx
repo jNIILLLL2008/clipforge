@@ -1,12 +1,12 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { C } from "../brand";
+import { C } from "../../shared/brand";
+import { Lockup } from "../../shared/components/Lockup";
+import { CLAMP } from "../../shared/motion";
 import { CAPTION_LEFT, CHROME_Y, STEPPER_X } from "../layout";
-import { CLAMP } from "../motion";
 import { TOTAL_STEPS } from "../steps";
 import { TRANSITION, cutFrame } from "../timeline";
 import type { SceneId } from "../timeline";
-import { Lockup } from "./Lockup";
 
 /*
  * The modal's own stepper, scaled up: small dots, and the current one an

@@ -1,10 +1,10 @@
 import React from "react";
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
-import { C, SANS, SPRING } from "../brand";
-import { Backdrop } from "../components/Backdrop";
-import { Lockup, lockupEntrance } from "../components/Lockup";
-import { CLAMP, riseStyle } from "../motion";
+import { C, SANS, SPRING } from "../../shared/brand";
+import { Backdrop } from "../../shared/components/Backdrop";
+import { Lockup, lockupEntrance } from "../../shared/components/Lockup";
+import { CLAMP, riseStyle } from "../../shared/motion";
 import { sceneFrames } from "../timeline";
 
 export const bookendSchema = z.object({

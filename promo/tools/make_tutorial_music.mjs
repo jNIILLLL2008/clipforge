@@ -1,8 +1,12 @@
-// Synthesises the music bed for the YouTube setup tutorial.
+// Synthesises the music bed for the YouTube setup tutorial, and for the setup
+// guide from the same recipe.
 //
 //   node promo/tools/make_tutorial_music.mjs
+//   node promo/tools/make_tutorial_music.mjs --length 120 --drums-in 5 --drums-out 114 --final 115 --out guide
 //
-// Writes promo/public/tutorial/music.mp3. Everything is generated here from
+// With no options it writes promo/public/tutorial/music.mp3, the tutorial's
+// bed; the options move its cues for another video and write to
+// promo/public/<out>/music.mp3. Everything is generated here from
 // oscillators and seeded noise, like the launch ad's effects in make_audio.py,
 // so the bed carries no licence questions. Plain Node, no dependencies beyond
 // the ffmpeg Remotion ships, which encodes the MP3.
@@ -20,17 +24,24 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// --length seconds, --drums-in and --drums-out (the cuts they land on),
+// --final (when the progression resolves), --out (a folder under public/).
+const option = (name, fallback) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i === -1 ? fallback : process.argv[i + 1];
+};
+
 const SR = 44100;
 const BEAT = 60 / 120;
 const BAR = BEAT * 4;
-const LENGTH = 60;
+const LENGTH = Number(option("length", 60));
 const N = Math.round(LENGTH * SR);
 
-const DRUMS_IN = 4;
-const DRUMS_OUT = 55;
-const FINAL_CHORD = 56;
+const DRUMS_IN = Number(option("drums-in", 4));
+const DRUMS_OUT = Number(option("drums-out", 55));
+const FINAL_CHORD = Number(option("final", 56));
 
-const OUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public/tutorial");
+const OUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public", option("out", "tutorial"));
 
 // ------------------------------------------------------------------ utils --
 let seed = 0x2545f491;
