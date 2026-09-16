@@ -248,6 +248,20 @@ and cannot drift between them. `sanitise()` drops unknown keys and forces every
 value into range, so a niche can never hold something the renderer would choke
 on.
 
+**Fill in with AI** (`autofill.py`) writes the settings nobody knows how to
+fill in. The subscriber gives a playlist, a channel or one sentence. The server
+reads the titles of the videos in those sources, and Claude writes the
+description the moment picker ranks against, the show keywords, the regulars
+with their aliases, the words said in a good moment, archive searches and the
+banner. It is on the Settings screen and is a step of the guided setup, and it
+only appears when `ANTHROPIC_API_KEY` is set. The answer goes through
+`sanitise()` and comes back unsaved for the subscriber to check. It never
+writes search terms, which would switch the blind keyword search back on (or,
+on uploads, filter by filename), and never exclusions beside a playlist, where
+they could only remove an episode somebody chose. Reading the sources follows
+the same operator switch as sourcing from YouTube. If they cannot be read, it
+asks for a sentence rather than guessing a show from a playlist id.
+
 **Moments** (`render/moments.py`) are why a source video no longer has to be
 short. Anything longer than the niche's `long_clip_seconds` is a haystack: its
 subtitle track and its audio are searched and the best few windows are cut out
