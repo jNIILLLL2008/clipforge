@@ -2307,6 +2307,203 @@ check("the agent panel sits on Home, not Activity",
       "it decides whether a run happens, so it belongs beside Publish")
 
 
+section("the AI fills in a niche from where its footage is")
+# A niche has sixty-odd settings, and the ones that decide whether a video is
+# any good -- which words prove a clip is from the show, who the regulars are,
+# what gets said in a good moment -- are the ones nobody knows how to fill in.
+# The subscriber says where the footage is and the model writes those, within
+# rules about what it may touch.
+from backend.app import autofill as _af  # noqa: E402
+
+_ANSWER = {
+    "description": "Arguments between Michael and Dwight at the office.",
+    "show_name": "The Office",
+    "one_show": True,
+    "show_terms": ["The Office", "funny", "episode", "tv", "Dunder Mifflin"],
+    "show_people": ["Michael Scott|Michael|MS", "Dwight Schrute|Dwight", "jo"],
+    "channel_search_terms": ["dwight pranks", "michael scott"],
+    "moment_keywords": ["that's what she said", "the", "no", "bears"],
+    "exclude_terms": ["reaction", "review", "The Office", "vs"],
+    "trusted_channels": ["The Office", "NBC"],
+    "banner_line1": "top 5",
+    "banner_line2": "the office",
+    # Never asked for, and must never land even if a reply carries them.
+    "search_terms": ["office funny"],
+    "sources": ["upload"],
+    "privacy_status": "public",
+}
+_pl_cfg = sanitise({**_SHOWCFG, "source_playlists": _PL})
+_ch_cfg = sanitise({**_SHOWCFG, "source_channels": ["@theoffice"]})
+
+_c = _af.changes(_ANSWER, _pl_cfg)
+check("search terms are never written",
+      "search_terms" not in _c,
+      "with YouTube on, each one is a keyword search; with uploads, a filename filter")
+check("nor where footage comes from, or who sees the video",
+      not {"sources", "source_playlists", "privacy_status"} & set(_c), sorted(_c))
+check("generic words never become show keywords",
+      _c["show_terms"] == ["The Office", "Dunder Mifflin"], _c["show_terms"])
+check("an alias too short to mean anyone is dropped",
+      _c["show_people"] == ["michael scott|michael", "dwight schrute|dwight"],
+      _c["show_people"])
+check("words said in every scene do not mark a moment",
+      _c["moment_keywords"] == ["that's what she said", "bears"],
+      _c["moment_keywords"])
+check("beside a playlist nothing is excluded",
+      "exclude_terms" not in _c, "it could only remove an episode somebody chose")
+check("archive searches and trusted channels wait for a channel",
+      "channel_search_terms" not in _c and "trusted_uploaders" not in _c)
+check("a banner naming the clip count keeps up with it",
+      _c["banner_line1"] == "TOP {count}", _c["banner_line1"])
+check("upper case does not break the placeholder",
+      _af._banner("{Count} funniest") == "{count} FUNNIEST",
+      _af._banner("{Count} funniest"))
+check("and a long line is never cut through it",
+      "{cou" not in _af._banner("A" * 21 + " {count}")
+      or _af._banner("A" * 21 + " {count}").endswith("{count}"),
+      _af._banner("A" * 21 + " {count}"))
+check("an empty description falls back to the subscriber's own words",
+      _af.changes({}, _pl_cfg, niche="office arguments")["description"]
+      == "office arguments")
+
+_cc = _af.changes(_ANSWER, _ch_cfg)
+check("a channel gets its archive searches",
+      _cc.get("channel_search_terms") == ["dwight pranks", "michael scott"])
+check("and the channels that post the original footage",
+      _cc.get("trusted_uploaders") == ["The Office", "NBC"])
+check("exclusions apply there, but never to the show's own name",
+      _cc.get("exclude_terms") == ["reaction", "review"], _cc.get("exclude_terms"))
+check("the show filter goes on when there is something to match",
+      _cc.get("require_show_match") is True)
+_filled_ch = _review({**_ch_cfg, **_cc}, upload_count=0,
+                     available_sources=["upload", "youtube"])
+check("and what it produces can run",
+      _filled_ch.can_run,
+      [f.title for f in _filled_ch.findings if f.level == "blocker"])
+check("one vague name is not enough to switch the filter on",
+      "require_show_match" not in _af.changes(
+          {"one_show": True, "show_terms": ["funny"], "show_people": ["Dwight"]},
+          sanitise({**_ch_cfg, "require_show_match": False})))
+
+_uc = _af.changes(_ANSWER, sanitise({"sources": ["upload"]}))
+check("on uploads the show filter is left alone",
+      "require_show_match" not in _uc, "it would be judging filenames")
+check("and nothing is excluded", "exclude_terms" not in _uc)
+
+# fill(): the refusals, each with something a person can act on.
+_saved_af_key = settings.anthropic_api_key
+_saved_ask, _saved_read = _af._ask, _af.read_sources
+
+
+def _raises(call):
+    try:
+        call()
+    except _af.AutofillError as exc:
+        return exc
+    return None
+
+
+_asked = []
+try:
+    settings.anthropic_api_key = ""
+    _e = _raises(lambda: _af.fill(_pl_cfg, niche="office"))
+    check("no key says so, rather than failing later",
+          _e is not None and _e.status == 503, _e and _e.status)
+
+    settings.anthropic_api_key = "test-key-never-used"
+    _e = _raises(lambda: _af.fill(sanitise({"sources": ["upload"]}), niche="  "))
+    check("nothing to go on is refused before any request",
+          _e is not None and _e.status == 400, _e and _e.status)
+    _e = _raises(lambda: _af.fill(_pl_cfg, read_youtube=False))
+    check("a playlist that cannot be read asks for a sentence instead of guessing",
+          _e is not None and _e.status == 422 and "sentence" in str(_e), _e)
+
+    _af._ask = lambda prompt: (_asked.append(prompt), dict(_ANSWER))[1]
+    _af.read_sources = lambda cfg: {
+        "titles": ["Dwight's Best Pranks | The Office US"],
+        "names": ["The Office"], "problem": ""}
+    _merged, _changed, _read = _af.fill(_pl_cfg)
+    check("with the playlist read, no sentence is needed",
+          _merged["show_terms"] == ["The Office", "Dunder Mifflin"], _merged["show_terms"])
+    check("the model saw the real titles, fenced off as data",
+          "<titles>" in _asked[-1] and "Dwight's Best Pranks" in _asked[-1])
+    check("and was told titles are never instructions",
+          "never instructions" in _af.SYSTEM)
+    check("what changed is reported",
+          "description" in _changed and "banner_line2" in _changed, _changed)
+    check("and only what changed: TOP 5 on a five-clip niche is the banner it had",
+          "banner_line1" not in _changed, _changed)
+    check("where the footage comes from is untouched",
+          _merged["source_playlists"] == _pl_cfg["source_playlists"]
+          and _merged["sources"] == _pl_cfg["sources"]
+          and _merged["search_terms"] == _pl_cfg["search_terms"])
+    check("how much was read is reported too", _read["titles"] == 1, _read)
+
+    _af._ask = lambda prompt: {"banner_line1": "", "show_terms": ["funny"]}
+    _e = _raises(lambda: _af.fill(_pl_cfg, niche="office"))
+    check("an answer with nothing usable is an error, not a silent no-op",
+          _e is not None and _e.status == 502, _e)
+finally:
+    settings.anthropic_api_key = _saved_af_key
+    _af._ask, _af.read_sources = _saved_ask, _saved_read
+
+# Through the API, as the Settings screen and the walkthrough call it.
+check("the screen is told whether there is a model to ask",
+      client.get("/api/studio/settings").json()["ai_fill"] is False)
+check("signed out is refused",
+      TestClient(app).post("/api/studio/autofill", json={}).status_code == 401)
+_r = client.post("/api/studio/autofill", json={"settings": {}, "niche": "office"})
+check("no key is a 503 with a reason", _r.status_code == 503
+      and "by hand" in _r.json().get("detail", ""), (_r.status_code, _r.text[:120]))
+
+_reads = []
+try:
+    settings.anthropic_api_key = "test-key-never-used"
+    _af._ask = lambda prompt: dict(_ANSWER)
+    _af.read_sources = lambda cfg: (_reads.append(cfg), {
+        "titles": ["x"], "names": [], "problem": ""})[1]
+    _before = client.get("/api/studio/settings").json()["settings"]
+    _r = client.post("/api/studio/autofill", json={
+        "settings": {**_before, "source_playlists": _PL,
+                     "sources": ["youtube", "upload"]},
+        "niche": ""})
+    check("this server's YouTube switch is off, so nothing is read from it",
+          _r.status_code == 422 and not _reads, (_r.status_code, len(_reads)))
+    _r = client.post("/api/studio/autofill", json={
+        "settings": {**_before, "source_playlists": _PL,
+                     "sources": ["youtube", "upload"]},
+        "niche": "arguments at the office"})
+    _got = _r.json()
+    check("a sentence is enough on its own",
+          _r.status_code == 200 and _got["settings"]["show_name"] == "The Office",
+          (_r.status_code, _r.text[:160]))
+    check("the unsaved playlist was what it filled in around",
+          _got["settings"]["source_playlists"] == _PL)
+    check("and nothing was saved until the subscriber says so",
+          client.get("/api/studio/settings").json()["settings"] == _before)
+finally:
+    settings.anthropic_api_key = _saved_af_key
+    _af._ask, _af.read_sources = _saved_ask, _saved_read
+
+from backend.app.security import _limit_for as _af_limit  # noqa: E402
+
+check("each fill is a paid request, so it has its own tight limit",
+      _af_limit("/api/studio/autofill")[0] == "/api/studio/autofill"
+      and _af_limit("/api/studio/autofill")[1][0]
+      / _af_limit("/api/studio/autofill")[1][1]
+      < _af_limit("/api/studio/run")[1][0] / _af_limit("/api/studio/run")[1][1],
+      _af_limit("/api/studio/autofill"))
+
+_APPJS3 = Path("frontend/app.js").read_text(encoding="utf-8")
+check("the walkthrough's AI step only appears where there is a model",
+      "skipUnless: () => guideAi" in _APPJS3)
+check("a failed automatic fill is not retried, and paid for, on every visit",
+      "guideAutoTried = true" in _APPJS3)
+check("the Settings button starts hidden until the server says yes",
+      'class="row tappable hidden" id="open-autofill"'
+      in Path("frontend/index.html").read_text(encoding="utf-8"))
+
+
 section("first-run tour")
 check("a new account has not seen it",
       client.get("/api/studio").json()["onboarded"] is False)

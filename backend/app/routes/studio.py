@@ -192,7 +192,10 @@ def set_setup_video_seen(seen: bool = True, user: User = Depends(current_user),
 
 @router.get("/studio/settings")
 def get_settings(user: User = Depends(current_user)):
-    return {"settings": _user_settings(user), "schema": schema()}
+    from .. import autofill
+
+    return {"settings": _user_settings(user), "schema": schema(),
+            "ai_fill": autofill.available()}
 
 
 @router.put("/studio/settings")
@@ -294,6 +297,36 @@ def review_settings(body: PreviewIn, user: User = Depends(current_user)):
                  if s["enabled"] and s["configured"] and s["permitted"]]
     return review(cfg, upload_count=uploads,
                   available_sources=available).to_dict()
+
+
+class AutofillIn(BaseModel):
+    settings: Dict = {}
+    niche: str = ""
+
+
+@router.post("/studio/autofill")
+def autofill_settings(body: AutofillIn, user: User = Depends(current_user)):
+    """Fill in the key terms of a niche from its sources and a sentence.
+
+    Takes unsaved settings, like the preview, because the playlist was most
+    likely pasted a moment ago. Returns them with the gaps filled and saves
+    nothing: the subscriber reads what the model wrote before it decides a
+    single video.
+    """
+    from .. import autofill
+
+    cfg = sanitise(body.settings, base=user.settings or {})
+    # Reading a playlist's titles is still a request to YouTube, so it follows
+    # the same operator switch as sourcing footage from it does.
+    read_youtube = any(s["name"] == "youtube" and s["enabled"]
+                       and s["configured"] and s["permitted"]
+                       for s in catalogue(user.id))
+    try:
+        filled, changed, read = autofill.fill(
+            cfg, niche=body.niche[:600], read_youtube=read_youtube)
+    except autofill.AutofillError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    return {"settings": filled, "changed": changed, "read": read}
 
 
 @router.get("/presets")

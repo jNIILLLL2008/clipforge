@@ -587,6 +587,19 @@ code {
 }
 .guide-field textarea { min-height: 74px; resize: vertical; }
 
+/* What the AI filled in, read back before anybody saves it. */
+.filled {
+  display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem;
+  margin: 1rem 0 .4rem; padding: .8rem .9rem; border-radius: var(--radius);
+  background: var(--surface-2); font-size: .88rem;
+}
+.filled dt { color: var(--muted); }
+.filled dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .filled { grid-template-columns: 1fr; }
+  .filled dd { margin-bottom: .35rem; }
+}
+
 .guide-preview { padding: 0 1.2rem 1rem; }
 .guide-preview img {
   display: block; margin: 0 auto; max-height: 340px; border-radius: var(--radius-ctrl);

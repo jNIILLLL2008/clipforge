@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@92,880&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/backdrop.css?v=2">
-<link rel="stylesheet" href="/static/styles.css?v=6">
+<link rel="stylesheet" href="/static/styles.css?v=7">
 <link rel="stylesheet" href="/static/legal.css?v=2">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='.135' y1='-.084' x2='.865' y2='1.084'><stop offset='0' stop-color='%23F25C1E'/><stop offset='.52' stop-color='%23FF8A3C'/><stop offset='1' stop-color='%23E8B54A'/></linearGradient></defs><rect width='64' height='64' rx='14.08' fill='url(%23g)'/><g transform='translate(14.08 14.08) scale(.56)' fill='none' stroke='%230C0B0A' stroke-width='11'><path d='M50 13H27L15.5 32L27 51H50'/></g><path transform='translate(14.08 14.08) scale(.56)' fill='%230C0B0A' d='M45 23L47.26 29.74L54 32L47.26 34.26L45 41L42.74 34.26L36 32L42.74 29.74Z'/></svg>">
 </head>
@@ -199,6 +199,12 @@
             <span class="row-sub">A guided walkthrough that checks your answers</span></span>
           <span class="row-value accent">Start <span class="chev" aria-hidden="true">&rsaquo;</span></span>
         </button>
+        <!-- Shown only when the server has an AI key; see loadSettings. -->
+        <button class="row tappable hidden" id="open-autofill">
+          <span class="row-label">Fill in with AI
+            <span class="row-sub">Paste a playlist or channel, and it writes the keywords, regulars and banner</span></span>
+          <span class="row-value accent">Start <span class="chev" aria-hidden="true">&rsaquo;</span></span>
+        </button>
       </div>
 
       <!-- live layout preview, rendered by the real pipeline -->
@@ -309,6 +315,43 @@
       settings are kept.
     </p>
     <div id="presets-list" class="rows"></div>
+  </div>
+</div>
+
+<!-- AI autofill sheet -->
+<div id="autofill-sheet" class="sheet hidden" role="dialog" aria-modal="true"
+     aria-labelledby="autofill-title">
+  <div class="sheet-card">
+    <header class="sheet-head">
+      <h2 id="autofill-title">Fill in with AI</h2>
+      <button class="ghost" id="autofill-close">Close</button>
+    </header>
+    <p class="note">
+      Say where the footage is. The AI reads the videos in it and fills in the
+      description, show keywords, regulars, catchphrases and banner. Nothing
+      is saved until you press Save.
+    </p>
+    <div class="guide-field">
+      <label for="autofill-niche">What the channel is about</label>
+      <textarea id="autofill-niche"
+                placeholder="e.g. the funniest moments from The Office, mostly Michael and Dwight"></textarea>
+      <span class="hint">Optional when you paste a playlist or channel below.</span>
+    </div>
+    <div class="guide-field">
+      <label for="autofill-playlists">Playlist links</label>
+      <textarea id="autofill-playlists"
+                placeholder="https://www.youtube.com/playlist?list=..."></textarea>
+    </div>
+    <div class="guide-field">
+      <label for="autofill-channels">Source channels</label>
+      <textarea id="autofill-channels" placeholder="@channel, one per line"></textarea>
+      <span class="hint">When there is a playlist, clips come only from the
+        playlist. Channels are searched when there is not.</span>
+    </div>
+    <div class="actions-row">
+      <button class="primary" id="autofill-go">Fill it in</button>
+    </div>
+    <p class="hint" id="autofill-status" role="status" aria-live="polite"></p>
   </div>
 </div>
 
@@ -445,7 +488,7 @@
 </div>
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-<script src="/static/app.js?v=6"></script>
+<script src="/static/app.js?v=7"></script>
 <script src="/static/consent.js?v=2" data-optional="__CONSENT_OPTIONAL__" data-ga="__GA_ID__"></script>
 </body>
 </html>

@@ -186,6 +186,9 @@ _LIMITS: Dict[str, Tuple[int, float]] = {
     "/api/me/delete": (5, 3600.0),
     "/api/uploads": (30, 300.0),
     "/api/studio/run": (20, 300.0),
+    # Every call is a paid model request and a read of YouTube. Nobody sets a
+    # niche up a dozen times an hour; a script trying to spend the key does.
+    "/api/studio/autofill": (12, 3600.0),
     "/api": (240, 60.0),
 }
 

@@ -375,6 +375,10 @@ async function loadSettings() {
   state.schema = data.schema;
   state.settings = data.settings;
   state.dirty = false;
+  // Offered only where there is a model to ask; a button that can only ever
+  // answer "not switched on" is a worse screen than no button.
+  state.aiFill = Boolean(data.ai_fill);
+  $('open-autofill').classList.toggle('hidden', !state.aiFill);
   renderSettings();
 }
 
@@ -515,6 +519,71 @@ $('open-presets').onclick = async () => {
 };
 $('presets-close').onclick = () => $('presets-sheet').classList.add('hidden');
 $('presets-sheet').onclick = (e) => { if (e.target === $('presets-sheet')) $('presets-close').click(); };
+
+/* ------------------------------------------------------ AI autofill ---- */
+/* The settings that decide which clips qualify are the ones nobody knows how
+   to fill in: the words that prove a clip is from the show, the regulars and
+   every name people call them, the catchphrases. So the subscriber says where
+   the footage is and the model writes those. Nothing is saved here -- the
+   answer lands in the form marked unsaved, for a person to read first. */
+function requestAutofill(settings, niche) {
+  return api('/api/studio/autofill', { method: 'POST', body: { settings, niche } });
+}
+
+function settingLabels(keys) {
+  const labels = {};
+  state.schema.groups.forEach((g) => g.fields.forEach((f) => { labels[f.key] = f.label; }));
+  return keys.map((key) => labels[key] || key);
+}
+
+$('open-autofill').onclick = () => {
+  $('autofill-niche').value = state.settings.description || '';
+  $('autofill-playlists').value = (state.settings.source_playlists || []).join('\n');
+  $('autofill-channels').value = (state.settings.source_channels || []).join('\n');
+  $('autofill-status').textContent = '';
+  $('autofill-sheet').classList.remove('hidden');
+  $('autofill-niche').focus();
+};
+$('autofill-close').onclick = () => $('autofill-sheet').classList.add('hidden');
+$('autofill-sheet').onclick = (e) => { if (e.target === $('autofill-sheet')) $('autofill-close').click(); };
+
+$('autofill-go').onclick = async () => {
+  const playlists = splitLines($('autofill-playlists').value);
+  const channels = splitLines($('autofill-channels').value);
+  const draft = { ...state.settings, source_playlists: playlists, source_channels: channels };
+  const button = $('autofill-go');
+  button.disabled = true;
+  $('autofill-status').textContent = (playlists.length || channels.length)
+    ? 'Reading your videos and asking the AI. This takes about 20 seconds…'
+    : 'Asking the AI…';
+  try {
+    // Pasting a playlist here is a decision to take clips from it. Left on
+    // uploads only, the link would be saved and then never read by a run.
+    if ((playlists.length || channels.length) && !(draft.sources || []).includes('youtube')) {
+      const { sources } = await api('/api/sources');
+      const usable = sources.some((s) => s.name === 'youtube' && s.enabled
+                                         && s.configured && s.permitted);
+      if (usable) draft.sources = ['youtube', ...(draft.sources || [])];
+    }
+    const data = await requestAutofill(draft, $('autofill-niche').value);
+    state.settings = data.settings;
+    state.dirty = true;
+    renderSettings();
+    fillPreviewClips();
+    previewSoon(0);
+    const filled = settingLabels(data.changed || []);
+    $('settings-status').textContent = filled.length
+      ? `AI filled in ${filled.length} setting${filled.length === 1 ? '' : 's'}. Check them, then save.`
+      : 'Unsaved changes';
+    $('autofill-sheet').classList.add('hidden');
+    toast(filled.length ? `Filled in: ${filled.join(', ')}.`
+                        : 'The AI had nothing to change.', 7000);
+  } catch (err) {
+    $('autofill-status').textContent = err.message;
+  } finally {
+    button.disabled = false;
+  }
+};
 
 /* ---------------------------------------------------------- history ---- */
 async function loadJobs() {
@@ -1206,6 +1275,29 @@ const GUIDE = [
     },
   },
   {
+    title: 'What is the channel about?',
+    /* The description is what the moment picker ranks against, and this
+       walkthrough never used to ask for it -- so a niche set up here gave
+       curator.py nothing to read, and "funniest moments" and "best fights"
+       from one playlist got the same cuts. Only shown where there is a model
+       to read it; without one the description changes nothing. */
+    skipUnless: () => guideAi,
+    intro: `<p>A sentence is enough. The AI that picks the moments reads this,
+      and it fills in the show's keywords, its regulars, catchphrases and the
+      banner for you.</p>`,
+    render: () => `
+      ${field('description', 'What the channel is about', 'textarea',
+              state.settings.description || '',
+              'e.g. the funniest moments from The Office, mostly Michael and Dwight')}
+      <button type="button" class="ghost" id="guide-autofill">
+        ${guideFilled ? 'Fill it in again' : 'Fill in the rest with AI'}</button>
+      <p class="hint" id="guide-autofill-status" role="status" aria-live="polite"></p>
+      ${guideFilledHtml()}`,
+    apply: (value, form) => {
+      state.settings.description = String(form.description || '').trim();
+    },
+  },
+  {
     title: 'How long, and how many clips?',
     intro: `<p>Pace is what the retention gate scores hardest. More clips in
       less time reads as energetic; fewer, longer ones read as static.</p>`,
@@ -1254,6 +1346,57 @@ let guideFirstRun = false;
    configuration that cannot produce a video -- which the comment at the top
    of GUIDE has always claimed happened, and which nothing enforced. */
 let guideReview = null;
+
+/* The AI step. guideFilled holds the keys the last fill changed (null until
+   one has run), and guideAutoTried stops a failed automatic fill from being
+   retried -- and paid for -- every time somebody steps back past it. */
+let guideAi = false;
+let guideFilled = null;
+let guideFilling = false;
+let guideAutoTried = false;
+
+function guideFilledHtml() {
+  if (!guideFilled) return '';
+  if (!guideFilled.length) return '<p class="hint">The AI had nothing to add.</p>';
+  const s = state.settings;
+  const rows = [
+    ['Show keywords', s.show_terms || []],
+    // Aliases are stored lower case, which is how they are matched; the
+    // summary is for reading, so the full name gets its capitals back.
+    ['Regulars', (s.show_people || []).map((p) => String(p).split('|')[0]
+      .replace(/(^|\s)\S/g, (c) => c.toUpperCase()))],
+    ['Said in a good moment', s.moment_keywords || []],
+    ['Archive searches', s.channel_search_terms || []],
+    ['Banner', [s.banner_line1, s.banner_line2].filter(Boolean)],
+  ].filter(([, values]) => values.length);
+  return `<dl class="filled">${rows.map(([name, values]) =>
+    `<dt>${esc(name)}</dt><dd>${esc(values.join(' · '))}</dd>`).join('')}</dl>
+    <p class="hint">Any of it can be changed on the Settings screen.</p>`;
+}
+
+async function guideAutofill() {
+  const status = $('guide-autofill-status');
+  const niche = readGuideForm().description || '';
+  guideFilling = true;
+  $('guide-next').disabled = true;
+  $('guide-autofill').disabled = true;
+  status.textContent = (state.settings.source_playlists || []).length
+    ? 'Reading your playlist and asking the AI. This takes about 20 seconds…'
+    : 'Asking the AI…';
+  try {
+    const data = await requestAutofill(state.settings, niche);
+    state.settings = data.settings;
+    guideFilled = data.changed || [];
+    // Only redraw if they are still on this step; the answer is kept either way.
+    if ($('guide-autofill')) await renderGuide();
+  } catch (err) {
+    if ($('guide-autofill-status')) $('guide-autofill-status').textContent = err.message;
+  } finally {
+    guideFilling = false;
+    $('guide-next').disabled = false;
+    if ($('guide-autofill')) $('guide-autofill').disabled = false;
+  }
+}
 
 function youtubeUsable() {
   return guideSources.some((s) => s.name === 'youtube' && s.enabled
@@ -1328,6 +1471,21 @@ async function renderGuide() {
     update();
   }
 
+  const fill = $('guide-autofill');
+  if (fill) {
+    fill.onclick = () => guideAutofill();
+    fill.disabled = guideFilling;
+    // Somebody who has just pasted a playlist has already given the AI all it
+    // needs, so it starts reading without being asked. Once: a fill that
+    // failed waits for the button rather than retrying on every visit.
+    if (!guideFilled && !guideFilling && !guideAutoTried
+        && guideChoice.source === 'playlist'
+        && (state.settings.source_playlists || []).length) {
+      guideAutoTried = true;
+      guideAutofill();
+    }
+  }
+
   $('guide-preview').classList.toggle('hidden', !step.preview);
   $('guide-review').innerHTML = '';
   if (step.preview) await guidePreview();
@@ -1369,6 +1527,9 @@ async function openGuide({ firstRun = false } = {}) {
   guideChoice = {};
   guideFirstRun = firstRun;
   guideReview = null;
+  guideAi = Boolean(state.aiFill);
+  guideFilled = null;
+  guideAutoTried = false;
   try {
     ({ sources: guideSources } = await api('/api/sources'));
   } catch { guideSources = []; }
@@ -1436,7 +1597,10 @@ $('guide-next').onclick = async () => {
   } catch (err) {
     toast(err.message);
   } finally {
-    button.disabled = false;
+    // Arriving on the AI step starts a fill that holds Next until it answers.
+    // Re-enabling unconditionally here let somebody skip past the answer
+    // while it was still being written.
+    button.disabled = guideFilling;
   }
 };
 
