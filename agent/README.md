@@ -36,23 +36,45 @@ pulls, and your channel's refresh token stays on the server.
 
 ## Setup
 
-Put `ClipForgeAgent.exe` in a folder of its own and run it. That is the whole
-install.
+On Windows, put `ClipForgeAgent.exe` in a folder of its own and run it. That
+is the whole install.
 
-On the first run it has no token, so it opens your browser at the site, shows
-you a short code, and waits. You sign in if you are not already, check the code
-matches, and click **Pair it**. The agent picks the token up within a few
-seconds, writes its own `agent.env` and starts working. Nothing is copied and
-no file is edited by hand.
+On a Mac, unpack the `.zip` into a folder of its own, then **right-click**
+`Start ClipForge Agent.command` and choose Open. Right-click rather than
+double-click, and only the first time: the build is signed ad-hoc, which is
+enough for Apple silicon to run it at all, but it is not notarized, and macOS
+refuses anything a browser downloaded from a developer it has not seen until
+it is opened that way once. The launcher then clears the quarantine flag off
+the rest of the folder, so ffmpeg does not need its own approval, and starts
+the agent.
 
-**ffmpeg is handled for you.** The `.zip` download ships it in `ffmpeg/`
-beside the .exe, so there is nothing to install. If you took the bare .exe
-instead, it fetches its own copy into `ffmpeg/` on the first run -- about
-110MB, once, with a progress bar. An ffmpeg already on PATH is used as-is and
-nothing is downloaded. `--no-download` turns the fetch off if you would rather
+That difference is worth spelling out to subscribers rather than hiding,
+because macOS words the refusal as *"cannot be opened"* or *"is damaged"*,
+which reads as a broken download. It is neither.
+
+On the first run the agent has no token, so it opens your browser at the site,
+shows you a short code, and waits. You sign in if you are not already, check
+the code matches, and click **Pair it**. The agent picks the token up within a
+few seconds, writes its own `agent.env` and starts working. Nothing is copied
+and no file is edited by hand.
+
+**ffmpeg is handled for you**, on both. The `.zip` downloads ship it in
+`ffmpeg/` beside the agent, so there is nothing to install. Taken on its own,
+the agent fetches its own copy into `ffmpeg/` on the first run -- about 110MB
+on Windows, 57MB on a Mac, once, with a progress bar, checked against the
+checksum the builder publishes. An ffmpeg already on PATH is used as-is and
+nothing is downloaded; on a Mac that includes `/opt/homebrew/bin`, which a
+program started from Finder cannot see on PATH because it inherits launchd's
+and not your shell's. `--no-download` turns the fetch off if you would rather
 install it yourself.
 
-Drop your own clips in `footage/` beside the .exe if you use the upload source.
+A Mac is also the one machine that will fall asleep in the middle of a job, so
+the agent holds off idle sleep with `caffeinate` while it is rendering and
+stops as soon as the job is done. Closing the lid still sleeps the machine,
+which is what closing the lid means.
+
+Drop your own clips in `footage/` beside the agent if you use the upload
+source.
 Everything the agent reads and writes lives in that one folder, so keep it
 together if you move it.
 
@@ -69,7 +91,7 @@ It is the shape a television uses to sign in, for the same reason.
 You need Python 3.11+. Same flow:
 
 ```bash
-python -m agent.main
+python -m agent.main     # python3 on a Mac
 ```
 
 `--check` verifies the token, reports your plan and remaining runs, confirms
@@ -100,45 +122,66 @@ credential: anything holding it can claim your jobs. The file is written
 `0600` where the filesystem supports it, and revoking it on the website stops
 it immediately.
 
-## Building the .exe
+## Building the downloads
 
 ```bash
-python agent/build_exe.py --clean
+python agent/build_exe.py --clean --bundle     # on Windows
+python3 agent/build_mac.py --clean --bundle    # on a Mac
 ```
 
-Around 25MB, and it lands at `agent/ClipForgeAgent.exe`. To build the file
-subscribers actually download -- the .exe and ffmpeg together in one archive:
+Each is around 25MB on its own and lands beside the source, at
+`agent/ClipForgeAgent.exe` or `agent/ClipForgeAgent`. `--bundle` produces what
+subscribers actually download -- the agent and ffmpeg in one archive:
+`agent/ClipForgeAgent-windows.zip` at about 100MB, or
+`agent/ClipForgeAgent-macos-arm64.zip` at about 60MB.
 
-```bash
-python agent/build_exe.py --clean --bundle
-```
+Both read the same `ClipForgeAgent.spec`, so the two builds cannot drift in
+what they include, and **each has to be built on the platform it is for**.
+PyInstaller freezes the interpreter it is running under; there is no
+cross-compiling it. For the same reason the Mac build is per-architecture:
+`build_mac.py` names the archive after the chip it was built on, so an Apple
+silicon and an Intel build can sit in the same release. Macs sold since late
+2020 are arm64.
 
-That produces `agent/ClipForgeAgent-windows.zip`, about 100MB. It needs
-`agent/ffmpeg/` to exist first; run the agent once and let it fetch one.
+The Windows bundle needs `agent/ffmpeg/` to exist first; run the agent once
+and let it fetch one. The Mac build fetches its own if it is missing, through
+the same code the agent uses, so a broken download shows up at build time
+rather than on a subscriber's machine.
 
-ffmpeg sits *next to* the .exe rather than inside it. Two static binaries are
-about 200MB, and PyInstaller's onefile mode unpacks its entire payload into a
-temp directory on every launch -- burying them would write 200MB to disk each
-time a long-running agent starts. The .zip gets the same one-download install
-without paying that on every run.
+The Mac zip also carries `Start ClipForge Agent.command` and writes every
+entry with its permissions set by hand. Python's `zipfile` records none
+otherwise, and a binary that arrives without its executable bit is a binary
+that will not start.
 
-The build is GPL, because the pipeline encodes with `libx264` and an LGPL
-ffmpeg has no software H.264 encoder at all. That means the .zip must keep
-ffmpeg's `LICENSE` alongside the binaries and point at the source, which
-`READ ME FIRST.txt` does. The binaries are unmodified upstream builds from
-gyan.dev and the agent invokes them as a separate process, so nothing here
-makes ClipForge itself a derived work.
+ffmpeg sits *next to* the agent rather than inside it. Two static binaries
+are 130-200MB, and PyInstaller's onefile mode unpacks its entire payload into
+a temp directory on every launch -- burying them would write that much to disk
+each time a long-running agent starts. The .zip gets the same one-download
+install without paying it on every run.
+
+The ffmpeg is GPL on both platforms, because the pipeline encodes with
+`libx264` and an LGPL build has no software H.264 encoder at all. That means
+each `.zip` must point at the source, which `READ ME FIRST.txt` does; the
+Windows archive ships ffmpeg's own `LICENSE` beside the binaries as well,
+while the Mac downloads contain nothing but the binary, so the notice in the
+READ ME is the whole of it. Both are unmodified upstream builds -- gyan.dev
+on Windows, ffmpeg.martin-riedl.de on macOS -- and the agent invokes them as a
+separate process, so nothing here makes ClipForge itself a derived work.
 
 The server half of the repo is excluded from the build, so SQLAlchemy, FastAPI,
-Stripe and the Google client are not along for the ride. The .exe is gitignored
-because it is a build artefact; the spec and this script are what is kept.
+Stripe and the Google client are not along for the ride. Both builds are
+gitignored because they are build artefacts; the spec and the two scripts are
+what is kept.
 
-## Where the .exe comes from
+## Where the downloads come from
 
-Set `AGENT_DOWNLOAD_URL` on the server to wherever the build is published -- a
-GitHub release, normally -- and the app shows a download button next to the
-pairing instructions. Left unset, it shows the run-from-source route instead of
-a button that leads nowhere.
+Set `AGENT_DOWNLOAD_URL` and `AGENT_DOWNLOAD_URL_MAC` on the server to
+wherever the builds are published -- a GitHub release, normally -- and the app
+shows a download button next to the pairing instructions. It offers whichever
+matches the computer the page is being read on, and puts the other underneath
+as a link, for somebody setting up a machine they are not sitting at. Either
+left unset shows the run-from-source route instead of a button that leads
+nowhere.
 
 ## How work is shared with the server
 

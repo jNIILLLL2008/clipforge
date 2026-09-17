@@ -146,6 +146,7 @@ def agent_status(user: User = Depends(current_user)) -> dict:
         "last_seen": user.agent_last_seen.isoformat() if user.agent_last_seen else "",
         "local_rendering": settings.render_workers <= 0,
         "download_url": settings.agent_download_url,
+        "download_url_mac": settings.agent_download_url_mac,
     }
 
 

@@ -727,6 +727,62 @@ async function loadSources() {
   }).join('');
 }
 
+// Which build this computer wants. navigator.platform is deprecated and is
+// still the only one every browser answers, so userAgentData is asked first
+// and it is the fallback. Guessing wrong is not fatal: the other platform's
+// link sits directly under the button.
+function onAMac() {
+  const claim = navigator.userAgentData?.platform || navigator.platform
+    || navigator.userAgent || '';
+  return /mac/i.test(claim);
+}
+
+// The install, for whichever computer is reading it. One download is offered
+// rather than two, because choosing between builds is a decision the page can
+// make for them; the other one stays as a link, for somebody setting up a
+// machine they are not sitting at.
+function agentInstall(state_) {
+  const mac = onAMac();
+  const mine = mac ? state_.download_url_mac : state_.download_url;
+  const other = mac ? state_.download_url : state_.download_url_mac;
+
+  // Only offer a download when there is one. A button that goes nowhere is
+  // worse than the sentence explaining where to get it.
+  const get = mine
+    ? '<li>Download it and put it in a folder of its own.</li>'
+    : `<li>Get the agent, or run it from source, and put it in a folder of
+         its own.</li>`;
+  // macOS refuses software without a paid Developer ID until it has been
+  // opened this way once, and somebody who is not expecting that reads the
+  // refusal as a broken download and gives up. It is worth the extra words --
+  // but only to somebody holding the .zip, since running it from source never
+  // meets Gatekeeper at all.
+  let run = `<li>Run <code>ClipForgeAgent.exe</code>.</li>`;
+  if (mac && mine) {
+    run = `<li>Unzip it, then <b>right-click</b> &ldquo;Start ClipForge
+      Agent.command&rdquo; and choose Open. macOS asks once; click Open.</li>`;
+  } else if (mac) {
+    run = `<li>Run it with <code>python3 -m agent.main</code>.</li>`;
+  }
+
+  return `
+    <p class="note"><b>Run the agent and it pairs itself.</b> Start it and it
+      opens this site to ask for one click. There is no token to copy, no file
+      to edit, and it fetches its own ffmpeg.</p>
+    <ol class="steps-list">
+      ${get}
+      ${run}
+      <li>Approve the code it shows you.</li>
+    </ol>
+    ${mine ? `<div class="actions-row">
+      <a class="ghost btn-link" id="agent-download"
+         href="${esc(mine)}">Download the agent</a>
+    </div>` : ''}
+    ${other ? `<p class="note">Setting up ${mac ? 'a Windows PC' : 'a Mac'}
+      instead? <a class="linkish" href="${esc(other)}">Download that
+      build</a>.</p>` : ''}`;
+}
+
 async function loadAgent() {
   const state_ = await api('/api/agent/status');
   const seen = state_.last_seen
@@ -750,28 +806,7 @@ async function loadAgent() {
     : '';
 
   $('agent-token').classList.toggle('hidden', state_.paired);
-  if (!state_.paired) {
-    // Only offer the download when there is one. A button that goes nowhere
-    // is worse than the sentence explaining where to get it.
-    const step1 = state_.download_url
-      ? `<li>Download it and put it in a folder of its own.</li>`
-      : `<li>Get <code>ClipForgeAgent.exe</code>, or run the agent from
-           source, and put it in a folder of its own.</li>`;
-    $('agent-token').innerHTML = `
-      <p class="note"><b>Run the agent and it pairs itself.</b> Start it and it
-        opens this site to ask for one click. There is no token to copy and no
-        file to edit.</p>
-      <ol class="steps-list">
-        ${step1}
-        <li>Install ffmpeg if you have not:
-          <code>winget install Gyan.FFmpeg</code></li>
-        <li>Run it, and approve the code it shows you.</li>
-      </ol>
-      ${state_.download_url ? `<div class="actions-row">
-        <a class="ghost btn-link" id="agent-download"
-           href="${esc(state_.download_url)}">Download the agent</a>
-      </div>` : ''}`;
-  }
+  if (!state_.paired) $('agent-token').innerHTML = agentInstall(state_);
 
   // Why anyone would want this, in the one place they are deciding.
   $('agent-note').textContent = state_.local_rendering
