@@ -3127,6 +3127,162 @@ check("revoking the token stops the agent at once",
       TestClient(app).get("/api/agent/hello", headers=AGENT).status_code == 401)
 
 
+section("the agent on a Mac")
+# The Mac build is the same agent; nearly all of the difference is getting an
+# ffmpeg onto the machine and getting past Gatekeeper. Neither can be run from
+# Windows, so what is checked here is the decisions -- which build, which chip,
+# and the refusals -- rather than the binaries themselves.
+import hashlib as _hashlib  # noqa: E402
+import zipfile as _zipfile  # noqa: E402
+
+import agent.build_mac as _build_mac  # noqa: E402
+import agent.ffmpeg as _ffmpeg  # noqa: E402
+
+
+class _Chip:
+    """Stands in for the platform module, which answers for this machine."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def machine(self) -> str:
+        return self.name
+
+
+_real_platform, _real_macos = _ffmpeg.platform, _ffmpeg.MACOS
+_ffmpeg.platform = _Chip("arm64")
+check("an Apple silicon Mac asks for the arm64 build",
+      _ffmpeg.mac_arch() == "arm64")
+_ffmpeg.platform = _Chip("x86_64")
+check("an Intel Mac asks for the Intel one", _ffmpeg.mac_arch() == "amd64")
+
+# A download that arrives corrupt is the likely failure here, not a hostile
+# builder, and either way a half-written ffmpeg must not be kept: finding out
+# it is broken mid-render costs the subscriber a job they waited on.
+_ffmpeg.platform = _Chip("arm64")
+_asked = []
+_real_fetch = _ffmpeg._fetch
+_real_checksum = _ffmpeg._published_checksum
+_ff_home = Path(tempfile.mkdtemp(prefix="agent-ffmpeg-"))
+
+
+def _fetch_rubbish(url, destination, label=""):
+    _asked.append(url)
+    destination.write_bytes(b"not an ffmpeg")
+    return url, "0" * 64
+
+
+_ffmpeg._fetch = _fetch_rubbish
+_ffmpeg._published_checksum = lambda url: "f" * 64
+try:
+    _ffmpeg._download_mac(_ff_home)
+    _refusal = "it was kept"
+except _ffmpeg.FFmpegError as _exc:
+    _refusal = str(_exc)
+check("the arm64 release is what it asks for first",
+      _asked[:1] == [f"{_ffmpeg.MAC_BASE}/arm64/release/ffmpeg.zip"], _asked[:1])
+check("a download that fails its published checksum is thrown away",
+      "checksum" in _refusal and not (_ff_home / "ffmpeg.zip").exists(),
+      _refusal[:60])
+
+
+def _fetch_zip(url, destination, label=""):
+    with _zipfile.ZipFile(destination, "w") as bundle:
+        bundle.writestr(label, "a stand-in for the real binary")
+    body = destination.read_bytes()
+    return url, _hashlib.sha256(body).hexdigest()
+
+
+# ffmpeg and ffprobe are two separate archives on a Mac, each holding one bare
+# binary, which is why this half is not shared with the Windows path.
+_ffmpeg._fetch = _fetch_zip
+_ffmpeg._published_checksum = lambda url: ""
+_got = _ffmpeg._download_mac(_ff_home)
+check("both binaries are unpacked, and named without .exe",
+      [p.name for p in _got] == ["ffmpeg", "ffprobe"])
+check("and the archives they came in are cleaned up",
+      all(p.is_file() for p in _got)
+      and not list(_ff_home.glob("*.zip")))
+_ffmpeg._fetch, _ffmpeg._published_checksum = _real_fetch, _real_checksum
+
+# A program started from Finder inherits launchd's PATH, which is four system
+# folders and nothing else, so a Homebrew ffmpeg is invisible to which().
+_brew = Path(tempfile.mkdtemp(prefix="brew-"))
+(_brew / "pretend-ffmpeg").write_text("", encoding="utf-8")
+_real_extra, _real_windows = _ffmpeg.MAC_EXTRA_PATHS, _ffmpeg.WINDOWS
+_ffmpeg.MAC_EXTRA_PATHS, _ffmpeg.MACOS, _ffmpeg.WINDOWS = (str(_brew),), True, False
+check("a Mac looks where the package managers install, not only on PATH",
+      _ffmpeg._on_path("pretend-ffmpeg") == _brew / "pretend-ffmpeg")
+check("and those folders are Homebrew's and MacPorts'",
+      "/opt/homebrew/bin" in _real_extra and "/opt/local/bin" in _real_extra)
+check("ffmpeg installed by hand is a brew install, not a winget one",
+      _ffmpeg.install_hint() == "brew install ffmpeg")
+_ffmpeg.MAC_EXTRA_PATHS, _ffmpeg.MACOS = _real_extra, _real_macos
+_ffmpeg.WINDOWS = _real_windows
+_ffmpeg.platform = _real_platform
+
+# Whatever the .zip shipped beats whatever the machine happens to have, so a
+# subscriber who took the bundle renders with the build that was tested.
+_home = Path(tempfile.mkdtemp(prefix="agent-home-"))
+(_home / "ffmpeg").mkdir()
+for _name in (f"ffmpeg{_ffmpeg.SUFFIX}", f"ffprobe{_ffmpeg.SUFFIX}"):
+    (_home / "ffmpeg" / _name).write_text("", encoding="utf-8")
+check("the ffmpeg beside the agent wins over one on PATH",
+      _ffmpeg.find(_home)[0] == _home / "ffmpeg" / f"ffmpeg{_ffmpeg.SUFFIX}")
+check("clearing the quarantine flag is a no-op off a Mac",
+      _ffmpeg.unblock([_home / "ffmpeg" / f"ffmpeg{_ffmpeg.SUFFIX}"]) is None)
+
+# The .zip is the whole install, so it has to survive being unpacked by
+# Finder: zipfile records no permissions unless it is told to, and a binary
+# without its executable bit is a binary that will not start.
+_zip = Path(tempfile.mkdtemp(prefix="agent-zip-")) / "bundle.zip"
+_stand_in = _zip.parent / "ClipForgeAgent"
+_stand_in.write_bytes(b"a stand-in for the real binary")
+with _zipfile.ZipFile(_zip, "w") as _z:
+    _build_mac._add(_z, _stand_in, _build_mac.BINARY_NAME, executable=True)
+    _build_mac._add_text(_z, _build_mac.LAUNCHER_NAME,
+                         _build_mac.LAUNCHER.format(
+                             binary=_build_mac.BINARY_NAME), executable=True)
+    _build_mac._add_text(_z, "READ ME FIRST.txt", _build_mac.READ_ME)
+with _zipfile.ZipFile(_zip) as _z:
+    _modes = {i.filename: i.external_attr >> 16 for i in _z.infolist()}
+    _launcher = _z.read(_build_mac.LAUNCHER_NAME).decode()
+check("the agent is shipped executable", _modes[_build_mac.BINARY_NAME] == 0o755,
+      oct(_modes[_build_mac.BINARY_NAME]))
+check("the launcher is too, or nothing can be double-clicked",
+      _modes[_build_mac.LAUNCHER_NAME] == 0o755)
+check("the READ ME is not", _modes["READ ME FIRST.txt"] == 0o644)
+check("the launcher clears the quarantine a browser download leaves behind",
+      "xattr -dr com.apple.quarantine" in _launcher)
+check("and starts the agent from the folder it sits in, not the home folder",
+      'cd "$(dirname "$0")"' in _launcher
+      and f'"./{_build_mac.BINARY_NAME}"' in _launcher)
+check("the READ ME leads with the right-click macOS insists on",
+      "RIGHT-CLICK" in _build_mac.READ_ME)
+check("and points at ffmpeg's source, which shipping a GPL build requires",
+      "ffmpeg.org/download" in _build_mac.READ_ME)
+check("the archive says which chip it was built for",
+      _build_mac.zip_name() in ("ClipForgeAgent-macos-arm64.zip",
+                                "ClipForgeAgent-macos-x86_64.zip"),
+      _build_mac.zip_name())
+
+# The two builds are published separately, so the app has to be told about
+# both and pick one; a Mac offered a .exe is a subscriber who gives up.
+settings.agent_download_url = "https://example.test/ClipForgeAgent-windows.zip"
+settings.agent_download_url_mac = "https://example.test/ClipForgeAgent-mac.zip"
+_links = agent_owner.get("/api/agent/status").json()
+check("the app is told where both builds live",
+      _links["download_url"].endswith("windows.zip")
+      and _links["download_url_mac"].endswith("mac.zip"))
+settings.agent_download_url = settings.agent_download_url_mac = ""
+
+_APP_JS = Path("frontend/app.js").read_text(encoding="utf-8")
+check("and offers a Mac the Mac one",
+      "download_url_mac" in _APP_JS and "onAMac" in _APP_JS)
+check("with the right-click spelled out, because the refusal reads as a bug",
+      "right-click" in _APP_JS.lower())
+
+
 section("the server stands down for a live agent")
 # Both the local pool and the agent claim from the same QUEUED pool, and the
 # pool is in-process, so it used to win every time -- sending the job to the

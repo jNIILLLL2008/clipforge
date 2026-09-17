@@ -5,6 +5,10 @@ build_exe.py -- Produce agent/ClipForgeAgent.exe, and the .zip around it.
     python agent/build_exe.py --clean        rebuild from scratch
     python agent/build_exe.py --bundle       .exe + ffmpeg, in one .zip
 
+The Mac build is build_mac.py, run on a Mac. Both read the same spec, and
+neither can produce the other: PyInstaller freezes the interpreter it is
+running under.
+
 One self-contained .exe so a subscriber does not need Python installed.
 
 ffmpeg stays *beside* the .exe rather than inside it. Two static binaries are

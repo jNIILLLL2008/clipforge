@@ -27,13 +27,17 @@ agent/footage/
 agent/work/
 # Downloaded or unpacked beside the agent, ~200MB of third-party binaries.
 agent/ffmpeg/
-# Build artefacts from agent/build_exe.py. The .exe is 24MB and is rebuilt
-# from the spec, so it is released rather than committed.
+# Build artefacts from agent/build_exe.py and agent/build_mac.py. Each is
+# ~25MB and is rebuilt from the spec, so they are released rather than
+# committed. One per platform, because neither can be cross-compiled.
 agent/ClipForgeAgent.exe
+agent/ClipForgeAgent
 agent/ClipForgeAgent-windows.zip
+agent/ClipForgeAgent-macos-*.zip
 # The unpacked bundle. It carries ~200MB of ffmpeg AND the agent.env
 # a test run pairs into it, which is a live credential.
 agent/ClipForgeAgent-windows/
+agent/ClipForgeAgent-macos-*/
 # Any agent.env anywhere, not just the one beside the source. This is
 # the pattern that matters: the file is written by pairing, so it
 # appears wherever somebody unpacks and runs the agent.

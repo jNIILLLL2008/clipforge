@@ -14,6 +14,9 @@ edit a file.
     ClipForgeAgent.exe --check       confirm the token and settings
     ClipForgeAgent.exe --pair        pair again, replacing the current token
 
+On a Mac the same three, without the .exe, and normally reached by opening
+"Start ClipForge Agent.command" rather than by typing anything.
+
 Nothing here decides whether a job may run. The server hands out work against a
 live subscription and counts it; this asks, renders and reports.
 """
@@ -21,12 +24,14 @@ live subscription and counts it; this asks, renders and reports.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import time
-from typing import Optional
+from typing import Iterator, Optional
 
 import requests
 
@@ -212,6 +217,40 @@ def _sync_footage(cfg) -> None:
             shutil.copy2(source, link)
 
 
+@contextlib.contextmanager
+def keep_awake() -> Iterator[None]:
+    """Stop a Mac falling asleep in the middle of a render.
+
+    A laptop left alone sleeps, and a suspended ffmpeg is a job the server
+    waits on until the claim goes stale and it hands it to somebody else. The
+    subscriber sees a run that took an hour and produced nothing.
+
+    ``caffeinate -i`` holds off idle sleep and nothing else: closing the lid
+    still sleeps the machine, which is what somebody closing the lid means.
+    ``-w`` ties it to this process, so a crash here does not leave a Mac that
+    will not sleep. Windows has no equivalent worth the ctypes, and a desktop
+    that sleeps mid-render is a much rarer thing than a laptop that does.
+    """
+    holder = None
+    if sys.platform == "darwin":
+        try:
+            holder = subprocess.Popen(
+                ["caffeinate", "-i", "-w", str(os.getpid())],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            # Not being able to hold off sleep is not a reason to refuse a job.
+            log.debug("Could not hold off sleep: %s", exc)
+    try:
+        yield
+    finally:
+        if holder is not None:
+            holder.terminate()
+            try:
+                holder.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                holder.kill()
+
+
 def work_once(cfg, server: Server) -> bool:
     """Claim and run one job. True if there was work."""
     from .runner import run
@@ -231,7 +270,8 @@ def work_once(cfg, server: Server) -> bool:
     log.info("Claimed job %s.", job["job"])
     _sync_footage(cfg)
     try:
-        outcome = run(job, cfg, server)
+        with keep_awake():
+            outcome = run(job, cfg, server)
         log.info("Job %s %s", job["job"], outcome)
     except requests.RequestException as exc:
         # The render may well have succeeded; the server will requeue it.

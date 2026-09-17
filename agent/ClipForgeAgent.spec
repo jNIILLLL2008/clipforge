@@ -2,14 +2,20 @@
 """
 PyInstaller spec for the ClipForge render agent.
 
-Build with:   python agent/build_exe.py
-Output:       agent/ClipForgeAgent.exe
+Build with:   python agent/build_exe.py     (Windows -> ClipForgeAgent.exe)
+              python3 agent/build_mac.py    (macOS   -> ClipForgeAgent)
+
+One spec for both, so the two builds cannot drift in what they include. Each
+has to be made on the platform it is for -- PyInstaller freezes the
+interpreter it is running under and cannot cross-compile -- and PyInstaller
+appends the .exe itself on Windows. On Apple silicon it also signs the output
+ad-hoc, which that hardware requires before it will run a binary at all.
 
 Notes
 -----
-* ffmpeg is NOT bundled. It is a ~90MB pair of binaries that the user is better
-  off installing themselves (winget install Gyan.FFmpeg), and the agent checks
-  for it on --check and says so if it is missing.
+* ffmpeg is NOT inside the build. It is a ~130MB pair of binaries, and onefile
+  mode would unpack them again on every launch; they sit beside the agent
+  instead, shipped in the .zip or fetched on first run by agent/ffmpeg.py.
 * yt_dlp resolves its extractors dynamically, so they have to be collected by
   name or the YouTube source silently finds nothing in a frozen build.
 * The agent imports the render pipeline from backend.app, but nothing that

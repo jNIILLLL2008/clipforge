@@ -130,12 +130,18 @@ class Settings:
         # that a laptop closed at bedtime hands the queue back quickly.
         self.agent_online_seconds: int = _int("AGENT_ONLINE_SECONDS", 120)
 
-        # Where a subscriber gets the render agent. The .exe is a build
-        # artefact rather than something in the repo, so this points at
-        # wherever it was published -- a GitHub release, normally. Unset means
-        # the app shows the run-from-source instructions instead of a button
-        # that leads nowhere.
+        # Where a subscriber gets the render agent. The builds are build
+        # artefacts rather than something in the repo, so these point at
+        # wherever they were published -- a GitHub release, normally. Unset
+        # means the app shows the run-from-source instructions instead of a
+        # button that leads nowhere.
+        #
+        # One per platform, because they are separate builds: PyInstaller
+        # freezes the interpreter it runs under and cannot cross-compile, so
+        # the .exe is made on Windows and the Mac build on a Mac. The app
+        # offers whichever matches the computer the person is reading on.
         self.agent_download_url: str = _str("AGENT_DOWNLOAD_URL")
+        self.agent_download_url_mac: str = _str("AGENT_DOWNLOAD_URL_MAC")
 
         # --- content sources --------------------------------------------- #
         # Only sources licensed for commercial reuse are on by default. The
